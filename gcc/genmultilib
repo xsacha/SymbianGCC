@@ -73,6 +73,8 @@
 # the os directory names are used exclusively.  Use the mapping when
 # there is no one-to-one equivalence between GCC levels and the OS.
 
+# The optional eighth argument is the multiarch name.
+
 # The optional eighth option is a list of multilib aliases.  This takes the
 # same form as the third argument.  It specifies that the second multilib is
 # a synonym for the first.  This allows a suitable multilib to be selected
@@ -269,6 +271,9 @@ fi
 # names.
 toosdirnames=
 defaultosdirname=
+if [ -n "${multiarch}" ]; then
+  defaultosdirname=::${multiarch}
+fi
 if [ -n "${osdirnames}" ]; then
   set x ${osdirnames}
   shift
@@ -276,6 +281,9 @@ if [ -n "${osdirnames}" ]; then
     case "$1" in
       .=*)
         defaultosdirname=`echo $1 | sed 's|^.=|:|'`
+	if [ -n "${multiarch}" ]; then
+	  defaultosdirname=${defaultosdirname}:${multiarch}
+	fi
 	shift
 	;;
       *=*)
@@ -361,13 +369,13 @@ for combo in ${combinations}; do
     dirout=`echo ${combo} | sed -e 's/=/-/g'`
   fi
   # Remove the leading and trailing slashes.
-  dirout=`echo ${dirout} | sed -e 's|^/||' -e 's|/$||g'`
+  dirout=`echo ${dirout} | sed -e 's|^/||' -e 's|/*:/*|:|' -e 's|/$||g'`
 
   # Use the OS directory names rather than the option names.
   if [ -n "${toosdirnames}" ]; then
     osdirout=`echo ${combo} | sed ${toosdirnames}`
     # Remove the leading and trailing slashes.
-    osdirout=`echo ${osdirout} | sed -e 's|^/||' -e 's|/$||g'`
+    osdirout=`echo ${osdirout} | sed -e 's|^/||' -e 's|/*:/*|:|' -e 's|/$||g'`
     if [ "x${enable_multilib}" != xyes ]; then
       dirout=".:${osdirout}"
       disable_multilib=yes

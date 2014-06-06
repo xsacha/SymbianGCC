@@ -169,6 +169,9 @@ GLIBCXX_ENABLE_LIBSTDCXX_TIME([no])
 # For gthread support
 GLIBCXX_CHECK_GTHREADS
 
+# For copy-assignable gthreads types
+GLIBCXX_GTHREADS_CXX11_COPY_ASSIGN
+
 AC_LC_MESSAGES
 
 # Check for available headers.
