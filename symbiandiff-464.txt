@@ -1927,23 +1927,6 @@ index c3c5aa1..3740ff8 100644
  /* Set up library functions unique to ARM.  */
  
  static void
-@@ -1194,12 +1336,12 @@ arm_init_libfuncs (void)
-       /* Conversions.  */
-       set_conv_libfunc (trunc_optab, HFmode, SFmode,
- 			(arm_fp16_format == ARM_FP16_FORMAT_IEEE
--			 ? "__gnu_f2h_ieee"
--			 : "__gnu_f2h_alternative"));
-+			 ? "__aeabi_f2h"
-+			 : "__aeabi_f2h_alt"));
-       set_conv_libfunc (sext_optab, SFmode, HFmode, 
- 			(arm_fp16_format == ARM_FP16_FORMAT_IEEE
--			 ? "__gnu_h2f_ieee"
--			 : "__gnu_h2f_alternative"));
-+			 ? "__aeabi_h2f"
-+			 : "__aeabi_h2f_alt"));
-       
-       /* Arithmetic.  */
-       set_optab_libfunc (add_optab, HFmode, NULL);
 @@ -1222,6 +1364,137 @@ arm_init_libfuncs (void)
        break;
      }
@@ -4891,88 +4874,6 @@ index 4e220e5..4e9c07a 100644
  ;; We used to have constraint letters for S and R in ARM state, but
  ;; all uses of these now appear to have been removed.
  
-diff --git a/gcc/config/arm/elf.h b/gcc/config/arm/elf.h
-index 8840088..e06e49a 100644
---- a/gcc/config/arm/elf.h
-+++ b/gcc/config/arm/elf.h
-@@ -152,7 +152,7 @@
- 
- /* Horrible hack: We want to prevent some libgcc routines being included
-    for some multilibs.  */
--#ifndef __ARM_ARCH_6M__
-+#if !(defined(__ARM_ARCH_6M__) || defined(__ARM_ARCH_6SM__))
- #undef L_fixdfsi
- #undef L_fixunsdfsi
- #undef L_truncdfsf2
-diff --git a/gcc/config/arm/fp16.c b/gcc/config/arm/fp16.c
-index 936caeb..a49401d 100644
---- a/gcc/config/arm/fp16.c
-+++ b/gcc/config/arm/fp16.c
-@@ -22,10 +22,10 @@
-    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
-    <http://www.gnu.org/licenses/>.  */
- 
--static inline unsigned short
-+static inline unsigned int
- __gnu_f2h_internal(unsigned int a, int ieee)
- {
--  unsigned short sign = (a >> 16) & 0x8000;
-+  unsigned int sign = (a >> 16) & 0x8000;
-   int aexp = (a >> 23) & 0xff;
-   unsigned int mantissa = a & 0x007fffff;
-   unsigned int mask;
-@@ -95,10 +95,10 @@ __gnu_f2h_internal(unsigned int a, int ieee)
-   return sign | (((aexp + 14) << 10) + (mantissa >> 13));
- }
- 
--unsigned int
--__gnu_h2f_internal(unsigned short a, int ieee)
-+static inline unsigned int
-+__gnu_h2f_internal(unsigned int a, int ieee)
- {
--  unsigned int sign = (unsigned int)(a & 0x8000) << 16;
-+  unsigned int sign = (a & 0x00008000) << 16;
-   int aexp = (a >> 10) & 0x1f;
-   unsigned int mantissa = a & 0x3ff;
- 
-@@ -120,26 +120,33 @@ __gnu_h2f_internal(unsigned short a, int ieee)
-   return sign | (((aexp + 0x70) << 23) + (mantissa << 13));
- }
- 
--unsigned short
-+#define ALIAS(src, dst) \
-+  typeof (src) dst __attribute__ ((alias (#src)));
-+
-+unsigned int
- __gnu_f2h_ieee(unsigned int a)
- {
-   return __gnu_f2h_internal(a, 1);
- }
-+ALIAS (__gnu_f2h_ieee, __aeabi_f2h)
- 
- unsigned int
--__gnu_h2f_ieee(unsigned short a)
-+__gnu_h2f_ieee(unsigned int a)
- {
-   return __gnu_h2f_internal(a, 1);
- }
-+ALIAS (__gnu_h2f_ieee, __aeabi_h2f)
- 
--unsigned short
-+unsigned int
- __gnu_f2h_alternative(unsigned int x)
- {
-   return __gnu_f2h_internal(x, 0);
- }
-+ALIAS (__gnu_f2h_alternative, __aeabi_f2h_alt)
- 
- unsigned int
--__gnu_h2f_alternative(unsigned short a)
-+__gnu_h2f_alternative(unsigned int a)
- {
-   return __gnu_h2f_internal(a, 0);
- }
-+ALIAS (__gnu_h2f_alternative, __aeabi_h2f_alt)
 diff --git a/gcc/config/arm/iterators.md b/gcc/config/arm/iterators.md
 index 887c962b..0684824 100644
 --- a/gcc/config/arm/iterators.md
@@ -5032,66 +4933,10 @@ index 887c962b..0684824 100644
 +(define_code_attr return_cond [(return " && USE_RETURN_INSN (FALSE)")
 +			       (simple_return " && use_simple_return_p ()")])
 +
-diff --git a/gcc/config/arm/lib1funcs.asm b/gcc/config/arm/lib1funcs.asm
+diff --git a/libgcc/config/arm/lib1funcs.S b/libgcc/config/arm/lib1funcs.S
 index 2e76c01..c1830385 100644
---- a/gcc/config/arm/lib1funcs.asm
-+++ b/gcc/config/arm/lib1funcs.asm
-@@ -99,7 +99,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
- #if defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) \
- 	|| defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) \
- 	|| defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__) \
--	|| defined(__ARM_ARCH_6M__)
-+	|| defined(__ARM_ARCH_6M__) || defined(__ARM_ARCH_6SM__)
- # define __ARM_ARCH__ 6
- #endif
- 
-@@ -113,6 +113,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
- #error Unable to determine architecture.
- #endif
- 
-+#if defined(__ARM_ARCH_6M__) || defined(__ARM_ARCH_6SM__)
-+#define __thumb1_only
-+#endif
-+
- /* There are times when we might prefer Thumb1 code even if ARM code is
-    permitted, for example, the code might be smaller, or there might be
-    interworking problems with switching to ARM state if interworking is
-@@ -121,7 +125,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
-      && !defined(__thumb2__)		\
-      && (!defined(__THUMB_INTERWORK__)	\
- 	 || defined (__OPTIMIZE_SIZE__)	\
--	 || defined(__ARM_ARCH_6M__)))
-+	 || defined(__thumb1_only)))
- # define __prefer_thumb__
- #endif
- 
-@@ -302,7 +306,7 @@ LSYM(Lend_fde):
- 
- #ifdef __ARM_EABI__
- .macro THUMB_LDIV0 name signed
--#if defined(__ARM_ARCH_6M__)
-+#ifdef __thumb1_only
- 	.ifc \signed, unsigned
- 	cmp	r0, #0
- 	beq	1f
-@@ -461,7 +465,7 @@ _L__\name:
- 
- #else /* !(__INTERWORKING_STUBS__ || __thumb2__) */
- 
--#ifdef __ARM_ARCH_6M__
-+#ifdef __thumb1_only
- #define EQUIV .thumb_set
- #else
- .macro	ARM_FUNC_START name
-@@ -489,7 +493,7 @@ SYM (__\name):
- #endif
- .endm
- 
--#ifndef __ARM_ARCH_6M__
-+#ifndef __thumb1_only
- .macro	ARM_FUNC_ALIAS new old
- 	.globl	SYM (__\new)
- 	EQUIV	SYM (__\new), SYM (__\old)
+--- a/libgcc/config/arm/lib1funcs.S
++++ b/libgcc/config/arm/lib1funcs.S
 @@ -1312,9 +1316,6 @@ LSYM(Lover12):
  #define ah	r1
  #endif
@@ -5102,52 +4947,15 @@ index 2e76c01..c1830385 100644
  #ifdef L_lshrdi3
  
  	FUNC_START lshrdi3
-@@ -1416,16 +1417,14 @@ LSYM(Lover12):
+@@ -1416,8 +1417,6 @@ LSYM(Lover12):
  
  #endif
  
 -#endif /* __symbian__ */
 -
--#if ((__ARM_ARCH__ > 5) && !defined(__ARM_ARCH_6M__)) \
-+#if ((__ARM_ARCH__ > 5) && !defined(__thumb1_only)) \
+ #if ((__ARM_ARCH__ > 5) && !defined(__ARM_ARCH_6M__)) \
      || defined(__ARM_ARCH_5E__) || defined(__ARM_ARCH_5TE__) \
      || defined(__ARM_ARCH_5TEJ__)
- #define HAVE_ARM_CLZ 1
- #endif
- 
- #ifdef L_clzsi2
--#if defined(__ARM_ARCH_6M__)
-+#ifdef __thumb1_only
- FUNC_START clzsi2
- 	mov	r1, #28
- 	mov	r3, #1
-@@ -1486,7 +1485,7 @@ ARM_FUNC_START clzsi2
- #ifdef L_clzdi2
- #if !defined(HAVE_ARM_CLZ)
- 
--# if defined(__ARM_ARCH_6M__)
-+# ifdef __thumb1_only
- FUNC_START clzdi2
- 	push	{r4, lr}
- # else
-@@ -1511,7 +1510,7 @@ ARM_FUNC_START clzdi2
- 	bl	__clzsi2
- # endif
- 2:
--# if defined(__ARM_ARCH_6M__)
-+# ifdef __thumb1_only
- 	pop	{r4, pc}
- # else
- 	RETLDM	r4
-@@ -1584,7 +1583,7 @@ ARM_FUNC_START clzdi2
- 
- /* Don't bother with the old interworking routines for Thumb-2.  */
- /* ??? Maybe only omit these on "m" variants.  */
--#if !defined(__thumb2__) && !defined(__ARM_ARCH_6M__)
-+#if !defined(__thumb2__) && !defined(__thumb1_only)
- 
- #if defined L_interwork_call_via_rX
- 
 @@ -1818,12 +1817,10 @@ LSYM(Lchange_\register):
  
  #endif /* Arch supports thumb.  */
@@ -5164,10 +4972,10 @@ index 2e76c01..c1830385 100644
 -#endif /* __ARM_ARCH_6M__ */
 -#endif /* !__symbian__ */
 +#endif /* __thumb1_only */
-diff --git a/gcc/config/arm/libunwind.S b/gcc/config/arm/libunwind.S
+diff --git a/libgcc/config/arm/libunwind.S b/libgcc/config/arm/libunwind.S
 index 48eb592..25fea25 100644
---- a/gcc/config/arm/libunwind.S
-+++ b/gcc/config/arm/libunwind.S
+--- a/libgcc/config/arm/libunwind.S
++++ b/libgcc/config/arm/libunwind.S
 @@ -38,8 +38,6 @@
  	.eabi_attribute 25, 1
  #endif /* __ARM_EABI__ */
@@ -5177,15 +4985,6 @@ index 48eb592..25fea25 100644
  #include "lib1funcs.asm"
  
  .macro UNPREFIX name
-@@ -59,7 +57,7 @@
- #endif
- #endif
- 
--#ifdef __ARM_ARCH_6M__
-+#if defined(__ARM_ARCH_6M__) || defined(__ARM_ARCH_6SM__)
- 
- /* r0 points to a 16-word block.  Upload these values to the actual core
-    state.  */
 @@ -359,5 +357,3 @@ UNWIND_WRAPPER _Unwind_Resume 1
  UNWIND_WRAPPER _Unwind_Resume_or_Rethrow 1
  UNWIND_WRAPPER _Unwind_ForcedUnwind 3
@@ -5205,20 +5004,6 @@ index 63fbbbf..08acbeb 100644
                           (analyze_all_shapes features shape analyze_shape)
    in
      (* Emit file and function prologues.  *)
-diff --git a/gcc/config/arm/sfp-machine.h b/gcc/config/arm/sfp-machine.h
-index a89d05a..f2d7a37 100644
---- a/gcc/config/arm/sfp-machine.h
-+++ b/gcc/config/arm/sfp-machine.h
-@@ -99,7 +99,7 @@ typedef int __gcc_CMPtype __attribute__ ((mode (__libgcc_cmp_return__)));
- #define __fixdfdi	__aeabi_d2lz
- #define __fixunsdfdi	__aeabi_d2ulz
- #define __floatdidf	__aeabi_l2d
--#define __extendhfsf2	__gnu_h2f_ieee
--#define __truncsfhf2	__gnu_f2h_ieee
-+#define __extendhfsf2	__aeabi_h2f
-+#define __truncsfhf2	__aeabi_f2h
- 
- #endif /* __ARM_EABI__ */
 diff --git a/gcc/config/arm/symbian.h b/gcc/config/arm/symbian.h
 index ff233a8..defd3d2 100644
 --- a/gcc/config/arm/symbian.h
@@ -5249,19 +5034,6 @@ index 33d7e19..a75dee3 100644
  
  LIB1ASMSRC = arm/lib1funcs.asm
  LIB1ASMFUNCS = _thumb1_case_sqi _thumb1_case_uqi _thumb1_case_shi \
-diff --git a/gcc/config/arm/t-arm-softfp b/gcc/config/arm/t-arm-softfp
-index f9cace9..dac4300 100644
---- a/gcc/config/arm/t-arm-softfp
-+++ b/gcc/config/arm/t-arm-softfp
-@@ -22,7 +22,7 @@ softfp_extensions := sfdf
- softfp_truncations := dfsf
- softfp_machine_header := arm/sfp-machine.h
- softfp_exclude_libgcc2 := y
--softfp_wrap_start := '\#ifdef __ARM_ARCH_6M__'
-+softfp_wrap_start := '\#if defined(__ARM_ARCH_6M__) || defined(__ARM_ARCH_6SM__)'
- softfp_wrap_end := '\#endif'
- 
- # softfp seems to be missing a whole bunch of prototypes.
 diff --git a/gcc/config/arm/t-symbian b/gcc/config/arm/t-symbian
 index 4a1476f..a6b8ccc 100644
 --- a/gcc/config/arm/t-symbian
@@ -5376,10 +5148,10 @@ index 4455288..8345b41 100644
  /* Clear the instruction cache from `beg' to `end'.  This makes an
     inline system call to SYS_cacheflush.  */
  #undef CLEAR_INSN_CACHE
-diff --git a/gcc/config/arm/unwind-arm.c b/gcc/config/arm/unwind-arm.c
+diff --git a/libgcc/config/arm/unwind-arm.c b/libgcc/config/arm/unwind-arm.c
 index 2c6e004..90d258d 100644
---- a/gcc/config/arm/unwind-arm.c
-+++ b/gcc/config/arm/unwind-arm.c
+--- a/libgcc/config/arm/unwind-arm.c
++++ b/libgcc/config/arm/unwind-arm.c
 @@ -32,13 +32,18 @@ extern void abort (void);
  typedef unsigned char bool;
  
@@ -5467,327 +5239,6 @@ index 2c6e004..90d258d 100644
  		}
  	      if (data[0] & uint32_highbit)
  		data++;
-diff --git a/gcc/config/arm/vfp.md b/gcc/config/arm/vfp.md
-index 1ac2d0c..5b48204 100644
---- a/gcc/config/arm/vfp.md
-+++ b/gcc/config/arm/vfp.md
-@@ -83,6 +83,7 @@
-   "
-   [(set_attr "predicable" "yes")
-    (set_attr "type" "*,*,*,*,load1,store1,r_2_f,f_2_r,fcpys,f_loads,f_stores")
-+   (set_attr "neon_type" "*,*,*,*,*,*,neon_mcr,neon_mrc,neon_vmov,neon_ldr,neon_str")
-    (set_attr "insn" "mov,mov,mvn,mov,*,*,*,*,*,*,*")
-    (set_attr "pool_range"     "*,*,*,*,4096,*,*,*,*,1020,*")
-    (set_attr "neg_pool_range" "*,*,*,*,4084,*,*,*,*,1008,*")]
-@@ -125,6 +126,7 @@
-   "
-   [(set_attr "predicable" "yes")
-    (set_attr "type" "*,*,*,*,load1,load1,store1,store1,r_2_f,f_2_r,fcpys,f_loads,f_stores")
-+   (set_attr "neon_type" "*,*,*,*,*,*,*,*,neon_mcr,neon_mrc,neon_vmov,*,*")
-    (set_attr "insn" "mov,mov,mvn,mov,*,*,*,*,*,*,*,*,*")
-    (set_attr "pool_range"     "*,*,*,*,1020,4096,*,*,*,*,*,1020,*")
-    (set_attr "neg_pool_range" "*,*,*,*,   0,   0,*,*,*,*,*,1008,*")]
-@@ -134,9 +136,51 @@
- ;; DImode moves
- 
- (define_insn "*arm_movdi_vfp"
--  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r,m,w,r,w,w, Uv")
-+  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r, m,w,r,w,w, Uv")
- 	(match_operand:DI 1 "di_operand"              "rIK,mi,r,r,w,w,Uvi,w"))]
--  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP
-+  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP && arm_tune != cortexa8
-+   && (   register_operand (operands[0], DImode)
-+       || register_operand (operands[1], DImode))"
-+  "*
-+  switch (which_alternative)
-+    {
-+    case 0: 
-+      return \"#\";
-+    case 1:
-+    case 2:
-+      return output_move_double (operands);
-+    case 3:
-+      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
-+    case 4:
-+      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
-+    case 5:
-+      if (TARGET_VFP_SINGLE)
-+	return \"fcpys%?\\t%0, %1\\t%@ int\;fcpys%?\\t%p0, %p1\\t%@ int\";
-+      else
-+	return \"fcpyd%?\\t%P0, %P1\\t%@ int\";
-+    case 6: case 7:
-+      return output_move_vfp (operands);
-+    default:
-+      gcc_unreachable ();
-+    }
-+  "
-+  [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
-+   (set_attr "neon_type" "*,*,*,neon_mcr_2_mcrr,neon_mrrc,neon_vmov,*,*")
-+   (set (attr "length") (cond [(eq_attr "alternative" "0,1,2") (const_int 8)
-+			       (eq_attr "alternative" "5")
-+				(if_then_else
-+				 (eq (symbol_ref "TARGET_VFP_SINGLE") (const_int 1))
-+				 (const_int 8)
-+				 (const_int 4))]
-+			      (const_int 4)))
-+   (set_attr "pool_range"     "*,1020,*,*,*,*,1020,*")
-+   (set_attr "neg_pool_range" "*,1008,*,*,*,*,1008,*")]
-+)
-+
-+(define_insn "*arm_movdi_vfp_cortexa8"
-+  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r,m,w,!r,w,w, Uv")
-+	(match_operand:DI 1 "di_operand"              "rIK,mi,r,r,w,w,Uvi,w"))]
-+  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP && arm_tune == cortexa8
-    && (   register_operand (operands[0], DImode)
-        || register_operand (operands[1], DImode))"
-   "*
-@@ -163,6 +207,7 @@
-     }
-   "
-   [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
-+   (set_attr "neon_type" "*,*,*,neon_mcr_2_mcrr,neon_mrrc,neon_vmov,*,*")
-    (set (attr "length") (cond [(eq_attr "alternative" "0,1,2") (const_int 8)
- 			       (eq_attr "alternative" "5")
- 				(if_then_else
-@@ -201,6 +246,7 @@
-     }
-   "
-   [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
-+   (set_attr "neon_type" "*,*,*,neon_mcr_2_mcrr,neon_mrrc,neon_vmov,*,*")
-    (set (attr "length") (cond [(eq_attr "alternative" "0,1,2") (const_int 8)
- 			       (eq_attr "alternative" "5")
- 				(if_then_else
-@@ -355,6 +401,7 @@
-   [(set_attr "predicable" "yes")
-    (set_attr "type"
-      "r_2_f,f_2_r,fconsts,f_loads,f_stores,load1,store1,fcpys,*")
-+   (set_attr "neon_type" "neon_mcr,neon_mrc,*,*,*,*,*,neon_vmov,*")
-    (set_attr "insn" "*,*,*,*,*,*,*,*,mov")
-    (set_attr "pool_range" "*,*,*,1020,*,4096,*,*,*")
-    (set_attr "neg_pool_range" "*,*,*,1008,*,4080,*,*,*")]
-@@ -392,6 +439,7 @@
-   [(set_attr "predicable" "yes")
-    (set_attr "type"
-      "r_2_f,f_2_r,fconsts,f_loads,f_stores,load1,store1,fcpys,*")
-+   (set_attr "neon_type" "neon_mcr,neon_mrc,*,*,*,*,*,neon_vmov,*")
-    (set_attr "insn" "*,*,*,*,*,*,*,*,mov")
-    (set_attr "pool_range" "*,*,*,1020,*,4092,*,*,*")
-    (set_attr "neg_pool_range" "*,*,*,1008,*,0,*,*,*")]
-@@ -401,8 +449,8 @@
- ;; DFmode moves
- 
- (define_insn "*movdf_vfp"
--  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,r, m,w  ,Uv,w,r")
--	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,mF,r,UvF,w, w,r"))]
-+  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,w, r, m,w  ,Uv,w,r")
-+	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,D0,mF,r,UvF,w, w,r"))]
-   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP
-    && (   register_operand (operands[0], DFmode)
-        || register_operand (operands[1], DFmode))"
-@@ -417,16 +465,18 @@
-       case 2:
- 	gcc_assert (TARGET_VFP_DOUBLE);
-         return \"fconstd%?\\t%P0, #%G1\";
--      case 3: case 4:
-+      case 3:
-+	return \"vmov.i32\\t%P0, #0\";
-+      case 4: case 5:
- 	return output_move_double (operands);
--      case 5: case 6:
-+      case 6: case 7:
- 	return output_move_vfp (operands);
--      case 7:
-+      case 8:
- 	if (TARGET_VFP_SINGLE)
- 	  return \"fcpys%?\\t%0, %1\;fcpys%?\\t%p0, %p1\";
- 	else
- 	  return \"fcpyd%?\\t%P0, %P1\";
--      case 8:
-+      case 9:
-         return \"#\";
-       default:
- 	gcc_unreachable ();
-@@ -434,9 +484,10 @@
-     }
-   "
-   [(set_attr "type"
--     "r_2_f,f_2_r,fconstd,f_loadd,f_stored,load2,store2,ffarithd,*")
--   (set (attr "length") (cond [(eq_attr "alternative" "3,4,8") (const_int 8)
--			       (eq_attr "alternative" "7")
-+     "r_2_f,f_2_r,fconstd,*,f_loadd,f_stored,load2,store2,ffarithd,*")
-+   (set_attr "neon_type" "neon_mcr_2_mcrr,neon_mrrc,*,neon_vmov,*,*,*,*,neon_vmov,*")
-+   (set (attr "length") (cond [(eq_attr "alternative" "4,5,9") (const_int 8)
-+			       (eq_attr "alternative" "8")
- 				(if_then_else
- 				 (eq (symbol_ref "TARGET_VFP_SINGLE")
- 				     (const_int 1))
-@@ -444,14 +495,16 @@
- 				 (const_int 4))]
- 			      (const_int 4)))
-    (set_attr "predicable" "yes")
--   (set_attr "pool_range" "*,*,*,1020,*,1020,*,*,*")
--   (set_attr "neg_pool_range" "*,*,*,1008,*,1008,*,*,*")]
-+   (set_attr "pool_range" "*,*,*,*,1020,*,1020,*,*,*")
-+   (set_attr "neg_pool_range" "*,*,*,*,1008,*,1008,*,*,*")]
- )
- 
- (define_insn "*thumb2_movdf_vfp"
--  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,r, m,w  ,Uv,w,r")
--	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,mF,r,UvF,w, w,r"))]
--  "TARGET_THUMB2 && TARGET_HARD_FLOAT && TARGET_VFP"
-+  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,w,r, m,w  ,Uv,w,r")
-+	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,D0,mF,r,UvF,w, w,r"))]
-+  "TARGET_THUMB2 && TARGET_HARD_FLOAT && TARGET_VFP
-+   && (   register_operand (operands[0], DFmode)
-+       || register_operand (operands[1], DFmode))"
-   "*
-   {
-     switch (which_alternative)
-@@ -463,11 +516,13 @@
-       case 2:
- 	gcc_assert (TARGET_VFP_DOUBLE);
- 	return \"fconstd%?\\t%P0, #%G1\";
--      case 3: case 4: case 8:
-+      case 3:
-+	return \"vmov.i32\\t%P0, #0\";
-+      case 4: case 5: case 9:
- 	return output_move_double (operands);
--      case 5: case 6:
-+      case 6: case 7:
- 	return output_move_vfp (operands);
--      case 7:
-+      case 8:
- 	if (TARGET_VFP_SINGLE)
- 	  return \"fcpys%?\\t%0, %1\;fcpys%?\\t%p0, %p1\";
- 	else
-@@ -478,17 +533,18 @@
-     }
-   "
-   [(set_attr "type"
--     "r_2_f,f_2_r,fconstd,load2,store2,f_loadd,f_stored,ffarithd,*")
--   (set (attr "length") (cond [(eq_attr "alternative" "3,4,8") (const_int 8)
--			       (eq_attr "alternative" "7")
-+     "r_2_f,f_2_r,fconstd,*,load2,store2,f_loadd,f_stored,ffarithd,*")
-+   (set_attr "neon_type" "neon_mcr_2_mcrr,neon_mrrc,*,neon_vmov,*,*,*,*,neon_vmov,*")
-+   (set (attr "length") (cond [(eq_attr "alternative" "4,5,9") (const_int 8)
-+			       (eq_attr "alternative" "8")
- 				(if_then_else
- 				 (eq (symbol_ref "TARGET_VFP_SINGLE")
- 				     (const_int 1))
- 				 (const_int 8)
- 				 (const_int 4))]
- 			      (const_int 4)))
--   (set_attr "pool_range" "*,*,*,4096,*,1020,*,*,*")
--   (set_attr "neg_pool_range" "*,*,*,0,*,1008,*,*,*")]
-+   (set_attr "pool_range" "*,*,*,*,4096,*,1020,*,*,*")
-+   (set_attr "neg_pool_range" "*,*,*,*,0,*,1008,*,*,*")]
- )
- 
- 
-@@ -514,7 +570,8 @@
-    fmrs%D3\\t%0, %2\;fmrs%d3\\t%0, %1"
-    [(set_attr "conds" "use")
-     (set_attr "length" "4,4,8,4,4,8,4,4,8")
--    (set_attr "type" "fcpys,fcpys,fcpys,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")]
-+    (set_attr "type" "fcpys,fcpys,fcpys,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")
-+    (set_attr "neon_type" "neon_vmov,neon_vmov,neon_vmov,neon_mcr,neon_mcr,neon_mcr,neon_mrc,neon_mrc,neon_mrc")]
- )
- 
- (define_insn "*thumb2_movsfcc_vfp"
-@@ -537,7 +594,8 @@
-    ite\\t%D3\;fmrs%D3\\t%0, %2\;fmrs%d3\\t%0, %1"
-    [(set_attr "conds" "use")
-     (set_attr "length" "6,6,10,6,6,10,6,6,10")
--    (set_attr "type" "fcpys,fcpys,fcpys,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")]
-+    (set_attr "type" "fcpys,fcpys,fcpys,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")
-+    (set_attr "neon_type" "neon_vmov,neon_vmov,neon_vmov,neon_mcr,neon_mcr,neon_mcr,neon_mrc,neon_mrc,neon_mrc")]
- )
- 
- (define_insn "*movdfcc_vfp"
-@@ -560,7 +618,8 @@
-    fmrrd%D3\\t%Q0, %R0, %P2\;fmrrd%d3\\t%Q0, %R0, %P1"
-    [(set_attr "conds" "use")
-     (set_attr "length" "4,4,8,4,4,8,4,4,8")
--    (set_attr "type" "ffarithd,ffarithd,ffarithd,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")]
-+    (set_attr "type" "ffarithd,ffarithd,ffarithd,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")
-+    (set_attr "neon_type" "neon_vmov,neon_vmov,neon_vmov,neon_mcr_2_mcrr,neon_mcr_2_mcrr,neon_mcr_2_mcrr,neon_mrrc,neon_mrrc,neon_mrrc")]
- )
- 
- (define_insn "*thumb2_movdfcc_vfp"
-@@ -583,7 +642,8 @@
-    ite\\t%D3\;fmrrd%D3\\t%Q0, %R0, %P2\;fmrrd%d3\\t%Q0, %R0, %P1"
-    [(set_attr "conds" "use")
-     (set_attr "length" "6,6,10,6,6,10,6,6,10")
--    (set_attr "type" "ffarithd,ffarithd,ffarithd,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")]
-+    (set_attr "type" "ffarithd,ffarithd,ffarithd,r_2_f,r_2_f,r_2_f,f_2_r,f_2_r,f_2_r")
-+    (set_attr "neon_type" "neon_vmov,neon_vmov,neon_vmov,neon_mcr_2_mcrr,neon_mcr_2_mcrr,neon_mcr_2_mcrr,neon_mrrc,neon_mrrc,neon_mrrc")]
- )
- 
- 
-@@ -712,23 +772,25 @@
- ;; Division insns
- 
- (define_insn "*divsf3_vfp"
--  [(set (match_operand:SF	  0 "s_register_operand" "+t")
--	(div:SF (match_operand:SF 1 "s_register_operand" "t")
--		(match_operand:SF 2 "s_register_operand" "t")))]
-+  [(set (match_operand:SF	  0 "s_register_operand" "+t,&t")
-+	(div:SF (match_operand:SF 1 "s_register_operand" "t,t")
-+		(match_operand:SF 2 "s_register_operand" "t,t")))]
-   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP"
-   "fdivs%?\\t%0, %1, %2"
-   [(set_attr "predicable" "yes")
--   (set_attr "type" "fdivs")]
-+   (set_attr "type" "fdivs")
-+   (set_attr "arch" "notvfp9,vfp9")]
- )
- 
- (define_insn "*divdf3_vfp"
--  [(set (match_operand:DF	  0 "s_register_operand" "+w")
--	(div:DF (match_operand:DF 1 "s_register_operand" "w")
--		(match_operand:DF 2 "s_register_operand" "w")))]
-+  [(set (match_operand:DF	  0 "s_register_operand" "+w,&w")
-+	(div:DF (match_operand:DF 1 "s_register_operand" "w,w")
-+		(match_operand:DF 2 "s_register_operand" "w,w")))]
-   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP_DOUBLE"
-   "fdivd%?\\t%P0, %P1, %P2"
-   [(set_attr "predicable" "yes")
--   (set_attr "type" "fdivd")]
-+   (set_attr "type" "fdivd")
-+   (set_attr "arch" "notvfp9,vfp9")]
- )
- 
- 
-@@ -991,21 +1053,23 @@
- ;; Sqrt insns.
- 
- (define_insn "*sqrtsf2_vfp"
--  [(set (match_operand:SF	   0 "s_register_operand" "=t")
--	(sqrt:SF (match_operand:SF 1 "s_register_operand" "t")))]
-+  [(set (match_operand:SF	   0 "s_register_operand" "=t,&t")
-+	(sqrt:SF (match_operand:SF 1 "s_register_operand" "t,t")))]
-   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP"
-   "fsqrts%?\\t%0, %1"
-   [(set_attr "predicable" "yes")
--   (set_attr "type" "fdivs")]
-+   (set_attr "type" "fdivs")
-+   (set_attr "arch" "notvfp9,vfp9")]
- )
- 
- (define_insn "*sqrtdf2_vfp"
--  [(set (match_operand:DF	   0 "s_register_operand" "=w")
--	(sqrt:DF (match_operand:DF 1 "s_register_operand" "w")))]
-+  [(set (match_operand:DF	   0 "s_register_operand" "=w,&w")
-+	(sqrt:DF (match_operand:DF 1 "s_register_operand" "w,w")))]
-   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP_DOUBLE"
-   "fsqrtd%?\\t%P0, %P1"
-   [(set_attr "predicable" "yes")
--   (set_attr "type" "fdivd")]
-+   (set_attr "type" "fdivd")
-+   (set_attr "arch" "notvfp9,vfp9")]
- )
- 
- 
 diff --git a/gcc/config/bfin/bfin.c b/gcc/config/bfin/bfin.c
 index 60cd09ef..2b41ef7 100644
 --- a/gcc/config/bfin/bfin.c
@@ -5814,10 +5265,10 @@ index aec7cba..2f8f267 100644
  
    CRIS_ASSERT (cfun->machine->return_type != CRIS_RETINSN_RET || !on_stack);
    CRIS_ASSERT (cfun->machine->return_type != CRIS_RETINSN_JUMP || on_stack);
-diff --git a/gcc/config/fixed-bit.h b/gcc/config/fixed-bit.h
+diff --git a/libgcc/fixed-bit.h b/libgcc/fixed-bit.h
 index 562772d..4de3f40 100644
---- a/gcc/config/fixed-bit.h
-+++ b/gcc/config/fixed-bit.h
+--- a/libgcc/fixed-bit.h
++++ b/libgcc/fixed-bit.h
 @@ -25,6 +25,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
  #ifndef _FIXED_BIT_H
  #define _FIXED_BIT_H
@@ -5937,480 +5388,6 @@ index 13eb536..5b09451 100644
 -SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver \
 +SHLIB_MAPFILES = $$(libgcc_objdir)/libgcc-std.ver \
  		 $(srcdir)/config/frv/libgcc-frv.ver
-diff --git a/gcc/config/h8300/h8300.c b/gcc/config/h8300/h8300.c
-index 55acfff..23463c3 100644
---- a/gcc/config/h8300/h8300.c
-+++ b/gcc/config/h8300/h8300.c
-@@ -702,7 +702,7 @@ h8300_push_pop (int regno, int nregs, bool pop_p, bool return_p)
-   /* Add the return instruction.  */
-   if (return_p)
-     {
--      RTVEC_ELT (vec, i) = gen_rtx_RETURN (VOIDmode);
-+      RTVEC_ELT (vec, i) = ret_rtx;
-       i++;
-     }
- 
-@@ -986,7 +986,7 @@ h8300_expand_epilogue (void)
-     }
- 
-   if (!returned_p)
--    emit_jump_insn (gen_rtx_RETURN (VOIDmode));
-+    emit_jump_insn (ret_rtx);
- }
- 
- /* Return nonzero if the current function is an interrupt
-diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
-index c43d3ed..99c8c13 100644
---- a/gcc/config/i386/i386.c
-+++ b/gcc/config/i386/i386.c
-@@ -11286,13 +11286,13 @@ ix86_expand_epilogue (int style)
- 
- 	  pro_epilogue_adjust_stack (stack_pointer_rtx, stack_pointer_rtx,
- 				     popc, -1, true);
--	  emit_jump_insn (gen_return_indirect_internal (ecx));
-+	  emit_jump_insn (gen_simple_return_indirect_internal (ecx));
- 	}
-       else
--	emit_jump_insn (gen_return_pop_internal (popc));
-+	emit_jump_insn (gen_simple_return_pop_internal (popc));
-     }
-   else
--    emit_jump_insn (gen_return_internal ());
-+    emit_jump_insn (gen_simple_return_internal ());
- 
-   /* Restore the state back to the state from the prologue,
-      so that it's correct for the next epilogue.  */
-@@ -30255,7 +30255,7 @@ ix86_pad_returns (void)
-       rtx prev;
-       bool replace = false;
- 
--      if (!JUMP_P (ret) || GET_CODE (PATTERN (ret)) != RETURN
-+      if (!JUMP_P (ret) || !ANY_RETURN_P (PATTERN (ret))
- 	  || optimize_bb_for_size_p (bb))
- 	continue;
-       for (prev = PREV_INSN (ret); prev; prev = PREV_INSN (prev))
-@@ -30285,7 +30285,10 @@ ix86_pad_returns (void)
- 	}
-       if (replace)
- 	{
--	  emit_jump_insn_before (gen_return_internal_long (), ret);
-+	  if (PATTERN (ret) == ret_rtx)
-+	    emit_jump_insn_before (gen_return_internal_long (), ret);
-+	  else
-+	    emit_jump_insn_before (gen_simple_return_internal_long (), ret);
- 	  delete_insn (ret);
- 	}
-     }
-@@ -30306,7 +30309,7 @@ ix86_count_insn_bb (basic_block bb)
-     {
-       /* Only happen in exit blocks.  */
-       if (JUMP_P (insn)
--	  && GET_CODE (PATTERN (insn)) == RETURN)
-+	  && ANY_RETURN_P (PATTERN (insn)))
- 	break;
- 
-       if (NONDEBUG_INSN_P (insn)
-@@ -30379,7 +30382,7 @@ ix86_pad_short_function (void)
-   FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
-     {
-       rtx ret = BB_END (e->src);
--      if (JUMP_P (ret) && GET_CODE (PATTERN (ret)) == RETURN)
-+      if (JUMP_P (ret) && ANY_RETURN_P (PATTERN (ret)))
- 	{
- 	  int insn_count = ix86_count_insn (e->src);
- 
-diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
-index 3a27ca4..86938ae 100644
---- a/gcc/config/i386/i386.md
-+++ b/gcc/config/i386/i386.md
-@@ -11687,24 +11687,29 @@
-   ""
-   [(set_attr "length" "0")])
- 
-+(define_code_iterator returns [return simple_return])
-+(define_code_attr return_str [(return "") (simple_return "simple_")])
-+(define_code_attr return_cond [(return "ix86_can_use_return_insn_p ()")
-+			       (simple_return "")])
-+
- ;; Insn emitted into the body of a function to return from a function.
- ;; This is only done if the function's epilogue is known to be simple.
- ;; See comments for ix86_can_use_return_insn_p in i386.c.
- 
--(define_expand "return"
--  [(return)]
--  "ix86_can_use_return_insn_p ()"
-+(define_expand "<return_str>return"
-+  [(returns)]
-+  "<return_cond>"
- {
-   if (crtl->args.pops_args)
-     {
-       rtx popc = GEN_INT (crtl->args.pops_args);
--      emit_jump_insn (gen_return_pop_internal (popc));
-+      emit_jump_insn (gen_<return_str>return_pop_internal (popc));
-       DONE;
-     }
- })
- 
--(define_insn "return_internal"
--  [(return)]
-+(define_insn "<return_str>return_internal"
-+  [(returns)]
-   "reload_completed"
-   "ret"
-   [(set_attr "length" "1")
-@@ -11715,8 +11720,8 @@
- ;; Used by x86_machine_dependent_reorg to avoid penalty on single byte RET
- ;; instruction Athlon and K8 have.
- 
--(define_insn "return_internal_long"
--  [(return)
-+(define_insn "<return_str>return_internal_long"
-+  [(returns)
-    (unspec [(const_int 0)] UNSPEC_REP)]
-   "reload_completed"
-   "rep\;ret"
-@@ -11726,8 +11731,8 @@
-    (set_attr "prefix_rep" "1")
-    (set_attr "modrm" "0")])
- 
--(define_insn "return_pop_internal"
--  [(return)
-+(define_insn "<return_str>return_pop_internal"
-+  [(returns)
-    (use (match_operand:SI 0 "const_int_operand" ""))]
-   "reload_completed"
-   "ret\t%0"
-@@ -11736,8 +11741,8 @@
-    (set_attr "length_immediate" "2")
-    (set_attr "modrm" "0")])
- 
--(define_insn "return_indirect_internal"
--  [(return)
-+(define_insn "<return_str>return_indirect_internal"
-+  [(returns)
-    (use (match_operand:SI 0 "register_operand" "r"))]
-   "reload_completed"
-   "jmp\t%A0"
-diff --git a/gcc/config/i386/i386elf.h b/gcc/config/i386/i386elf.h
-index 79d7b95..c3c58ce 100644
---- a/gcc/config/i386/i386elf.h
-+++ b/gcc/config/i386/i386elf.h
-@@ -20,10 +20,6 @@ You should have received a copy of the GNU General Public License
- along with GCC; see the file COPYING3.  If not see
- <http://www.gnu.org/licenses/>.  */
- 
--/* Use stabs instead of DWARF debug format.  */
--#undef  PREFERRED_DEBUGGING_TYPE
--#define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
--
- #define TARGET_VERSION fprintf (stderr, " (i386 bare ELF target)");
- 
- /* The ELF ABI for the i386 says that records and unions are returned
-@@ -36,12 +32,9 @@ along with GCC; see the file COPYING3.  If not see
- #undef CPP_SPEC
- #define CPP_SPEC ""
- 
--#define ENDFILE_SPEC "crtend.o%s"
-+#define ENDFILE_SPEC "crtend.o%s crtn.o%s"
- 
--#define STARTFILE_SPEC "%{!shared: \
--			 %{!symbolic: \
--			  %{pg:gcrt0.o%s}%{!pg:%{p:mcrt0.o%s}%{!p:crt0.o%s}}}}\
--			crtbegin.o%s"
-+#define STARTFILE_SPEC "crtbegin.o%s crti.o%s"
- 
- #undef DBX_REGISTER_NUMBER
- #define DBX_REGISTER_NUMBER(n) \
-diff --git a/gcc/config/i386/t-cygming b/gcc/config/i386/t-cygming
-index ccae237..b41cb80 100644
---- a/gcc/config/i386/t-cygming
-+++ b/gcc/config/i386/t-cygming
-@@ -106,4 +106,4 @@ SHLIB_MKMAP = $(srcdir)/mkmap-flat.awk
- # We'd like to use SHLIB_SONAME here too, but shlib_base_name
- # does not get substituted before mkmap-flat.awk is run.
- SHLIB_MKMAP_OPTS = -v pe_dll=libgcc_s_$(EH_MODEL)-$(SHLIB_SOVERSION)$(SHLIB_EXT)
--SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver
-+SHLIB_MAPFILES = $$(libgcc_objdir)/libgcc-std.ver
-diff --git a/gcc/config/i386/t-i386elf b/gcc/config/i386/t-i386elf
-index 9560d90..e4c55cb 100644
---- a/gcc/config/i386/t-i386elf
-+++ b/gcc/config/i386/t-i386elf
-@@ -1,4 +1,17 @@
- # For svr4 we build crtbegin.o and crtend.o which serve to add begin and
- # end labels to the .ctors and .dtors section when we link using gcc.
- 
--EXTRA_PARTS=crtbegin.o crtend.o
-+EXTRA_PARTS=crtbegin.o crtend.o crti.o crtn.o
-+
-+#
-+# Also build crti.o and ctrn.o to provide _init/_fini.
-+# The x68 Solaris implementation works here.
-+#
-+
-+$(T)crti.o: $(srcdir)/config/i386/sol2-ci.asm $(GCC_PASSES)
-+	sed -e '/^!/d' <$(srcdir)/config/i386/sol2-ci.asm >crti.s
-+	$(GCC_FOR_TARGET) -c -o $(T)crti.o crti.s
-+$(T)crtn.o: $(srcdir)/config/i386/sol2-cn.asm $(GCC_PASSES)
-+	sed -e '/^!/d' <$(srcdir)/config/i386/sol2-cn.asm >crtn.s
-+	$(GCC_FOR_TARGET) -c -o $(T)crtn.o crtn.s
-+
-diff --git a/gcc/config/i386/t-linux b/gcc/config/i386/t-linux
-index 76e3f64..f05cbd3 100644
---- a/gcc/config/i386/t-linux
-+++ b/gcc/config/i386/t-linux
-@@ -1,7 +1,7 @@
- # On 64bit we do not need any exports for glibc for 64-bit libgcc_s.
- # Need to support TImode for x86.  Override the settings from
- # t-slibgcc-elf-ver and t-linux
--SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver \
-+SHLIB_MAPFILES = $$(libgcc_objdir)/libgcc-std.ver \
- 		 $(srcdir)/config/i386/libgcc-glibc.ver
- 
- ifneq (,$(findstring -linux,$(target)))
-diff --git a/gcc/config/m68k/m68k-devices.def b/gcc/config/m68k/m68k-devices.def
-index 4838fb0..41e11c8 100644
---- a/gcc/config/m68k/m68k-devices.def
-+++ b/gcc/config/m68k/m68k-devices.def
-@@ -84,10 +84,16 @@ M68K_DEVICE ("cpu32", cpu32,    "cpu32", "cpu32", cpu32,    isa_cpu32, FL_MMU)
- /* For historical reasons, the 51 multilib is named 51qe.  */
- M68K_DEVICE ("51",    mcf51,    "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP)
- M68K_DEVICE ("51ac",  mcf51ac,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP)
-+M68K_DEVICE ("51ag",  mcf51ag,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP)
- M68K_DEVICE ("51cn",  mcf51cn,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP)
- M68K_DEVICE ("51em",  mcf51em,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP | FL_CF_MAC)
-+M68K_DEVICE ("51je",  mcf51je,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP | FL_CF_MAC)
-+M68K_DEVICE ("51jf",  mcf51jf,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP | FL_CF_EMAC)
-+M68K_DEVICE ("51jg",  mcf51jg,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP | FL_CF_EMAC)
- M68K_DEVICE ("51jm",  mcf51jm,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP)
-+M68K_DEVICE ("51mm",  mcf51mm,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP | FL_CF_MAC)
- M68K_DEVICE ("51qe",  mcf51qe,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP)
-+M68K_DEVICE ("51qm",  mcf51qm,  "51",    "51qe",  cfv1,     isa_c,     FL_CF_USP | FL_CF_EMAC)
- 
- /* ColdFire CFV2 processors.  */
- M68K_DEVICE ("5202",  mcf5202,  "5206",  "5206",  cfv2,     isa_a,     0)
-diff --git a/gcc/config/m68k/m68k-protos.h b/gcc/config/m68k/m68k-protos.h
-index ad02026..fb8f718 100644
---- a/gcc/config/m68k/m68k-protos.h
-+++ b/gcc/config/m68k/m68k-protos.h
-@@ -54,7 +54,7 @@ extern void print_operand (FILE *, rtx, int);
- extern bool m68k_output_addr_const_extra (FILE *, rtx);
- extern void notice_update_cc (rtx, rtx);
- extern bool m68k_legitimate_base_reg_p (rtx, bool);
--extern bool m68k_legitimate_index_reg_p (rtx, bool);
-+extern bool m68k_legitimate_index_reg_p (enum machine_mode, rtx, bool);
- extern bool m68k_illegitimate_symbolic_constant_p (rtx);
- extern bool m68k_matches_q_p (rtx);
- extern bool m68k_matches_u_p (rtx);
-diff --git a/gcc/config/m68k/m68k.c b/gcc/config/m68k/m68k.c
-index e5bd011..1fe6e20 100644
---- a/gcc/config/m68k/m68k.c
-+++ b/gcc/config/m68k/m68k.c
-@@ -1397,7 +1397,7 @@ m68k_expand_epilogue (bool sibcall_p)
- 			   EH_RETURN_STACKADJ_RTX));
- 
-   if (!sibcall_p)
--    emit_jump_insn (gen_rtx_RETURN (VOIDmode));
-+    emit_jump_insn (ret_rtx);
- }
- 
- /* Return true if X is a valid comparison operator for the dbcc 
-@@ -1917,15 +1917,16 @@ m68k_legitimate_base_reg_p (rtx x, bool strict_p)
-    whether we need strict checking.  */
- 
- bool
--m68k_legitimate_index_reg_p (rtx x, bool strict_p)
-+m68k_legitimate_index_reg_p (enum machine_mode mode, rtx x, bool strict_p)
- {
-   if (!strict_p && GET_CODE (x) == SUBREG)
-     x = SUBREG_REG (x);
- 
-   return (REG_P (x)
- 	  && (strict_p
--	      ? REGNO_OK_FOR_INDEX_P (REGNO (x))
--	      : REGNO_OK_FOR_INDEX_NONSTRICT_P (REGNO (x))));
-+	      ? REGNO_MODE_OK_FOR_INDEX_P (REGNO (x), mode)
-+	      : (MODE_OK_FOR_INDEX_P (mode)
-+		 && REGNO_OK_FOR_INDEX_NONSTRICT_P (REGNO (x)))));
- }
- 
- /* Return true if X is a legitimate index expression for a (d8,An,Xn) or
-@@ -1933,7 +1934,8 @@ m68k_legitimate_index_reg_p (rtx x, bool strict_p)
-    ADDRESS if so.  STRICT_P says whether we need strict checking.  */
- 
- static bool
--m68k_decompose_index (rtx x, bool strict_p, struct m68k_address *address)
-+m68k_decompose_index (enum machine_mode mode, rtx x, bool strict_p,
-+		      struct m68k_address *address)
- {
-   int scale;
- 
-@@ -1957,7 +1959,7 @@ m68k_decompose_index (rtx x, bool strict_p, struct m68k_address *address)
-       && GET_MODE (XEXP (x, 0)) == HImode)
-     x = XEXP (x, 0);
- 
--  if (m68k_legitimate_index_reg_p (x, strict_p))
-+  if (m68k_legitimate_index_reg_p (mode, x, strict_p))
-     {
-       address->scale = scale;
-       address->index = x;
-@@ -2111,7 +2113,7 @@ m68k_decompose_address (enum machine_mode mode, rtx x,
-      accesses to unplaced labels in other cases.  */
-   if (GET_CODE (x) == PLUS
-       && m68k_jump_table_ref_p (XEXP (x, 1))
--      && m68k_decompose_index (XEXP (x, 0), strict_p, address))
-+      && m68k_decompose_index (mode, XEXP (x, 0), strict_p, address))
-     {
-       address->offset = XEXP (x, 1);
-       return true;
-@@ -2143,7 +2145,7 @@ m68k_decompose_address (enum machine_mode mode, rtx x,
- 	 worse code.  */
-       if (address->offset
- 	  && symbolic_operand (address->offset, VOIDmode)
--	  && m68k_decompose_index (x, strict_p, address))
-+	  && m68k_decompose_index (mode, x, strict_p, address))
- 	return true;
-     }
-   else
-@@ -2162,14 +2164,14 @@ m68k_decompose_address (enum machine_mode mode, rtx x,
-   if (GET_CODE (x) == PLUS)
-     {
-       if (m68k_legitimate_base_reg_p (XEXP (x, 0), strict_p)
--	  && m68k_decompose_index (XEXP (x, 1), strict_p, address))
-+	  && m68k_decompose_index (mode, XEXP (x, 1), strict_p, address))
- 	{
- 	  address->base = XEXP (x, 0);
- 	  return true;
- 	}
- 
-       if (m68k_legitimate_base_reg_p (XEXP (x, 1), strict_p)
--	  && m68k_decompose_index (XEXP (x, 0), strict_p, address))
-+	  && m68k_decompose_index (mode, XEXP (x, 0), strict_p, address))
- 	{
- 	  address->base = XEXP (x, 1);
- 	  return true;
-@@ -4302,7 +4304,8 @@ notice_update_cc (rtx exp, rtx insn)
-       && GET_MODE_CLASS (GET_MODE (XEXP (cc_status.value2, 0))) == MODE_FLOAT)
-     {
-       cc_status.flags = CC_IN_68881;
--      if (!FP_REG_P (XEXP (cc_status.value2, 0)))
-+      if (!FP_REG_P (XEXP (cc_status.value2, 0))
-+	  && FP_REG_P (XEXP (cc_status.value2, 1)))
- 	cc_status.flags |= CC_REVERSED;
-     }
- }
-@@ -6175,7 +6178,14 @@ m68k_sched_variable_issue (FILE *sched_dump ATTRIBUTE_UNUSED,
- 	  gcc_unreachable ();
- 	}
- 
--      gcc_assert (insn_size <= sched_ib.filled);
-+      if (insn_size > sched_ib.filled)
-+	/* Scheduling for register pressure does not always take DFA into
-+	   account.  Workaround instruction buffer not being filled enough.  */
-+	{
-+	  gcc_assert (sched_pressure_p);
-+	  insn_size = sched_ib.filled;
-+	}
-+
-       --can_issue_more;
-     }
-   else if (GET_CODE (PATTERN (insn)) == ASM_INPUT
-@@ -6341,6 +6351,8 @@ m68k_sched_md_init (FILE *sched_dump ATTRIBUTE_UNUSED,
-     /* haifa-sched.c: schedule_block () calls advance_cycle () just before
-        the first cycle.  Workaround that.  */
-     sched_ib.filled = -2;
-+  /* Undo attempts by sched-rgn to save states across block boundaries.  */
-+  state_reset (curr_state);
- }
- 
- /* Implementation of targetm.sched.dfa_pre_advance_cycle () hook.
-diff --git a/gcc/config/rx/rx.c b/gcc/config/rx/rx.c
-index 392e2ff..5cc9a7f 100644
---- a/gcc/config/rx/rx.c
-+++ b/gcc/config/rx/rx.c
-@@ -1566,7 +1566,7 @@ gen_rx_rtsd_vector (unsigned int adjust, unsigned int low, unsigned int high)
- 				: plus_constant (stack_pointer_rtx,
- 						 i * UNITS_PER_WORD)));
- 
--  XVECEXP (vector, 0, count - 1) = gen_rtx_RETURN (VOIDmode);
-+  XVECEXP (vector, 0, count - 1) = ret_rtx;
- 
-   return vector;
- }
-diff --git a/gcc/config/s390/s390.c b/gcc/config/s390/s390.c
-index 9b275b0..d9d3aa9 100644
---- a/gcc/config/s390/s390.c
-+++ b/gcc/config/s390/s390.c
-@@ -4856,7 +4856,7 @@ s390_expand_cs_hqi (enum machine_mode mode, rtx target, rtx mem, rtx cmp, rtx ne
-   if (ac.aligned && MEM_P (cmp))
-     {
-       cmpv = force_reg (SImode, val);
--      store_bit_field (cmpv, GET_MODE_BITSIZE (mode), 0, SImode, cmp);
-+      store_bit_field (cmpv, GET_MODE_BITSIZE (mode), 0, false, SImode, cmp);
-     }
-   else
-     cmpv = force_reg (SImode, expand_simple_binop (SImode, IOR, cmp, val,
-@@ -4864,7 +4864,8 @@ s390_expand_cs_hqi (enum machine_mode mode, rtx target, rtx mem, rtx cmp, rtx ne
-   if (ac.aligned && MEM_P (new_rtx))
-     {
-       newv = force_reg (SImode, val);
--      store_bit_field (newv, GET_MODE_BITSIZE (mode), 0, SImode, new_rtx);
-+      store_bit_field (newv, GET_MODE_BITSIZE (mode), 0, false, SImode,
-+		       new_rtx);
-     }
-   else
-     newv = force_reg (SImode, expand_simple_binop (SImode, IOR, new_rtx, val,
-@@ -4941,7 +4942,8 @@ s390_expand_atomic (enum machine_mode mode, enum rtx_code code,
-       /* FALLTHRU */
-     case SET:
-       if (ac.aligned && MEM_P (val))
--	store_bit_field (new_rtx, GET_MODE_BITSIZE (mode), 0, SImode, val);
-+	store_bit_field (new_rtx, GET_MODE_BITSIZE (mode), 0, false, SImode,
-+			 val);
-       else
- 	{
- 	  new_rtx = expand_simple_binop (SImode, AND, new_rtx, ac.modemaski,
-@@ -8479,7 +8481,7 @@ s390_emit_epilogue (bool sibcall)
- 
-       p = rtvec_alloc (2);
- 
--      RTVEC_ELT (p, 0) = gen_rtx_RETURN (VOIDmode);
-+      RTVEC_ELT (p, 0) = ret_rtx;
-       RTVEC_ELT (p, 1) = gen_rtx_USE (VOIDmode, return_reg);
-       emit_jump_insn (gen_rtx_PARALLEL (VOIDmode, p));
-     }
-@@ -8736,7 +8738,7 @@ s390_promote_function_mode (const_tree type, enum machine_mode mode,
-   if (INTEGRAL_MODE_P (mode)
-       && GET_MODE_SIZE (mode) < UNITS_PER_LONG)
-     {
--      if (POINTER_TYPE_P (type))
-+      if (type != NULL_TREE && POINTER_TYPE_P (type))
- 	*punsignedp = POINTERS_EXTEND_UNSIGNED;
-       return Pmode;
-     }
-diff --git a/gcc/config/sh/constraints.md b/gcc/config/sh/constraints.md
-index 6b0e5d2..dbc4bbe 100644
---- a/gcc/config/sh/constraints.md
-+++ b/gcc/config/sh/constraints.md
-@@ -75,6 +75,9 @@
- (define_register_constraint "t" "T_REGS"
-   "T register.")
- 
-+(define_register_constraint "u" "NON_SP_REGS"
-+  "Non-stack-pointer register.")
-+
- (define_register_constraint "w" "FP0_REGS"
-   "Floating-point register 0.")
-diff --git a/gcc/config/t-slibgcc-sld b/gcc/config/t-slibgcc-sld
-index 3a343f5..013a0d7 100644
---- a/gcc/config/t-slibgcc-sld
-+++ b/gcc/config/t-slibgcc-sld
-@@ -47,4 +47,4 @@ SHLIB_INSTALL = \
- 	$(LN_S) $(SHLIB_SONAME) \
- 	  $$(DESTDIR)$$(slibdir)$(SHLIB_SLIBDIR_QUAL)/$(SHLIB_SOLINK)
- SHLIB_MKMAP = $(srcdir)/mkmap-symver.awk
--SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver
-+SHLIB_MAPFILES = $$(libgcc_objdir)/libgcc-std.ver
 diff --git a/gcc/config/t-sysroot-suffix b/gcc/config/t-sysroot-suffix
 index 08b4f94..5ebd9f0 100644
 --- a/gcc/config/t-sysroot-suffix
@@ -6422,30 +5399,6 @@ index 08b4f94..5ebd9f0 100644
 -	  "$(MULTILIB_MATCHES)" > tmp-sysroot-suffix.h
 +	  "$(MULTILIB_MATCHES)" "$(MULTILIB_ALIASES)" > tmp-sysroot-suffix.h
  	mv tmp-sysroot-suffix.h $@
-diff --git a/gcc/config/v850/v850.c b/gcc/config/v850/v850.c
-index d75f88c..bb32613 100644
---- a/gcc/config/v850/v850.c
-+++ b/gcc/config/v850/v850.c
-@@ -1886,7 +1886,7 @@ expand_epilogue (void)
- 	  int offset;
- 	  restore_all = gen_rtx_PARALLEL (VOIDmode,
- 					  rtvec_alloc (num_restore + 2));
--	  XVECEXP (restore_all, 0, 0) = gen_rtx_RETURN (VOIDmode);
-+	  XVECEXP (restore_all, 0, 0) = ret_rtx;
- 	  XVECEXP (restore_all, 0, 1)
- 	    = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
- 			    gen_rtx_PLUS (Pmode,
-diff --git a/gcc/config/vx-common.h b/gcc/config/vx-common.h
-index 6a6d109..f1aad2e 100644
---- a/gcc/config/vx-common.h
-+++ b/gcc/config/vx-common.h
-@@ -92,3 +92,6 @@ along with GCC; see the file COPYING3.  If not see
- /* We occasionally need to distinguish between the VxWorks variants.  */
- #define VXWORKS_KIND_NORMAL  1
- #define VXWORKS_KIND_AE      2
-+
-+/* Enable get_feature license checking.  */
-+#define TARGET_FLEXLM
 diff --git a/gcc/configure b/gcc/configure
 index c8caff2..6542f2f 100755
 --- a/gcc/configure
@@ -6893,58 +5846,6 @@ index 4c55f4f..cecc6e0 100644
    if (DECL_CLONED_FUNCTION_P (decl))
      TREE_USED (DECL_CLONED_FUNCTION (decl)) = 1;
  
-diff --git a/gcc/crtstuff.c b/gcc/crtstuff.c
-index b65f490..38542f3 100644
---- a/gcc/crtstuff.c
-+++ b/gcc/crtstuff.c
-@@ -152,6 +152,9 @@ extern void __register_frame_info (const void *, struct object *)
- extern void __register_frame_info_bases (const void *, struct object *,
- 					 void *, void *)
- 				  TARGET_ATTRIBUTE_WEAK;
-+extern void __register_frame_info_header_bases (const void *, struct object *,
-+					 void *, void *)
-+				  TARGET_ATTRIBUTE_WEAK;
- extern void *__deregister_frame_info (const void *)
- 				     TARGET_ATTRIBUTE_WEAK;
- extern void *__deregister_frame_info_bases (const void *)
-@@ -226,6 +229,10 @@ STATIC func_ptr __DTOR_LIST__[1]
- STATIC EH_FRAME_SECTION_CONST char __EH_FRAME_BEGIN__[]
-      __attribute__((section(EH_FRAME_SECTION_NAME), aligned(4)))
-      = { };
-+
-+#ifdef MD_HAVE_COMPACT_EH
-+extern char __GNU_EH_FRAME_HDR[] TARGET_ATTRIBUTE_WEAK;
-+#endif /* MD_HAVE_COMPACT_EH */
- #endif /* USE_EH_FRAME_REGISTRY */
- 
- #ifdef JCR_SECTION_NAME
-@@ -327,6 +334,12 @@ __do_global_dtors_aux (void)
- 
- #ifdef USE_EH_FRAME_REGISTRY
- #ifdef CRT_GET_RFIB_DATA
-+#ifdef MD_HAVE_COMPACT_EH
-+  if (__register_frame_info_header_bases && __GNU_EH_FRAME_HDR &&
-+      __GNU_EH_FRAME_HDR[0] > 1)
-+    __deregister_frame_info_bases (__GNU_EH_FRAME_HDR);
-+  else
-+#endif /* MD_HAVE_COMPACT_EH */
-   /* If we used the new __register_frame_info_bases interface,
-      make sure that we deregister from the same place.  */
-   if (__deregister_frame_info_bases)
-@@ -370,6 +383,13 @@ frame_dummy (void)
-   void *tbase, *dbase;
-   tbase = 0;
-   CRT_GET_RFIB_DATA (dbase);
-+#ifdef MD_HAVE_COMPACT_EH
-+  if (__register_frame_info_header_bases && __GNU_EH_FRAME_HDR &&
-+      __GNU_EH_FRAME_HDR[0] > 1)
-+    __register_frame_info_header_bases (__GNU_EH_FRAME_HDR, &object,
-+					tbase, dbase);
-+  else
-+#endif /* MD_HAVE_COMPACT_EH */
-   if (__register_frame_info_bases)
-     __register_frame_info_bases (__EH_FRAME_BEGIN__, &object, tbase, dbase);
- #else
 diff --git a/gcc/cse.c b/gcc/cse.c
 index 078977f..6f06807 100644
 --- a/gcc/cse.c
@@ -14686,10 +13587,10 @@ index b01aed3..9ff17aa 100644
  #define synchronize_libfunc	(libfunc_table[LTI_synchronize])
  
  #define gcov_flush_libfunc	(libfunc_table[LTI_gcov_flush])
-diff --git a/gcc/libgcc2.h b/gcc/libgcc2.h
+diff --git a/libgcc/libgcc2.h b/libgcc/libgcc2.h
 index 4e6fd23..bb4e6f3 100644
---- a/gcc/libgcc2.h
-+++ b/gcc/libgcc2.h
+--- a/libgcc/libgcc2.h
++++ b/libgcc/libgcc2.h
 @@ -193,8 +193,13 @@ typedef int shift_count_type __attribute__((mode (__libgcc_shift_count__)));
  #define UHWtype	UDItype
  #define DWtype	TItype
@@ -19643,26 +18544,6 @@ index b6846a9..dfb87a1 100644
  "/* { dg-options \"%s-I%s -mno-base-addresses\" { target mmix-*-* } } */\n",
  "/* { dg-options \"%s-I%s -mlongcalls -mtext-section-literals\" { target xtensa*-*-* } } */\n"
  #define NDG_OPTIONS (sizeof (dg_options) / sizeof (dg_options[0]))
-diff --git a/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-5.C b/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-5.C
-index 92bc8a9..738d26d 100644
---- a/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-5.C
-+++ b/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-5.C
-@@ -13,3 +13,5 @@
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h\[a-z\]*_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h2f_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_f2h_ieee" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_h2f" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_f2h" } } */
-diff --git a/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-6.C b/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-6.C
-index ae40b1e..a0e09c8 100644
---- a/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-6.C
-+++ b/gcc/testsuite/g++.dg/ext/arm-fp16/arm-fp16-ops-6.C
-@@ -13,3 +13,5 @@
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h\[a-z\]*_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h2f_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_f2h_ieee" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_h2f" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_f2h" } } */
 diff --git a/gcc/testsuite/gcc.c-torture/execute/20101011-1.c b/gcc/testsuite/gcc.c-torture/execute/20101011-1.c
 index 7180e68..485e61e 100644
 --- a/gcc/testsuite/gcc.c-torture/execute/20101011-1.c
@@ -19976,42 +18857,6 @@ index 3fa1a0e..9276b1a 100644
 +extern __typeof (syslog) syslog __asm__ ("" ASMNAME ("__GI_syslog")) __attribute__ ((visibility ("hidden")));
 +extern __typeof (vsyslog) vsyslog __asm__ ("" ASMNAME ("__GI_vsyslog")) __attribute__ ((visibility ("hidden")));
 +extern __typeof (__vsyslog_chk) __vsyslog_chk __asm__ ("" ASMNAME ("__GI___vsyslog_chk")) __attribute__ ((visibility ("hidden")));
-diff --git a/gcc/testsuite/gcc.dg/tls/thr-cse-1.c b/gcc/testsuite/gcc.dg/tls/thr-cse-1.c
-index 95d3b45..7542350 100644
---- a/gcc/testsuite/gcc.dg/tls/thr-cse-1.c
-+++ b/gcc/testsuite/gcc.dg/tls/thr-cse-1.c
-@@ -15,9 +15,10 @@ int foo (int b, int c, int d)
-   return a;
- }
- 
--/* { dg-final { scan-assembler-not "emutls_get_address.*emutls_get_address.*" { target { ! { "*-wrs-vxworks"  "*-*-darwin8"  "hppa*-*-hpux*" "spu-*-*" } } } } } */
-+/* { dg-final { scan-assembler-not "emutls_get_address.*emutls_get_address.*" { target { ! { "*-wrs-vxworks"  "*-*-darwin8"  "hppa*-*-hpux*" "spu-*-*" "i?86-*-mingw*" } } } } } */
- /* { dg-final { scan-assembler-not "call\tL___emutls_get_address.stub.*call\tL___emutls_get_address.stub.*" { target "*-*-darwin8" } } } */
- /* { dg-final { scan-assembler-not "(b,l|bl) __emutls_get_address.*(b,l|bl) __emutls_get_address.*" { target "hppa*-*-hpux*" } } } */
- /* { dg-final { scan-assembler-not "(brsl|brasl)\t__emutls_get_address.*(brsl|brasl)\t__emutls_get_address.*" { target spu-*-* } } } */
- /* { dg-final { scan-assembler-not "tls_lookup.*tls_lookup.*" { target *-wrs-vxworks } } } */
-+/* { dg-final { scan-assembler-not "call\t___emutls_get_address.*call\t___emutls_get_address" { target "i?86-*-mingw*" } } } */
- 
-diff --git a/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-5.c b/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-5.c
-index 92bc8a9..738d26d 100644
---- a/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-5.c
-+++ b/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-5.c
-@@ -13,3 +13,5 @@
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h\[a-z\]*_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h2f_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_f2h_ieee" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_h2f" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_f2h" } } */
-diff --git a/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-6.c b/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-6.c
-index ae40b1e..a0e09c8 100644
---- a/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-6.c
-+++ b/gcc/testsuite/gcc.dg/torture/arm-fp16-ops-6.c
-@@ -13,3 +13,5 @@
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h\[a-z\]*_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_h2f_ieee" } } */
- /* { dg-final { scan-assembler-not "\tbl\t__gnu_f2h_ieee" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_h2f" } } */
-+/* { dg-final { scan-assembler-not "\tbl\t__aeabi_f2h" } } */
 diff --git a/gcc/testsuite/gcc.dg/torture/pr48044.c b/gcc/testsuite/gcc.dg/torture/pr48044.c
 index fe3b734..d20a634 100644
 --- a/gcc/testsuite/gcc.dg/torture/pr48044.c
@@ -20205,17 +19050,6 @@ index 91c214f..0759230 100644
  #include <sys/mman.h>
  #include <stdio.h>
  
-diff --git a/gcc/testsuite/gcc.dg/vect/vect-16.c b/gcc/testsuite/gcc.dg/vect/vect-16.c
-index 6983705..d55751b 100644
---- a/gcc/testsuite/gcc.dg/vect/vect-16.c
-+++ b/gcc/testsuite/gcc.dg/vect/vect-16.c
-@@ -34,5 +34,5 @@ int main (void)
- }
- 
- /* Requires fast-math.  */
--/* { dg-final { scan-tree-dump-times "vectorized 1 loops" 1 "vect" { xfail *-*-* } } } */
-+/* { dg-final { scan-tree-dump-times "vectorized 1 loops" 1 "vect" { xfail { ! "arm*-*-*" } } } } */
- /* { dg-final { cleanup-tree-dump "vect" } } */
 diff --git a/gcc/testsuite/gcc.dg/vect/vect-shift-2.c b/gcc/testsuite/gcc.dg/vect/vect-shift-2.c
 index 83211eb..641fe1a 100644
 --- a/gcc/testsuite/gcc.dg/vect/vect-shift-2.c
@@ -21564,10 +20398,10 @@ index ece68b4..64d4558 100644
  
  /* In tree-inline.c.  */
  
-diff --git a/gcc/unwind-compat.c b/gcc/unwind-compat.c
+diff --git a/libgcc/unwind-compat.c b/libgcc/unwind-compat.c
 index 5b41f24..2fbd69d 100644
---- a/gcc/unwind-compat.c
-+++ b/gcc/unwind-compat.c
+--- a/libgcc/unwind-compat.c
++++ b/libgcc/unwind-compat.c
 @@ -207,4 +207,14 @@ _Unwind_SetIP (struct _Unwind_Context *context, _Unwind_Ptr val)
    return __libunwind_Unwind_SetIP (context, val);
  }
@@ -21583,722 +20417,10 @@ index 5b41f24..2fbd69d 100644
 +}
 +symver (_Unwind_GetEhEncoding, GCC_3.0);
  #endif
-diff --git a/gcc/unwind-dw2-fde-glibc.c b/gcc/unwind-dw2-fde-glibc.c
-index d8e3c0e..400d7c0 100644
---- a/gcc/unwind-dw2-fde-glibc.c
-+++ b/gcc/unwind-dw2-fde-glibc.c
-@@ -45,6 +45,9 @@
- #include "unwind-dw2-fde.h"
- #include "unwind-compat.h"
- #include "gthr.h"
-+#ifdef MD_HAVE_COMPACT_EH
-+#include "unwind-compact.h"
-+#endif
- 
- #if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
-     && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
-@@ -72,11 +75,11 @@
- # define __RELOC_POINTER(ptr, base) ((ptr) + (base))
- #endif
- 
--static const fde * _Unwind_Find_registered_FDE (void *pc, struct dwarf_eh_bases *bases);
-+static enum compact_entry_type
-+_Unwind_Find_registered_Index (void *pc, struct compact_eh_bases *bases);
- 
--#define _Unwind_Find_FDE _Unwind_Find_registered_FDE
-+#define _Unwind_Find_registered_Index _Unwind_Find_registered_Index
- #include "unwind-dw2-fde.c"
--#undef _Unwind_Find_FDE
- 
- #ifndef PT_GNU_EH_FRAME
- #define PT_GNU_EH_FRAME (PT_LOOS + 0x474e550)
-@@ -85,10 +88,8 @@ static const fde * _Unwind_Find_registered_FDE (void *pc, struct dwarf_eh_bases
- struct unw_eh_callback_data
- {
-   _Unwind_Ptr pc;
--  void *tbase;
--  void *dbase;
--  void *func;
--  const fde *ret;
-+  struct compact_eh_bases *bases;
-+  enum compact_entry_type type;
-   int check_cache;
- };
- 
-@@ -131,9 +132,9 @@ base_from_cb_data (unsigned char encoding, struct unw_eh_callback_data *data)
-       return 0;
- 
-     case DW_EH_PE_textrel:
--      return (_Unwind_Ptr) data->tbase;
-+      return (_Unwind_Ptr) data->bases->tbase;
-     case DW_EH_PE_datarel:
--      return (_Unwind_Ptr) data->dbase;
-+      return (_Unwind_Ptr) data->bases->dbase;
-     default:
-       gcc_unreachable ();
-     }
-@@ -155,6 +156,7 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
-   _Unwind_Ptr eh_frame;
-   struct object ob;
-   _Unwind_Ptr pc_low = 0, pc_high = 0;
-+  const fde *f;
- 
-   struct ext_dl_phdr_info
-     {
-@@ -303,12 +305,10 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
-   /* Read .eh_frame_hdr header.  */
-   hdr = (const struct unw_eh_frame_hdr *)
-     __RELOC_POINTER (p_eh_frame_hdr->p_vaddr, load_base);
--  if (hdr->version != 1)
--    return 1;
- 
- #ifdef CRT_GET_RFIB_DATA
--# ifdef __i386__
--  data->dbase = NULL;
-+# if defined(__i386__) || defined(__mips__)
-+  data->bases->dbase = NULL;
-   if (p_dynamic)
-     {
-       /* For dynamically linked executables and shared libraries,
-@@ -318,19 +318,22 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
-       for (; dyn->d_tag != DT_NULL ; dyn++)
- 	if (dyn->d_tag == DT_PLTGOT)
- 	  {
--	    data->dbase = (void *) dyn->d_un.d_ptr;
--#if defined __linux__
-+	    data->bases->dbase = (void *) dyn->d_un.d_ptr;
-+#if defined(__mips__)
-+	    /* On MIPS we need to relocate the value and offset.  */
-+	    data->bases->dbase += load_base + 0x7ff0;
-+#elif defined __linux__
- 	    /* On IA-32 Linux, _DYNAMIC is writable and GLIBC has
- 	       relocated it.  */
- #elif defined __sun__ && defined __svr4__
- 	    /* On Solaris 2/x86, we need to do this ourselves.  */
--	    data->dbase += load_base;
-+	    data->bases->dbase += load_base;
- #endif
- 	    break;
- 	  }
-     }
- # elif defined __FRV_FDPIC__ && defined __linux__
--  data->dbase = load_base.got_value;
-+  data->bases->dbase = load_base.got_value;
- # elif defined __x86_64__ && defined __sun__ && defined __svr4__
-   /* While CRT_GET_RFIB_DATA is also defined for 64-bit Solaris 10+/x86, it
-      doesn't apply since it uses DW_EH_PE_pcrel encoding.  */
-@@ -339,6 +342,18 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
- # endif
- #endif
- 
-+#ifdef MD_HAVE_COMPACT_EH
-+  if (hdr->version == 2)
-+    {
-+      data->type = _Unwind_Search_Compact_eh_hdr ((void *)data->pc,
-+	  (const unsigned char *) hdr, data->bases);
-+      return 1;
-+    }
-+#endif
-+
-+  if (hdr->version != 1)
-+    return 1;
-+
-   p = read_encoded_value_with_base (hdr->eh_frame_ptr_enc,
- 				    base_from_cb_data (hdr->eh_frame_ptr_enc,
- 						       data),
-@@ -369,7 +384,6 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
- 	  const struct fde_table *table = (const struct fde_table *) p;
- 	  size_t lo, hi, mid;
- 	  _Unwind_Ptr data_base = (_Unwind_Ptr) hdr;
--	  fde *f;
- 	  unsigned int f_enc, f_enc_size;
- 	  _Unwind_Ptr range;
- 
-@@ -401,8 +415,11 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
- 	  read_encoded_value_with_base (f_enc & 0x0f, 0,
- 					&f->pc_begin[f_enc_size], &range);
- 	  if (data->pc < table[mid].initial_loc + data_base + range)
--	    data->ret = f;
--	  data->func = (void *) (table[mid].initial_loc + data_base);
-+	    {
-+	      data->bases->entry = f;
-+	      data->type = CET_FDE;
-+	    }
-+	  data->bases->func = (void *) (table[mid].initial_loc + data_base);
- 	  return 1;
- 	}
-     }
-@@ -411,58 +428,55 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
-      As soon as GLIBC will provide API so to notify that a library has been
-      removed, we could cache this (and thus use search_object).  */
-   ob.pc_begin = NULL;
--  ob.tbase = data->tbase;
--  ob.dbase = data->dbase;
-+  ob.tbase = data->bases->tbase;
-+  ob.dbase = data->bases->dbase;
-   ob.u.single = (fde *) eh_frame;
-   ob.s.i = 0;
-   ob.s.b.mixed_encoding = 1;  /* Need to assume worst case.  */
--  data->ret = linear_search_fdes (&ob, (fde *) eh_frame, (void *) data->pc);
--  if (data->ret != NULL)
-+  f = linear_search_fdes (&ob, (fde *) eh_frame, (void *) data->pc);
-+  data->bases->entry = f;
-+  if (f != NULL)
-     {
-       _Unwind_Ptr func;
--      unsigned int encoding = get_fde_encoding (data->ret);
-+      unsigned int encoding = get_fde_encoding (f);
- 
-       read_encoded_value_with_base (encoding,
- 				    base_from_cb_data (encoding, data),
--				    data->ret->pc_begin, &func);
--      data->func = (void *) func;
-+				    f->pc_begin, &func);
-+      data->bases->func = (void *) func;
-+      data->type = CET_FDE;
-     }
-   return 1;
- }
- 
--const fde *
--_Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-+enum compact_entry_type
-+_Unwind_Find_Index (void *pc, struct compact_eh_bases *bases)
- {
-   struct unw_eh_callback_data data;
--  const fde *ret;
- 
--  ret = _Unwind_Find_registered_FDE (pc, bases);
--  if (ret != NULL)
--    return ret;
-+  data.type = _Unwind_Find_registered_Index (pc, bases);
-+  if (data.type != CET_not_found)
-+    return data.type;
- 
-   data.pc = (_Unwind_Ptr) pc;
--  data.tbase = NULL;
--  data.dbase = NULL;
--  data.func = NULL;
--  data.ret = NULL;
-+  data.bases = bases;
-+  data.type = CET_not_found;
-   data.check_cache = 1;
- 
-   if (dl_iterate_phdr (_Unwind_IteratePhdrCallback, &data) < 0)
--    return NULL;
-+    return CET_not_found;
- 
--  if (data.ret)
--    {
--      bases->tbase = data.tbase;
--      bases->dbase = data.dbase;
--      bases->func = data.func;
--    }
--  return data.ret;
-+  if (data.type != CET_not_found)
-+    return data.type;
-+
-+  return CET_not_found;
- }
- 
--#else
--/* Prevent multiple include of header files.  */
--#define _Unwind_Find_FDE _Unwind_Find_FDE
-+#else /* !USE_PT_GNU_EH_FRAME */
-+
-+#define _Unwind_Find_registered_Index _Unwind_Find_Index
- #include "unwind-dw2-fde.c"
-+
- #endif
- 
- #if defined (USE_GAS_SYMVER) && defined (SHARED) && defined (USE_LIBUNWIND_EXCEPTIONS)
-diff --git a/gcc/unwind-dw2-fde.c b/gcc/unwind-dw2-fde.c
-index 93d4271..e38311d 100644
---- a/gcc/unwind-dw2-fde.c
-+++ b/gcc/unwind-dw2-fde.c
-@@ -24,7 +24,8 @@ a copy of the GCC Runtime Library Exception along with this program;
- see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
- <http://www.gnu.org/licenses/>.  */
- 
--#ifndef _Unwind_Find_FDE
-+#ifndef _Unwind_Find_registered_Index
-+#define _Unwind_Find_registered_Index _Unwind_Find_Index
- #include "tconfig.h"
- #include "tsystem.h"
- #include "coretypes.h"
-@@ -35,6 +36,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
- #include "unwind-pe.h"
- #include "unwind-dw2-fde.h"
- #include "gthr.h"
-+#ifdef MD_HAVE_COMPACT_EH
-+#include "unwind-compact.h"
-+#endif
- #endif
- 
- /* The unseen_objects list contains objects that have been registered
-@@ -67,22 +71,20 @@ init_object_mutex_once (void)
- #define init_object_mutex_once()
- #endif
- 
--/* Called from crtbegin.o to register the unwind info for an object.  */
-+/* Initialize OB and add to list of objects.  */
- 
--void
--__register_frame_info_bases (const void *begin, struct object *ob,
--			     void *tbase, void *dbase)
-+static void
-+__register_frame_info_1 (const void *begin, struct object *ob,
-+			  void *tbase, void *dbase, int header)
- {
--  /* If .eh_frame is empty, don't register at all.  */
--  if ((const uword *) begin == 0 || *(const uword *) begin == 0)
--    return;
--
-   ob->pc_begin = (void *)-1;
-   ob->tbase = tbase;
-   ob->dbase = dbase;
-   ob->u.single = begin;
-   ob->s.i = 0;
-   ob->s.b.encoding = DW_EH_PE_omit;
-+  ob->s.b.header = header;
-+  ob->s.b.mixed_encoding = header;
- #ifdef DWARF2_OBJECT_END_PTR_EXTENSION
-   ob->fde_end = NULL;
- #endif
-@@ -96,6 +98,34 @@ __register_frame_info_bases (const void *begin, struct object *ob,
-   __gthread_mutex_unlock (&object_mutex);
- }
- 
-+/* Called from crtbegin.o to register the unwind info for an object.  */
-+
-+void
-+__register_frame_info_header_bases (const void *begin, struct object *ob,
-+				    void *tbase, void *dbase)
-+{
-+  /* Only register compact EH frame headers.  */
-+  if (begin == NULL || *(const char *) begin != 2)
-+    return;
-+
-+#ifdef MD_HAVE_COMPACT_EH
-+  __register_frame_info_1 (begin, ob, tbase, dbase, 1);
-+#endif
-+}
-+
-+/* Called from crtbegin.o to register the unwind info for an object.  */
-+
-+void
-+__register_frame_info_bases (const void *begin, struct object *ob,
-+			     void *tbase, void *dbase)
-+{
-+  /* If .eh_frame is empty, don't register at all.  */
-+  if ((const uword *) begin == 0 || *(const uword *) begin == 0)
-+    return;
-+
-+  __register_frame_info_1 (begin, ob, tbase, dbase, 0);
-+}
-+
- void
- __register_frame_info (const void *begin, struct object *ob)
- {
-@@ -947,9 +977,25 @@ binary_search_mixed_encoding_fdes (struct object *ob, void *pc)
-   return NULL;
- }
- 
--static const fde *
--search_object (struct object* ob, void *pc)
-+static enum compact_entry_type
-+search_object (struct object* ob, void *pc, struct compact_eh_bases *bases)
- {
-+  const fde *f = NULL;
-+
-+#ifdef MD_HAVE_COMPACT_EH
-+  if (ob->s.b.header)
-+    {
-+      const unsigned char *hdr = (const unsigned char *) ob->u.single;
-+      if (ob->pc_begin == (void *) -1)
-+	{
-+	  const sword *first = (const sword *) (hdr + 8);
-+	  ob->pc_begin = (void *)((*first & ~1) + (_Unwind_Ptr) first);
-+	}
-+
-+      return _Unwind_Search_Compact_eh_hdr (pc, hdr, bases);
-+    }
-+#endif
-+
-   /* If the data hasn't been sorted, try to do this now.  We may have
-      more memory available than last time we tried.  */
-   if (! ob->s.b.sorted)
-@@ -960,17 +1006,17 @@ search_object (struct object* ob, void *pc)
- 	 that we've not processed this object before.  A quick range
- 	 check is in order.  */
-       if (pc < ob->pc_begin)
--	return NULL;
-+	return CET_not_found;
-     }
- 
-   if (ob->s.b.sorted)
-     {
-       if (ob->s.b.mixed_encoding)
--	return binary_search_mixed_encoding_fdes (ob, pc);
-+	f = binary_search_mixed_encoding_fdes (ob, pc);
-       else if (ob->s.b.encoding == DW_EH_PE_absptr)
--	return binary_search_unencoded_fdes (ob, pc);
-+	f = binary_search_unencoded_fdes (ob, pc);
-       else
--	return binary_search_single_encoding_fdes (ob, pc);
-+	f = binary_search_single_encoding_fdes (ob, pc);
-     }
-   else
-     {
-@@ -980,22 +1026,24 @@ search_object (struct object* ob, void *pc)
- 	  fde **p;
- 	  for (p = ob->u.array; *p ; p++)
- 	    {
--	      const fde *f = linear_search_fdes (ob, *p, pc);
-+	      f = linear_search_fdes (ob, *p, pc);
- 	      if (f)
--		return f;
-+		break;
- 	    }
--	  return NULL;
- 	}
-       else
--	return linear_search_fdes (ob, ob->u.single, pc);
-+	f = linear_search_fdes (ob, ob->u.single, pc);
-     }
-+
-+  bases->entry = f;
-+  return f ? CET_FDE : CET_not_found;
- }
- 
--const fde *
--_Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-+enum compact_entry_type
-+_Unwind_Find_registered_Index (void *pc, struct compact_eh_bases *bases)
- {
-   struct object *ob;
--  const fde *f = NULL;
-+  enum compact_entry_type t;
- 
-   init_object_mutex_once ();
-   __gthread_mutex_lock (&object_mutex);
-@@ -1006,8 +1054,8 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-   for (ob = seen_objects; ob; ob = ob->next)
-     if (pc >= ob->pc_begin)
-       {
--	f = search_object (ob, pc);
--	if (f)
-+	t = search_object (ob, pc, bases);
-+	if (t != CET_not_found)
- 	  goto fini;
- 	break;
-       }
-@@ -1018,7 +1066,7 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-       struct object **p;
- 
-       unseen_objects = ob->next;
--      f = search_object (ob, pc);
-+      t = search_object (ob, pc, bases);
- 
-       /* Insert the object into the classified list.  */
-       for (p = &seen_objects; *p ; p = &(*p)->next)
-@@ -1027,21 +1075,26 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-       ob->next = *p;
-       *p = ob;
- 
--      if (f)
-+      if (t != CET_not_found)
- 	goto fini;
-     }
- 
-  fini:
-   __gthread_mutex_unlock (&object_mutex);
- 
--  if (f)
-+  if (t == CET_not_found)
-+    return CET_not_found;
-+
-+  bases->tbase = ob->tbase;
-+  bases->dbase = ob->dbase;
-+
-+  if (t == CET_FDE)
-     {
-+      const fde *f;
-       int encoding;
-       _Unwind_Ptr func;
- 
--      bases->tbase = ob->tbase;
--      bases->dbase = ob->dbase;
--
-+      f = bases->entry;
-       encoding = ob->s.b.encoding;
-       if (ob->s.b.mixed_encoding)
- 	encoding = get_fde_encoding (f);
-@@ -1050,5 +1103,21 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-       bases->func = (void *) func;
-     }
- 
--  return f;
-+  return t;
-+}
-+
-+const fde *
-+_Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
-+{
-+  enum compact_entry_type type;
-+  struct compact_eh_bases data;
-+
-+  type = _Unwind_Find_Index (pc, &data);
-+  if (type != CET_FDE)
-+    return NULL;
-+
-+  bases->tbase = data.tbase;
-+  bases->dbase = data.dbase;
-+  bases->func = data.func;
-+  return (const fde *) data.entry;
- }
-diff --git a/gcc/unwind-dw2-fde.h b/gcc/unwind-dw2-fde.h
-index 6d7a8de..dfc5bfe 100644
---- a/gcc/unwind-dw2-fde.h
-+++ b/gcc/unwind-dw2-fde.h
-@@ -54,10 +54,11 @@ struct object
-       unsigned long sorted : 1;
-       unsigned long from_array : 1;
-       unsigned long mixed_encoding : 1;
-+      unsigned long header : 1;
-       unsigned long encoding : 8;
-       /* ??? Wish there was an easy way to detect a 64-bit host here;
- 	 we've got 32 bits left to play with...  */
--      unsigned long count : 21;
-+      unsigned long count : 20;
-     } b;
-     size_t i;
-   } s;
-@@ -88,9 +89,12 @@ struct dwarf_eh_bases
-   void *tbase;
-   void *dbase;
-   void *func;
-+  unsigned char eh_encoding;
- };
- 
- 
-+extern void __register_frame_info_header_bases (const void *, struct object *,
-+						void *, void *);
- extern void __register_frame_info_bases (const void *, struct object *,
- 					 void *, void *);
- extern void __register_frame_info (const void *, struct object *);
-@@ -166,6 +170,23 @@ next_fde (const fde *f)
- 
- extern const fde * _Unwind_Find_FDE (void *, struct dwarf_eh_bases *);
- 
-+struct compact_eh_bases {
-+    void *tbase;
-+    void *dbase;
-+    void *func;
-+    const void *entry;
-+    unsigned char eh_encoding;
-+};
-+enum compact_entry_type {
-+    CET_not_found,
-+    CET_FDE,
-+    CET_inline,
-+    CET_outline
-+};
-+
-+extern enum compact_entry_type _Unwind_Find_Index (void *,
-+    struct compact_eh_bases *);
-+
- static inline int
- last_fde (struct object *obj __attribute__ ((__unused__)), const fde *f)
- {
-diff --git a/gcc/unwind-dw2.c b/gcc/unwind-dw2.c
-index 2ea9adb..498da41 100644
---- a/gcc/unwind-dw2.c
-+++ b/gcc/unwind-dw2.c
-@@ -327,6 +327,12 @@ _Unwind_GetTextRelBase (struct _Unwind_Context *context)
- {
-   return (_Unwind_Ptr) context->bases.tbase;
- }
-+
-+unsigned char
-+_Unwind_GetEhEncoding (struct _Unwind_Context *context)
-+{
-+  return context->bases.eh_encoding;
-+}
- #endif
- 
- #ifdef MD_UNWIND_SUPPORT
-@@ -1115,6 +1121,79 @@ execute_cfa_program (const unsigned char *insn_ptr,
-     }
- }
- 
-+#ifdef MD_HAVE_COMPACT_EH
-+static _Unwind_Reason_Code
-+__gnu_compact_pr1 (int version ATTRIBUTE_UNUSED,
-+		  _Unwind_Action actions ATTRIBUTE_UNUSED,
-+		  _Unwind_Exception_Class exception_class ATTRIBUTE_UNUSED,
-+		  struct _Unwind_Exception *ue_header ATTRIBUTE_UNUSED,
-+		  struct _Unwind_Context *context ATTRIBUTE_UNUSED)
-+{
-+  return _URC_CONTINUE_UNWIND;
-+}
-+
-+/* The C++ EH routines need to live in the C++ runtime.  These should
-+   be pulled in via the unwinding tables when needed.  */
-+extern _Unwind_Reason_Code __gnu_compact_pr2 (int,
-+    _Unwind_Action, _Unwind_Exception_Class, struct _Unwind_Exception *,
-+    struct _Unwind_Context *) TARGET_ATTRIBUTE_WEAK;
-+extern _Unwind_Reason_Code __gnu_compact_pr3 (int,
-+    _Unwind_Action, _Unwind_Exception_Class, struct _Unwind_Exception *,
-+    struct _Unwind_Context *) TARGET_ATTRIBUTE_WEAK;
-+
-+static _Unwind_Reason_Code
-+uw_frame_state_compact (struct _Unwind_Context *context,
-+			_Unwind_FrameState *fs,
-+			enum compact_entry_type entry_type,
-+		       	struct compact_eh_bases *bases)
-+{
-+  const unsigned char *p;
-+  unsigned int pr_index;
-+  _Unwind_Ptr personality;
-+  unsigned char buf[4];
-+  _Unwind_Reason_Code rc;
-+
-+  p = bases->entry;
-+  pr_index = *(p++);
-+  switch (pr_index) {
-+  case 0:
-+      p = read_encoded_value (context, bases->eh_encoding, p, &personality);
-+      fs->personality = (_Unwind_Personality_Fn)personality;
-+      break;
-+  case 1:
-+      fs->personality = __gnu_compact_pr1;
-+      break;
-+  case 2:
-+      fs->personality = __gnu_compact_pr2;
-+      break;
-+  case 3:
-+      fs->personality = __gnu_compact_pr3;
-+      break;
-+  default:
-+      fs->personality = NULL;
-+  }
-+
-+  if (!fs->personality)
-+    return _URC_FATAL_PHASE1_ERROR;
-+
-+  if (entry_type == CET_inline)
-+    {
-+      memcpy(buf, p, 3);
-+      buf[3] = 0x5c;
-+      p = buf;
-+    }
-+
-+  rc = md_unwind_compact (context, fs, &p);
-+  if (rc != _URC_NO_REASON)
-+      return rc;
-+
-+  if (entry_type == CET_outline)
-+    context->lsda = (void *)(_Unwind_Internal_Ptr)p;
-+
-+  return _URC_NO_REASON;
-+}
-+#endif
-+
- /* Given the _Unwind_Context CONTEXT for a stack frame, look up the FDE for
-    its caller and decode it into FS.  This function also sets the
-    args_size and lsda members of CONTEXT, as they are really information
-@@ -1134,8 +1213,27 @@ uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
-   if (context->ra == 0)
-     return _URC_END_OF_STACK;
- 
-+#ifdef MD_HAVE_COMPACT_EH
-+    {
-+      struct compact_eh_bases bases;
-+      enum compact_entry_type type;
-+      type = _Unwind_Find_Index (context->ra + _Unwind_IsSignalFrame (context)
-+				 - 1, &bases);
-+      context->bases.tbase = bases.tbase;
-+      context->bases.dbase = bases.dbase;
-+      context->bases.func = bases.func;
-+      context->bases.eh_encoding = bases.eh_encoding;
-+      if (type == CET_inline || type == CET_outline)
-+	return uw_frame_state_compact (context, fs, type, &bases);
-+      if (type == CET_FDE)
-+	fde = bases.entry;
-+      else
-+	fde = NULL;
-+    }
-+#else
-   fde = _Unwind_Find_FDE (context->ra + _Unwind_IsSignalFrame (context) - 1,
- 			  &context->bases);
-+#endif
-   if (fde == NULL)
-     {
- #ifdef MD_FALLBACK_FRAME_STATE_FOR
-@@ -1423,16 +1521,12 @@ uw_advance_context (struct _Unwind_Context *context, _Unwind_FrameState *fs)
- /* Fill in CONTEXT for top-of-stack.  The only valid registers at this
-    level will be the return address and the CFA.  */
- 
--#define uw_init_context(CONTEXT)					   \
--  do									   \
--    {									   \
--      /* Do any necessary initialization to access arbitrary stack frames. \
--	 On the SPARC, this means flushing the register windows.  */	   \
--      __builtin_unwind_init ();						   \
--      uw_init_context_1 (CONTEXT, __builtin_dwarf_cfa (),		   \
--			 __builtin_return_address (0));			   \
--    }									   \
--  while (0)
-+#define uw_init_context(CONTEXT)					\
-+  /* Do any necessary initialization to access arbitrary stack frames.	\
-+     On the SPARC, this means flushing the register windows.  */	\
-+  (__builtin_unwind_init (),						\
-+   uw_init_context_1 ((CONTEXT), __builtin_dwarf_cfa (),		\
-+		      __builtin_return_address (0)))
- 
- static inline void
- init_dwarf_reg_size_table (void)
-@@ -1440,7 +1534,7 @@ init_dwarf_reg_size_table (void)
-   __builtin_init_dwarf_reg_size_table (dwarf_reg_size_table);
- }
- 
--static void __attribute__((noinline))
-+static _Unwind_Reason_Code __attribute__((noinline))
- uw_init_context_1 (struct _Unwind_Context *context,
- 		   void *outer_cfa, void *outer_ra)
- {
-@@ -1454,7 +1548,8 @@ uw_init_context_1 (struct _Unwind_Context *context,
-   context->flags = EXTENDED_CONTEXT_BIT;
- 
-   code = uw_frame_state_for (context, &fs);
--  gcc_assert (code == _URC_NO_REASON);
-+  if (code != _URC_NO_REASON)
-+    return code;
- 
- #if __GTHREADS
-   {
-@@ -1480,6 +1575,8 @@ uw_init_context_1 (struct _Unwind_Context *context,
-      initialization context, then we can't see it in the given
-      call frame data.  So have the initialization context tell us.  */
-   context->ra = __builtin_extract_return_addr (outer_ra);
-+
-+  return _URC_NO_REASON;
- }
- 
- static void _Unwind_DebugHook (void *, void *)
-@@ -1598,6 +1695,7 @@ alias (_Unwind_Resume);
- alias (_Unwind_Resume_or_Rethrow);
- alias (_Unwind_SetGR);
- alias (_Unwind_SetIP);
-+alias (_Unwind_GetEhEncoding);
- #endif
- 
- #endif /* !USING_SJLJ_EXCEPTIONS */
-diff --git a/gcc/unwind-generic.h b/gcc/unwind-generic.h
+diff --git a/libgcc/unwind-generic.h b/libgcc/unwind-generic.h
 index 4ff9017..667ffb9 100644
---- a/gcc/unwind-generic.h
-+++ b/gcc/unwind-generic.h
+--- a/libgcc/unwind-generic.h
++++ b/libgcc/unwind-generic.h
 @@ -164,6 +164,8 @@ extern _Unwind_Ptr _Unwind_GetIP (struct _Unwind_Context *);
  extern _Unwind_Ptr _Unwind_GetIPInfo (struct _Unwind_Context *, int *);
  extern void _Unwind_SetIP (struct _Unwind_Context *, _Unwind_Ptr);
@@ -22308,10 +20430,10 @@ index 4ff9017..667ffb9 100644
  /* @@@ Retrieve the CFA of the given context.  */
  extern _Unwind_Word _Unwind_GetCFA (struct _Unwind_Context *);
  
-diff --git a/gcc/unwind-sjlj.c b/gcc/unwind-sjlj.c
+diff --git a/libgcc/unwind-sjlj.c b/libgcc/unwind-sjlj.c
 index c71e798..4ef81a6 100644
---- a/gcc/unwind-sjlj.c
-+++ b/gcc/unwind-sjlj.c
+--- a/libgcc/unwind-sjlj.c
++++ b/libgcc/unwind-sjlj.c
 @@ -292,10 +292,11 @@ uw_advance_context (struct _Unwind_Context *context, _Unwind_FrameState *fs)
    uw_update_context (context, fs);
  }
@@ -22325,10 +20447,10 @@ index c71e798..4ef81a6 100644
  }
  
  static void __attribute__((noreturn))
-diff --git a/gcc/unwind.inc b/gcc/unwind.inc
+diff --git a/libgcc/unwind.inc b/libgcc/unwind.inc
 index 5e2ec29..562f6b1 100644
---- a/gcc/unwind.inc
-+++ b/gcc/unwind.inc
+--- a/libgcc/unwind.inc
++++ b/libgcc/unwind.inc
 @@ -85,7 +85,8 @@ _Unwind_RaiseException(struct _Unwind_Exception *exc)
    _Unwind_Reason_Code code;
  
@@ -22459,7 +20581,7 @@ diff --git a/libgcc/config.host b/libgcc/config.host
 index 25e949e..169e5f0 100644
 --- a/libgcc/config.host
 +++ b/libgcc/config.host
-@@ -202,12 +202,15 @@ arm*-*-netbsdelf*)
+@@ -202,7 +202,8 @@ arm*-*-netbsdelf*)
  	;;
  arm*-*-ecos-elf)
  	;;
@@ -22481,19 +20603,6 @@ index fc0e595..ebb1775 100644
 +   helper functions - not everything in libgcc - in the interests of
 +   maintaining backward compatibility.  */
 +#define LIBGCC2_FIXEDBIT_GNU_PREFIX
-diff --git a/libgcc/config/s390/t-linux b/libgcc/config/s390/t-linux
-index a0f10cb..b767082 100644
---- a/libgcc/config/s390/t-linux
-+++ b/libgcc/config/s390/t-linux
-@@ -2,6 +2,6 @@ DFP_ENABLE = true
- 
- # Override t-slibgcc-elf-ver to export some libgcc symbols with
- # the symbol versions that glibc used.
--SHLIB_MAPFILES = $(gcc_srcdir)/libgcc-std.ver $(srcdir)/config/s390/libgcc-glibc.ver
-+SHLIB_MAPFILES = libgcc-std.ver $(srcdir)/config/s390/libgcc-glibc.ver
- 
- HOST_LIBGCC2_CFLAGS += -mlong-double-128
-\ No newline at end of file
 diff --git a/libgcc/shared-object.mk b/libgcc/shared-object.mk
 index 65171b6..ea49dc2 100644
 --- a/libgcc/shared-object.mk
@@ -24670,10 +22779,10 @@ index b8ea31a..b510b0a 100644
  
  # Tell versions [3.59,3.63) of GNU make to not export all variables.
  # Otherwise a system limit (for SysV at least) may be exceeded.
-diff --git a/libstdc++-v3/src/codecvt.cc b/libstdc++-v3/src/codecvt.cc
+diff --git a/libstdc++-v3/src/c++98/codecvt.cc b/libstdc++-v3/src/c++98/codecvt.cc
 index fdb0896..9be3df9 100644
---- a/libstdc++-v3/src/codecvt.cc
-+++ b/libstdc++-v3/src/codecvt.cc
+--- a/libstdc++-v3/src/c++98/codecvt.cc
++++ b/libstdc++-v3/src/c++98/codecvt.cc
 @@ -149,3 +149,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
  
  _GLIBCXX_END_NAMESPACE_VERSION
@@ -24704,10 +22813,10 @@ index fdb0896..9be3df9 100644
 +#endif
 +#endif
 +#endif
-diff --git a/libstdc++-v3/src/ctype.cc b/libstdc++-v3/src/ctype.cc
+diff --git a/libstdc++-v3/src/c++98/ctype.cc b/libstdc++-v3/src/c++98/ctype.cc
 index 04d31cc..e88f1f2 100644
---- a/libstdc++-v3/src/ctype.cc
-+++ b/libstdc++-v3/src/ctype.cc
+--- a/libstdc++-v3/src/c++98/ctype.cc
++++ b/libstdc++-v3/src/c++98/ctype.cc
 @@ -137,3 +137,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
  
  _GLIBCXX_END_NAMESPACE_VERSION
@@ -24738,10 +22847,10 @@ index 04d31cc..e88f1f2 100644
 +#endif
 +#endif
 +#endif
-diff --git a/libstdc++-v3/src/locale-inst.cc b/libstdc++-v3/src/locale-inst.cc
+diff --git a/libstdc++-v3/src/c++98/locale-inst.cc b/libstdc++-v3/src/c++98/locale-inst.cc
 index e77c5c9..7c372fb 100644
---- a/libstdc++-v3/src/locale-inst.cc
-+++ b/libstdc++-v3/src/locale-inst.cc
+--- a/libstdc++-v3/src/c++98/locale-inst.cc
++++ b/libstdc++-v3/src/c++98/locale-inst.cc
 @@ -362,3 +362,41 @@ _GLIBCXX_LDBL_COMPAT(_ZNKSt17__gnu_cxx_ldbl1289money_putIcSt19ostreambuf_iterato
  		     _ZNKSt9money_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE9_M_insertILb1EEES3_S3_RSt8ios_basecRKSs);
  
@@ -24784,10 +22893,10 @@ index e77c5c9..7c372fb 100644
 +_GLIBCXX_LOCALE_COMPAT (_ZNSt8numpunctIcEC2EPim, _ZNSt8numpunctIcEC2EP15__locale_structm);
 +#endif
 +#endif
-diff --git a/libstdc++-v3/src/wlocale-inst.cc b/libstdc++-v3/src/wlocale-inst.cc
+diff --git a/libstdc++-v3/src/c++98/wlocale-inst.cc b/libstdc++-v3/src/c++98/wlocale-inst.cc
 index cdfed0c..23faf04 100644
---- a/libstdc++-v3/src/wlocale-inst.cc
-+++ b/libstdc++-v3/src/wlocale-inst.cc
+--- a/libstdc++-v3/src/c++98/wlocale-inst.cc
++++ b/libstdc++-v3/src/c++98/wlocale-inst.cc
 @@ -73,4 +73,42 @@ _GLIBCXX_LDBL_COMPAT(_ZNKSt17__gnu_cxx_ldbl1289money_putIwSt19ostreambuf_iterato
  		     _ZNKSt9money_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE9_M_insertILb1EEES3_S3_RSt8ios_basewRKSbIwS2_SaIwEE);
  
