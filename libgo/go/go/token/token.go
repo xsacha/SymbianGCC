@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// This package defines constants representing the lexical
-// tokens of the Go programming language and basic operations
-// on tokens (printing, predicates).
+// Package token defines constants representing the lexical tokens of the Go
+// programming language and basic operations on tokens (printing, predicates).
 //
 package token
 
 import "strconv"
-
 
 // Token is the set of lexical tokens of the Go programming language.
 type Token int
@@ -125,11 +123,7 @@ const (
 	keyword_end
 )
 
-
-// At the moment we have no array literal syntax that lets us describe
-// the index for each element - use a map for now to make sure they are
-// in sync.
-var tokens = map[Token]string{
+var tokens = [...]string{
 	ILLEGAL: "ILLEGAL",
 
 	EOF:     "EOF",
@@ -229,7 +223,6 @@ var tokens = map[Token]string{
 	VAR:    "var",
 }
 
-
 // String returns the string corresponding to the token tok.
 // For operators, delimiters, and keywords the string is the actual
 // token character sequence (e.g., for the token ADD, the string is
@@ -237,12 +230,15 @@ var tokens = map[Token]string{
 // constant name (e.g. for the token IDENT, the string is "IDENT").
 //
 func (tok Token) String() string {
-	if str, exists := tokens[tok]; exists {
-		return str
+	s := ""
+	if 0 <= tok && tok < Token(len(tokens)) {
+		s = tokens[tok]
 	}
-	return "token(" + strconv.Itoa(int(tok)) + ")"
+	if s == "" {
+		s = "token(" + strconv.Itoa(int(tok)) + ")"
+	}
+	return s
 }
-
 
 // A set of constants for precedence-based expression parsing.
 // Non-operators have lowest precedence, followed by operators
@@ -252,10 +248,9 @@ func (tok Token) String() string {
 //
 const (
 	LowestPrec  = 0 // non-operators
-	UnaryPrec   = 7
-	HighestPrec = 8
+	UnaryPrec   = 6
+	HighestPrec = 7
 )
-
 
 // Precedence returns the operator precedence of the binary
 // operator op. If op is not a binary operator, the result
@@ -267,18 +262,15 @@ func (op Token) Precedence() int {
 		return 1
 	case LAND:
 		return 2
-	case ARROW:
-		return 3
 	case EQL, NEQ, LSS, LEQ, GTR, GEQ:
-		return 4
+		return 3
 	case ADD, SUB, OR, XOR:
-		return 5
+		return 4
 	case MUL, QUO, REM, SHL, SHR, AND, AND_NOT:
-		return 6
+		return 5
 	}
 	return LowestPrec
 }
-
 
 var keywords map[string]Token
 
@@ -289,32 +281,28 @@ func init() {
 	}
 }
 
-
 // Lookup maps an identifier to its keyword token or IDENT (if not a keyword).
 //
-func Lookup(ident []byte) Token {
-	// TODO Maps with []byte key are illegal because []byte does not
-	//      support == . Should find a more efficient solution eventually.
-	if tok, is_keyword := keywords[string(ident)]; is_keyword {
+func Lookup(ident string) Token {
+	if tok, is_keyword := keywords[ident]; is_keyword {
 		return tok
 	}
 	return IDENT
 }
 
-
 // Predicates
 
 // IsLiteral returns true for tokens corresponding to identifiers
-// and basic type literals; returns false otherwise.
+// and basic type literals; it returns false otherwise.
 //
 func (tok Token) IsLiteral() bool { return literal_beg < tok && tok < literal_end }
 
 // IsOperator returns true for tokens corresponding to operators and
-// delimiters; returns false otherwise.
+// delimiters; it returns false otherwise.
 //
 func (tok Token) IsOperator() bool { return operator_beg < tok && tok < operator_end }
 
 // IsKeyword returns true for tokens corresponding to keywords;
-// returns false otherwise.
+// it returns false otherwise.
 //
 func (tok Token) IsKeyword() bool { return keyword_beg < tok && tok < keyword_end }

@@ -17,5 +17,5 @@ void test_vcgeQu32 (void)
   out_uint32x4_t = vcgeq_u32 (arg0_uint32x4_t, arg1_uint32x4_t);
 }
 
-/* { dg-final { scan-assembler "vcge\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcge\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -10,8 +10,8 @@ extern void *memcpy (void *__restrict __dest,
 extern size_t strlen (__const char *__s)
      __attribute__ ((__nothrow__)) __attribute__ ((__pure__)) __attribute__ ((__nonnull__ (1)));
 
-typedef short int int16_t;
-typedef int int32_t;
+typedef __INT16_TYPE__ int16_t;
+typedef __INT32_TYPE__ int32_t;
 
 extern void abort (void);
 

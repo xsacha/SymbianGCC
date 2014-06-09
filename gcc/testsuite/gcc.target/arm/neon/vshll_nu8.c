@@ -16,5 +16,5 @@ void test_vshll_nu8 (void)
   out_uint16x8_t = vshll_n_u8 (arg0_uint8x8_t, 1);
 }
 
-/* { dg-final { scan-assembler "vshll\.u8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vshll\.u8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

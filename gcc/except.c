@@ -1,7 +1,6 @@
 /* Implements exception handling.
    Copyright (C) 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
-   2012
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Mike Stump <mrs@cygnus.com>.
 
@@ -137,6 +136,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ggc.h"
 #include "tm_p.h"
 #include "target.h"
+#include "common/common-target.h"
 #include "langhooks.h"
 #include "cgraph.h"
 #include "diagnostic.h"
@@ -198,15 +198,6 @@ static int sjlj_size_of_call_site_table (void);
 #endif
 static void dw2_output_call_site_table (int, int);
 static void sjlj_output_call_site_table (void);
-static int compact_count_like_headers (enum eh_compact_header_type,
-				       const unsigned char *);
-static int compact_count_eh_specs (HOST_WIDE_INT);
-static int compact_encode_catch_count (int, const unsigned char *);
-static void compact_emit_region_header (enum eh_compact_header_type rtype,
-                                        int region_no);
-static bool compact_ends_in_catchall (int, const unsigned char *);
-static const unsigned char *read_sleb128 (const unsigned char *p,
-                                          HOST_WIDE_INT *val);
 
 
 void
@@ -219,7 +210,7 @@ init_eh (void)
 
   /* Create the SjLj_Function_Context structure.  This should match
      the definition in unwind-sjlj.c.  */
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     {
       tree f_jbuf, f_per, f_lsda, f_prev, f_cs, f_data, tmp;
 
@@ -235,7 +226,7 @@ init_eh (void)
 			 integer_type_node);
       DECL_FIELD_CONTEXT (f_cs) = sjlj_fc_type_node;
 
-      tmp = build_index_type (build_int_cst (NULL_TREE, 4 - 1));
+      tmp = build_index_type (size_int (4 - 1));
       tmp = build_array_type (lang_hooks.types.type_for_mode
 				(targetm.unwind_word_mode (), 1),
 			      tmp);
@@ -255,17 +246,17 @@ init_eh (void)
 
 #ifdef DONT_USE_BUILTIN_SETJMP
 #ifdef JMP_BUF_SIZE
-      tmp = build_int_cst (NULL_TREE, JMP_BUF_SIZE - 1);
+      tmp = size_int (JMP_BUF_SIZE - 1);
 #else
       /* Should be large enough for most systems, if it is not,
 	 JMP_BUF_SIZE should be defined with the proper value.  It will
 	 also tend to be larger than necessary for most systems, a more
 	 optimal port will define JMP_BUF_SIZE.  */
-      tmp = build_int_cst (NULL_TREE, FIRST_PSEUDO_REGISTER + 2 - 1);
+      tmp = size_int (FIRST_PSEUDO_REGISTER + 2 - 1);
 #endif
 #else
       /* builtin_setjmp takes a pointer to 5 words.  */
-      tmp = build_int_cst (NULL_TREE, 5 * BITS_PER_WORD / POINTER_SIZE - 1);
+      tmp = size_int (5 * BITS_PER_WORD / POINTER_SIZE - 1);
 #endif
       tmp = build_index_type (tmp);
       tmp = build_array_type (ptr_type_node, tmp);
@@ -834,7 +825,6 @@ assign_filter_values (void)
   htab_t ttypes, ehspec;
   eh_region r;
   eh_catch c;
-  int compact_flt_no = 0;
 
   cfun->eh->ttype_data = VEC_alloc (tree, gc, 16);
   if (targetm.arm_eabi_unwinder)
@@ -847,9 +837,6 @@ assign_filter_values (void)
 
   for (i = 1; VEC_iterate (eh_region, cfun->eh->region_array, i, r); ++i)
     {
-
-      compact_flt_no = 0;
-
       if (r == NULL)
 	continue;
 
@@ -871,19 +858,10 @@ assign_filter_values (void)
 		  for ( ; tp_node; tp_node = TREE_CHAIN (tp_node))
 		    {
 		      int flt = add_ttypes_entry (ttypes, TREE_VALUE (tp_node));
-		      tree flt_node = build_int_cst (NULL_TREE, flt);
+		      tree flt_node = build_int_cst (integer_type_node, flt);
 
 		      c->filter_list
 			= tree_cons (NULL_TREE, flt_node, c->filter_list);
-
-		      if (TARGET_COMPACT_EH)
-			{
-			  tree compact_flt_node = 
-			    build_int_cst (NULL_TREE, ++compact_flt_no);
-			  c->compact_filter_list
-			    = tree_cons (NULL_TREE, compact_flt_node,
-					 c->compact_filter_list);
-			}
 		    }
 		}
 	      else
@@ -891,7 +869,7 @@ assign_filter_values (void)
 		  /* Get a filter value for the NULL list also since it
 		     will need an action record anyway.  */
 		  int flt = add_ttypes_entry (ttypes, NULL);
-		  tree flt_node = build_int_cst (NULL_TREE, flt);
+		  tree flt_node = build_int_cst (integer_type_node, flt);
 
 		  c->filter_list
 		    = tree_cons (NULL_TREE, flt_node, NULL);
@@ -941,6 +919,34 @@ emit_to_new_bb_before (rtx seq, rtx insn)
   return bb;
 }
 
+/* A subroutine of dw2_build_landing_pads, also used for edge splitting
+   at the rtl level.  Emit the code required by the target at a landing
+   pad for the given region.  */
+
+void
+expand_dw2_landing_pad_for_region (eh_region region)
+{
+#ifdef HAVE_exception_receiver
+  if (HAVE_exception_receiver)
+    emit_insn (gen_exception_receiver ());
+  else
+#endif
+#ifdef HAVE_nonlocal_goto_receiver
+  if (HAVE_nonlocal_goto_receiver)
+    emit_insn (gen_nonlocal_goto_receiver ());
+  else
+#endif
+    { /* Nothing */ }
+
+  if (region->exc_ptr_reg)
+    emit_move_insn (region->exc_ptr_reg,
+		    gen_rtx_REG (ptr_mode, EH_RETURN_DATA_REGNO (0)));
+  if (region->filter_reg)
+    emit_move_insn (region->filter_reg,
+		    gen_rtx_REG (targetm.eh_return_filter_mode (),
+				 EH_RETURN_DATA_REGNO (1)));
+}
+
 /* Expand the extra code needed at landing pads for dwarf2 unwinding.  */
 
 static void
@@ -948,10 +954,17 @@ dw2_build_landing_pads (void)
 {
   int i;
   eh_landing_pad lp;
+  int e_flags = EDGE_FALLTHRU;
+
+  /* If we're going to partition blocks, we need to be able to add
+     new landing pads later, which means that we need to hold on to
+     the post-landing-pad block.  Prevent it from being merged away.
+     We'll remove this bit after partitioning.  */
+  if (flag_reorder_blocks_and_partition)
+    e_flags |= EDGE_PRESERVE;
 
   for (i = 1; VEC_iterate (eh_landing_pad, cfun->eh->lp_array, i, lp); ++i)
     {
-      eh_region region;
       basic_block bb;
       rtx seq;
       edge e;
@@ -965,32 +978,13 @@ dw2_build_landing_pads (void)
       emit_label (lp->landing_pad);
       LABEL_PRESERVE_P (lp->landing_pad) = 1;
 
-#ifdef HAVE_exception_receiver
-      if (HAVE_exception_receiver)
-	emit_insn (gen_exception_receiver ());
-      else
-#endif
-#ifdef HAVE_nonlocal_goto_receiver
-	if (HAVE_nonlocal_goto_receiver)
-	  emit_insn (gen_nonlocal_goto_receiver ());
-	else
-#endif
-	  { /* Nothing */ }
-
-      region = lp->region;
-      if (region->exc_ptr_reg)
-	emit_move_insn (region->exc_ptr_reg,
-			gen_rtx_REG (ptr_mode, EH_RETURN_DATA_REGNO (0)));
-      if (region->filter_reg)
-	emit_move_insn (region->filter_reg,
-			gen_rtx_REG (targetm.eh_return_filter_mode (),
-				     EH_RETURN_DATA_REGNO (1)));
+      expand_dw2_landing_pad_for_region (lp->region);
 
       seq = get_insns ();
       end_sequence ();
 
       bb = emit_to_new_bb_before (seq, label_rtx (lp->post_landing_pad));
-      e = make_edge (bb, bb->next_bb, EDGE_FALLTHRU);
+      e = make_edge (bb, bb->next_bb, e_flags);
       e->count = bb->count;
       e->probability = REG_BR_PROB_BASE;
     }
@@ -1308,12 +1302,11 @@ sjlj_emit_dispatch_table (rtx dispatch_label, int num_dispatch)
 
 	if (num_dispatch > 1)
 	  {
-	    tree t_label, case_elt;
+	    tree t_label, case_elt, t;
 
 	    t_label = create_artificial_label (UNKNOWN_LOCATION);
-	    case_elt = build3 (CASE_LABEL_EXPR, void_type_node,
-			       build_int_cst (NULL, disp_index),
-			       NULL, t_label);
+	    t = build_int_cst (integer_type_node, disp_index);
+	    case_elt = build_case_label (t, NULL, t_label);
 	    gimple_switch_set_label (switch_stmt, disp_index, case_elt);
 
 	    label = label_rtx (t_label);
@@ -1419,13 +1412,13 @@ finish_eh_generation (void)
   basic_block bb;
 
   /* Construct the landing pads.  */
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     sjlj_build_landing_pads ();
   else
     dw2_build_landing_pads ();
   break_superblocks ();
 
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ
       /* Kludge for Alpha/Tru64 (see alpha_gp_save_rtx).  */
       || single_succ_edge (ENTRY_BLOCK_PTR)->insns.r)
     commit_edge_insertions ();
@@ -1481,7 +1474,7 @@ struct rtl_opt_pass pass_rtl_eh =
 {
  {
   RTL_PASS,
-  "rtl eh",                             /* name */
+  "rtl_eh",                             /* name */
   gate_handle_eh,                       /* gate */
   rest_of_handle_eh,			/* execute */
   NULL,                                 /* sub */
@@ -1492,7 +1485,7 @@ struct rtl_opt_pass pass_rtl_eh =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func                        /* todo_flags_finish */
+  0                                     /* todo_flags_finish */
  }
 };
 
@@ -1902,11 +1895,11 @@ set_nothrow_function_flags (void)
 	  }
       }
   if (crtl->nothrow
-      && (cgraph_function_body_availability (cgraph_node
+      && (cgraph_function_body_availability (cgraph_get_node
 					     (current_function_decl))
           >= AVAIL_AVAILABLE))
     {
-      struct cgraph_node *node = cgraph_node (current_function_decl);
+      struct cgraph_node *node = cgraph_get_node (current_function_decl);
       struct cgraph_edge *e;
       for (e = node->callers; e; e = e->next_caller)
         e->can_throw_external = false;
@@ -1934,7 +1927,7 @@ struct rtl_opt_pass pass_set_nothrow_function_flags =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func,                       /* todo_flags_finish */
+  0                                     /* todo_flags_finish */
  }
 };
 
@@ -2411,9 +2404,6 @@ convert_to_eh_region_ranges (void)
   rtx section_switch_note = NULL_RTX;
   rtx first_no_action_insn_before_switch = NULL_RTX;
   rtx last_no_action_insn_before_switch = NULL_RTX;
-  rtx *pad_map = NULL;
-  sbitmap pad_loc = NULL;
-  int min_labelno = 0, max_labelno = 0;
   int saved_call_site_base = call_site_base;
 
   crtl->eh.action_record_data = VEC_alloc (uchar, gc, 64);
@@ -2546,13 +2536,7 @@ convert_to_eh_region_ranges (void)
 	gcc_assert (crtl->eh.call_site_record[cur_sec] == NULL);
 	crtl->eh.call_site_record[cur_sec]
 	  = VEC_alloc (call_site_record, gc, 10);
-	max_labelno = max_label_num ();
-	min_labelno = get_first_label_num ();
-	pad_map = XCNEWVEC (rtx, max_labelno - min_labelno + 1);
-	pad_loc = sbitmap_alloc (max_labelno - min_labelno + 1);
       }
-    else if (LABEL_P (iter) && pad_map)
-      SET_BIT (pad_loc, CODE_LABEL_NUMBER (iter) - min_labelno);
 
   if (last_action >= -1 && ! first_no_action_insn)
     {
@@ -2561,103 +2545,6 @@ convert_to_eh_region_ranges (void)
     }
 
   call_site_base = saved_call_site_base;
-
-  if (pad_map)
-    {
-      /* When doing hot/cold partitioning, ensure landing pads are
-	 always in the same section as the EH region, .gcc_except_table
-	 can't express it otherwise.  */
-      for (cur_sec = 0; cur_sec < 2; cur_sec++)
-	{
-	  int i, idx;
-	  int n = VEC_length (call_site_record,
-			      crtl->eh.call_site_record[cur_sec]);
-	  basic_block prev_bb = NULL, padbb;
-
-	  for (i = 0; i < n; ++i)
-	    {
-	      struct call_site_record_d *cs =
-		VEC_index (call_site_record,
-			   crtl->eh.call_site_record[cur_sec], i);
-	      rtx jump, note;
-
-	      if (cs->landing_pad == NULL_RTX)
-		continue;
-	      idx = CODE_LABEL_NUMBER (cs->landing_pad) - min_labelno;
-	      /* If the landing pad is in the correct section, nothing
-		 is needed.  */
-	      if (TEST_BIT (pad_loc, idx) ^ (cur_sec == 0))
-		continue;
-	      /* Otherwise, if we haven't seen this pad yet, we need to
-		 add a new label and jump to the correct section.  */
-	      if (pad_map[idx] == NULL_RTX)
-		{
-		  pad_map[idx] = gen_label_rtx ();
-		  if (prev_bb == NULL)
-		    for (iter = section_switch_note;
-			 iter; iter = PREV_INSN (iter))
-		      if (NOTE_INSN_BASIC_BLOCK_P (iter))
-			{
-			  prev_bb = NOTE_BASIC_BLOCK (iter);
-			  break;
-			}
-		  if (cur_sec == 0)
-		    {
-		      note = emit_label_before (pad_map[idx],
-						section_switch_note);
-		      jump = emit_jump_insn_before (gen_jump (cs->landing_pad),
-						    section_switch_note);
-		    }
-		  else
-		    {
-		      jump = emit_jump_insn_after (gen_jump (cs->landing_pad),
-						   section_switch_note);
-		      note = emit_label_after (pad_map[idx],
-					       section_switch_note);
-		    }
-		  JUMP_LABEL (jump) = cs->landing_pad;
-		  add_reg_note (jump, REG_CROSSING_JUMP, NULL_RTX);
-		  iter = NEXT_INSN (cs->landing_pad);
-		  if (iter && NOTE_INSN_BASIC_BLOCK_P (iter))
-		    padbb = NOTE_BASIC_BLOCK (iter);
-		  else
-		    padbb = NULL;
-		  if (padbb && prev_bb
-		      && BB_PARTITION (padbb) != BB_UNPARTITIONED)
-		    {
-		      basic_block bb;
-		      int part
-			= BB_PARTITION (padbb) == BB_COLD_PARTITION
-			  ? BB_HOT_PARTITION : BB_COLD_PARTITION;
-		      edge_iterator ei;
-		      edge e;
-
-		      bb = create_basic_block (note, jump, prev_bb);
-		      make_single_succ_edge (bb, padbb, EDGE_CROSSING);
-		      BB_SET_PARTITION (bb, part);
-		      for (ei = ei_start (padbb->preds);
-			   (e = ei_safe_edge (ei)); )
-			{
-			  if ((e->flags & (EDGE_EH|EDGE_CROSSING))
-			      == (EDGE_EH|EDGE_CROSSING))
-			    {
-			      redirect_edge_succ (e, bb);
-			      e->flags &= ~EDGE_CROSSING;
-			    }
-			  else
-			    ei_next (&ei);
-			}
-		      if (cur_sec == 0)
-			prev_bb = bb;
-		    }
-		}
-	      cs->landing_pad = pad_map[idx];
-	    }
-	}
-
-      sbitmap_free (pad_loc);
-      XDELETEVEC (pad_map);
-    }
 
   htab_delete (ar_hash);
   return 0;
@@ -2669,7 +2556,7 @@ gate_convert_to_eh_region_ranges (void)
   /* Nothing to do for SJLJ exceptions or if no regions created.  */
   if (cfun->eh->region_tree == NULL)
     return false;
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     return false;
   return true;
 }
@@ -2689,7 +2576,7 @@ struct rtl_opt_pass pass_convert_to_eh_region_ranges =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func,			/* todo_flags_finish */
+  0              			/* todo_flags_finish */
  }
 };
 
@@ -2724,160 +2611,6 @@ push_sleb128 (VEC (uchar, gc) **data_area, int value)
       VEC_safe_push (uchar, gc, *data_area, byte);
     }
   while (more);
-}
-
-/* The catch count is encoded.  Multiply the count by two and
-   use bit zero to indicate the presence of a catchall handler.  */
-static int
-compact_encode_catch_count (int count, const unsigned char *p)
-{
-  bool encode_catchall = compact_ends_in_catchall (count, p);
-
-  if (encode_catchall)
-    {
-      count--;
-      count <<= 1;
-      count |= 1;
-    }
-  else
-    count <<= 1;
-
-  return count;
-}
-
-static int
-compact_count_eh_specs (HOST_WIDE_INT filter)
-{
-  HOST_WIDE_INT eh_filter;
-  int count = 0;
-
-  eh_filter = VEC_index (uchar, cfun->eh->ehspec_data.other, filter - 1);
-
-  while (eh_filter != 0)
-    {
-      eh_filter = VEC_index (uchar, cfun->eh->ehspec_data.other, eh_filter);
-      count++;
-    }
-  return count;
-}
-
-/* Return true if the catch type list ends in a NULL_TREE,
-   otherwise return false.  */
-static bool
-compact_ends_in_catchall (int count, const unsigned char *p)
-{
-  int i;
-  HOST_WIDE_INT ar_filter;
-  HOST_WIDE_INT ar_disp = -1;
-  tree type = NULL_TREE;
-
-  for (i = 0; i < count; i++)
-    {
-      p = read_sleb128 (p, &ar_filter);
-      p = read_sleb128 (p, &ar_disp);
-      p = p + ar_disp - 1;
-    }
-
-  type = VEC_index (tree, cfun->eh->ttype_data, ar_filter - 1);
-
-  if (type == NULL_TREE)
-    return true;
-  else
-    return false;
-}
-
-/* Count the number of adjacent cleanup or catch headers.  */
-static int
-compact_count_like_headers (enum eh_compact_header_type rtype,
-			    const unsigned char *p)
-{
-  int count = 0;
-  HOST_WIDE_INT ar_filter;
-  HOST_WIDE_INT ar_disp = -1;
-
-  while (ar_disp != 0)
-    {
-      p = read_sleb128 (p, &ar_filter);
-      p = read_sleb128 (p, &ar_disp);
-
-      if (rtype == ECHT_CLEANUP && ar_filter != 0)
-	return count;
-
-      if (rtype == ECHT_CATCH && ar_filter <= 0)
-	return count;
-
-      p = p + ar_disp - 1;
-      count++;
-    }
-
-  return count;
-}
-
-/* Emit the region header for this entry.  */
-static void
-compact_emit_region_header (enum eh_compact_header_type rtype, int region_no)
-{
-  const char *begin;
-  char region_start[32];
-  char region_end[32];
-  char landing_pad[32];
-
-  struct call_site_record_d *cs =
-    VEC_index (call_site_record, crtl->eh.call_site_record[0], region_no);
-
-  begin = current_function_func_begin_label;
-  ASM_GENERATE_INTERNAL_LABEL (region_start, "LEHB",
-                               call_site_base + region_no);
-  ASM_GENERATE_INTERNAL_LABEL (region_end, "LEHE",
-                               call_site_base + region_no);
-
-  if (cs->landing_pad)
-    ASM_GENERATE_INTERNAL_LABEL (landing_pad, "L",
-                                 CODE_LABEL_NUMBER (cs->landing_pad));
-
-  switch (rtype)
-    {
-    case ECHT_CLEANUP:
-      /* Offset bit 0 = 0.  */
-      /* Length bit 0 = 0.  */
-      dw2_asm_output_comment ("Cleanup Region");
-      dw2_asm_output_delta_uleb128 (region_end, region_start, "Length");
-      dw2_asm_output_delta_uleb128 (region_start, begin, "Offset");
-      dw2_asm_output_delta_uleb128 (landing_pad, begin, "Landing Pad Offset");
-      break;
-
-    case ECHT_CATCH:
-      /* Offset bit 0 = 0.  */
-      /* Length bit 0 = 1.  */
-      dw2_asm_output_comment ("Catch Region");
-      dw2_asm_output_delta_setbit0_uleb128 (region_end,
-                                            region_start, "Length");
-      dw2_asm_output_delta_uleb128 (region_start, begin, "Offset");
-      dw2_asm_output_delta_uleb128 (landing_pad, begin, "Landing Pad Offset");
-      break;
-
-    case ECHT_SPEC:
-      /* Offset bit 0 = 1.  */
-      /* Length bit 0 = 1.  */
-      dw2_asm_output_comment ("Exception Specification Region");
-      dw2_asm_output_delta_setbit0_uleb128 (region_end,
-                                            region_start, "Length");
-      dw2_asm_output_delta_setbit0_uleb128 (region_start, begin, "Offset");
-      dw2_asm_output_delta_uleb128 (landing_pad, begin, "Landing Pad Offset");
-      break;
-
-    case ECHT_CONTINUE_UNWINDING:
-      /* Offset bit 0 = 1.  */
-      /* Length bit 0 = 0.  */
-      dw2_asm_output_comment ("Continue Unwinding Region");
-      dw2_asm_output_delta_uleb128 (region_end, region_start, "Length");
-      dw2_asm_output_delta_setbit0_uleb128 (region_start, begin, "Offset");
-      break;
-
-   case ECHT_NOT_INITIALIZED:
-      break;
-
-    }
 }
 
 
@@ -3012,7 +2745,7 @@ switch_to_exception_section (const char * ARG_UNUSED (fnname))
     {
       /* Compute the section and cache it into exception_section,
 	 unless it depends on the function name.  */
-      if (targetm.have_named_sections)
+      if (targetm_common.have_named_sections)
 	{
 	  int flags;
 
@@ -3029,16 +2762,11 @@ switch_to_exception_section (const char * ARG_UNUSED (fnname))
 	    flags = SECTION_WRITE;
 
 #ifdef HAVE_LD_EH_GC_SECTIONS
-	  if (flag_function_sections
-	      || (DECL_ONE_ONLY (current_function_decl) && HAVE_COMDAT_GROUP))
+	  if (flag_function_sections)
 	    {
 	      char *section_name = XNEWVEC (char, strlen (fnname) + 32);
-	      /* The EH table must match the code section, so only mark
-		 it linkonce if we have COMDAT groups to tie them together.  */
-	      if (DECL_ONE_ONLY (current_function_decl) && HAVE_COMDAT_GROUP)
-		flags |= SECTION_LINKONCE;
 	      sprintf (section_name, ".gcc_except_table.%s", fnname);
-	      s = get_section (section_name, flags, current_function_decl);
+	      s = get_section (section_name, flags, NULL);
 	      free (section_name);
 	    }
 	  else
@@ -3111,159 +2839,6 @@ output_ttype (tree type, int tt_format, int tt_format_size)
     dw2_asm_output_encoded_addr_rtx (tt_format, value, is_public, NULL);
 }
 
-static const unsigned char *
-read_sleb128 (const unsigned char *p, HOST_WIDE_INT *val)
-{
-  unsigned int shift = 0;
-  unsigned char byte;
-  HOST_WIDE_INT result;
-
-  result = 0;
-  do
-    {
-      byte = *p++;
-      result |= ((HOST_WIDE_INT) byte & 0x7f) << shift;
-      shift += 7;
-    }
-  while (byte & 0x80);
-
-  /* Sign-extend a negative value.  */
-  if (shift < 8 * sizeof(result) && (byte & 0x40) != 0)
-    result |= -(((unsigned HOST_WIDE_INT)1L) << shift);
-
-  *val = (HOST_WIDE_INT) result;
-  return p;
-}
-
-/* Walk the DWARF2 exception-handling tables and emit a compact-encoding
-   of the information.  */
-
-static void
-output_one_function_compact_eh_table (void)
-{
-  int i, k, count;
-  enum eh_compact_header_type this_region = ECHT_NOT_INITIALIZED;
-  int tt_format = ASM_PREFERRED_EH_DATA_FORMAT (/*code=*/0, /*global=*/1);
-  int tt_format_size = size_of_encoded_value (tt_format);
-
-  int nregions = VEC_length (call_site_record, crtl->eh.call_site_record[0]);
-
-  targetm.asm_out.internal_label (asm_out_file, "LLSDA",
-                                  current_function_funcdef_no);
-
-  for (i = 0; i < nregions; ++i)
-    {
-      HOST_WIDE_INT ar_filter, ar_disp;
-      const unsigned char *p, *like_start_p;
-      bool seen_cleanup = false;
-
-      struct call_site_record_d *cs =
-        VEC_index (call_site_record, crtl->eh.call_site_record[0], i);
-
-      if (cs->action == 0 && cs->landing_pad == 0)
-        {
-	  compact_emit_region_header (ECHT_CONTINUE_UNWINDING, i);
-	  continue;
-	}
-
-      else if (cs->action == 0)
-        {
-	  compact_emit_region_header (ECHT_CLEANUP, i);
-	  continue;
-	}
-
-      /* cs->action is an offset into ctrl->eh.action_record_data
-	 The action_record_data will be a pair of values.  Each
-	 pair is a catch/exception spec type.  The first is an
-	 index into cfun->eh->ttype_data and the second is the
-	 offset of the next action.  If the index is positive, it's
-	 a catch.  If it's negative, it's an exception spec.  */
-
-      /* Exception Specification, Catch or Cleanup.  */
-      p = VEC_address (uchar, crtl->eh.action_record_data)
-			+ cs->action - 1;
-
-      ar_disp = -1;
-      while (ar_disp != 0)
-	{
-	  int eh_filter, j, eh_count, encoded_count;
-	  tree type;
-
-	  like_start_p = p;
-	  p = read_sleb128 (p, &ar_filter);
-	  p = read_sleb128 (p, &ar_disp);
-
-	  if (ar_filter == 0)
-	    this_region = ECHT_CLEANUP;
-	  else if (ar_filter > 0)
-	    this_region = ECHT_CATCH;
-	  else if (ar_filter < 0)
-	    {
-	      this_region = ECHT_SPEC;
-	      ar_filter = abs (ar_filter);
-	    }
-
-	  /* Cleanups are emitted later.  */
-	  if (this_region != ECHT_CLEANUP)
-	    compact_emit_region_header (this_region, i);
-
-	  switch (this_region)
-	    {
-	    case ECHT_SPEC:
-	      eh_count = compact_count_eh_specs (ar_filter);
-	      dw2_asm_output_data_uleb128
-		(eh_count, "Number of exception specifications");
-	      eh_filter = VEC_index (uchar, cfun->eh->ehspec_data.other,
-				     ar_filter - 1);
-	      for (j = 0; j < eh_count; j++)
-		{
-		  type = VEC_index (tree, cfun->eh->ttype_data, eh_filter - 1);
-		  output_ttype (type, tt_format, tt_format_size);
-		  eh_filter++;
-		 }
-	      break;
-	    
-	    case ECHT_CATCH:
-	      count = compact_count_like_headers (this_region, like_start_p);
-	      encoded_count = compact_encode_catch_count (count, like_start_p);
-	      dw2_asm_output_data_uleb128 (encoded_count,
-					   "Number of catch clauses (encoded)");
-	      for (k = 0; k < count; k++)
-		{
-		  type = VEC_index (tree, cfun->eh->ttype_data, ar_filter - 1);
-		  /* Don't emit the catchall, if present.  */
-		  if (type != NULL_TREE)
-		    output_ttype (type, tt_format, tt_format_size);
-
-		  if ((k + 1) < count)
-		    {
-		      p = p + ar_disp - 1;
-		      p = read_sleb128 (p, &ar_filter);
-		      p = read_sleb128 (p, &ar_disp);
-		      ar_filter = abs (ar_filter);
-		    }
-		}
-	      break;
-	    
-	    case ECHT_CLEANUP:
-	      seen_cleanup = true;
-	      break;
-
-	    default:
-	      break;
-	    }
-	    
-	  p += ar_disp - 1;
-	}
-      /* Emit the saved cleanup region entry.  */
-      if (seen_cleanup)
-        compact_emit_region_header (ECHT_CLEANUP, i);
-    }
-
-  dw2_asm_output_data_uleb128 (0, "End of Region List");
-  call_site_base += nregions;
-}
-
 static void
 output_one_function_exception_table (int section)
 {
@@ -3320,7 +2895,7 @@ output_one_function_exception_table (int section)
 		       eh_data_format_name (tt_format));
 
 #ifndef HAVE_AS_LEB128
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     call_site_len = sjlj_size_of_call_site_table ();
   else
     call_site_len = dw2_size_of_call_site_table (section);
@@ -3387,14 +2962,14 @@ output_one_function_exception_table (int section)
   dw2_asm_output_delta_uleb128 (cs_end_label, cs_after_size_label,
 				"Call-site table length");
   ASM_OUTPUT_LABEL (asm_out_file, cs_after_size_label);
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     sjlj_output_call_site_table ();
   else
     dw2_output_call_site_table (cs_format, section);
   ASM_OUTPUT_LABEL (asm_out_file, cs_end_label);
 #else
   dw2_asm_output_data_uleb128 (call_site_len, "Call-site table length");
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     sjlj_output_call_site_table ();
   else
     dw2_output_call_site_table (cs_format, section);
@@ -3462,16 +3037,9 @@ output_function_exception_table (const char *fnname)
   /* If the target wants a label to begin the table, emit it here.  */
   targetm.asm_out.emit_except_table_label (asm_out_file);
 
-  if (TARGET_COMPACT_EH)
-    {
-      output_one_function_compact_eh_table ();
-    }
-  else
-    {
-      output_one_function_exception_table (0);
-      if (crtl->eh.call_site_record[1] != NULL)
-	output_one_function_exception_table (1);
-    }
+  output_one_function_exception_table (0);
+  if (crtl->eh.call_site_record[1] != NULL)
+    output_one_function_exception_table (1);
 
   switch_to_section (current_function_section ());
 }

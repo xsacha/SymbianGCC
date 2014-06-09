@@ -49,7 +49,7 @@ objcp_start_struct (location_t loc ATTRIBUTE_UNUSED,
   CLASSTYPE_DECLARED_CLASS (s) = 0;  /* this is a 'struct', not a 'class'.  */
   xref_basetypes (s, NULL_TREE);     /* no base classes here!  */
 
-  return begin_class_definition (s, NULL_TREE);
+  return begin_class_definition (s);
 }
 
 tree 
@@ -70,33 +70,7 @@ objcp_finish_struct (location_t loc ATTRIBUTE_UNUSED,
      ivars, we need to check for duplicate ivars.
   */
   if (fieldlist)
-    {
-      tree original_fieldlist = fieldlist;
-      fieldlist = objc_get_interface_ivars (fieldlist);
-      if (fieldlist != original_fieldlist)
-	{
-	  /* Minimal implementation of the equivalent of the C
-	     front-end's detect_field_duplicates().
-	  */
-	  htab_t htab = htab_create (37, htab_hash_pointer, htab_eq_pointer, NULL);
-	  tree x, y;
-	  void **slot;
-	  
-	  for (x = fieldlist; x ; x = DECL_CHAIN (x))
-	    if ((y = DECL_NAME (x)) != 0)
-	      {
-		slot = htab_find_slot (htab, y, INSERT);
-		if (*slot)
-		  {
-		    error ("duplicate member %q+D", x);
-		    DECL_NAME (x) = NULL_TREE;
-		  }
-		*slot = y;
-	      }
-	  
-	  htab_delete (htab);
-	}
-    }
+    objc_detect_field_duplicates (true);
 
   pop_lang_context ();
 

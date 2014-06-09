@@ -11,7 +11,7 @@
 // Consecutive groups of suffixes in sa are labeled as sorted groups or
 // unsorted groups. For a given pass of the sorter, all suffixes are ordered
 // up to their first h characters, and sa is h-ordered. Suffixes in their
-// final positions and unambiguouly sorted in h-order are in a sorted group.
+// final positions and unambiguously sorted in h-order are in a sorted group.
 // Consecutive groups of suffixes with identical first h characters are an
 // unsorted group. In each pass of the algorithm, unsorted groups are sorted
 // according to the group number of their following suffix.
@@ -37,7 +37,7 @@ func qsufsort(data []byte) []int {
 	inv := initGroups(sa, data)
 
 	// the index starts 1-ordered
-	sufSortable := &suffixSortable{sa, inv, 1}
+	sufSortable := &suffixSortable{sa: sa, inv: inv, h: 1}
 
 	for sa[0] > -len(sa) { // until all suffixes are one big sorted group
 		// The suffixes are h-ordered, make them 2*h-ordered
@@ -72,14 +72,13 @@ func qsufsort(data []byte) []int {
 	return sa
 }
 
-
 func sortedByFirstByte(data []byte) []int {
 	// total byte counts
 	var count [256]int
 	for _, b := range data {
 		count[b]++
 	}
-	// make count[b] equal index of first occurence of b in sorted array
+	// make count[b] equal index of first occurrence of b in sorted array
 	sum := 0
 	for b := range count {
 		count[b], sum = sum, count[b]+sum
@@ -92,7 +91,6 @@ func sortedByFirstByte(data []byte) []int {
 	}
 	return sa
 }
-
 
 func initGroups(sa []int, data []byte) []int {
 	// label contiguous same-letter groups with the same group number
@@ -133,32 +131,38 @@ func initGroups(sa []int, data []byte) []int {
 	return inv
 }
 
-
 type suffixSortable struct {
 	sa  []int
 	inv []int
 	h   int
+	buf []int // common scratch space
 }
 
 func (x *suffixSortable) Len() int           { return len(x.sa) }
 func (x *suffixSortable) Less(i, j int) bool { return x.inv[x.sa[i]+x.h] < x.inv[x.sa[j]+x.h] }
 func (x *suffixSortable) Swap(i, j int)      { x.sa[i], x.sa[j] = x.sa[j], x.sa[i] }
 
-
 func (x *suffixSortable) updateGroups(offset int) {
-	prev := len(x.sa) - 1
-	group := x.inv[x.sa[prev]+x.h]
-	for i := prev; i >= 0; i-- {
-		if g := x.inv[x.sa[i]+x.h]; g < group {
-			if prev == i+1 { // previous group had size 1 and is thus sorted
-				x.sa[i+1] = -1
-			}
+	bounds := x.buf[0:0]
+	group := x.inv[x.sa[0]+x.h]
+	for i := 1; i < len(x.sa); i++ {
+		if g := x.inv[x.sa[i]+x.h]; g > group {
+			bounds = append(bounds, i)
 			group = g
-			prev = i
 		}
-		x.inv[x.sa[i]] = prev + offset
-		if prev == 0 { // first group has size 1 and is thus sorted
-			x.sa[0] = -1
+	}
+	bounds = append(bounds, len(x.sa))
+	x.buf = bounds
+
+	// update the group numberings after all new groups are determined
+	prev := 0
+	for _, b := range bounds {
+		for i := prev; i < b; i++ {
+			x.inv[x.sa[i]] = offset + b - 1
 		}
+		if b-prev == 1 {
+			x.sa[prev] = -1
+		}
+		prev = b
 	}
 }

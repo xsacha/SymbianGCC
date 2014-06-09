@@ -16,5 +16,5 @@ void test_vdup_lanef32 (void)
   out_float32x2_t = vdup_lane_f32 (arg0_float32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vdup\.32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vdup\.32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -16,5 +16,5 @@ void test_vrev64Qu16 (void)
   out_uint16x8_t = vrev64q_u16 (arg0_uint16x8_t);
 }
 
-/* { dg-final { scan-assembler "vrev64\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrev64\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

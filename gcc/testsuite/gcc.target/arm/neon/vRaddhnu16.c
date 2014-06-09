@@ -17,5 +17,5 @@ void test_vRaddhnu16 (void)
   out_uint8x8_t = vraddhn_u16 (arg0_uint16x8_t, arg1_uint16x8_t);
 }
 
-/* { dg-final { scan-assembler "vraddhn\.i16\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vraddhn\.i16\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

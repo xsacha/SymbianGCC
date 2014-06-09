@@ -92,6 +92,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-inline.h"
 #include "tree-ssa-propagate.h"
 
+/* FIXME: add_cost and zero_cost defined in exprmed.h conflict with local uses.
+ */
+#include "expmed.h"
+#undef add_cost
+#undef zero_cost
+
 /* FIXME: Expressions are expanded to RTL in this pass to determine the
    cost of different addressing modes.  This should be moved to a TBD
    interface between the GIMPLE and RTL worlds.  */
@@ -109,7 +115,7 @@ along with GCC; see the file COPYING3.  If not see
 static inline HOST_WIDE_INT
 avg_loop_niter (struct loop *loop)
 {
-  HOST_WIDE_INT niter = estimated_loop_iterations_int (loop, false);
+  HOST_WIDE_INT niter = max_stmt_executions_int (loop, false);
   if (niter == -1)
     return AVG_LOOP_NITER (loop);
 
@@ -170,8 +176,8 @@ struct cost_pair
   tree value;		/* For final value elimination, the expression for
 			   the final value of the iv.  For iv elimination,
 			   the new bound to compare with.  */
-  int inv_expr_id;      /* Loop invariant expression id.  */
   enum tree_code comp;	/* For iv elimination, the comparison.  */
+  int inv_expr_id;      /* Loop invariant expression id.  */
 };
 
 /* Use.  */
@@ -381,126 +387,7 @@ struct iv_ca_delta
 
 static VEC(tree,heap) *decl_rtl_to_reset;
 
-/* Detects whether A is of POINTER_TYPE, and modifies CODE and B to make
-   A CODE B type-safe.  */
-
-static inline void
-robust_plus (enum tree_code *code, tree a, tree *b)
-{
-  tree a_type = TREE_TYPE (a);
-  tree b_type = TREE_TYPE (*b);
-
-  if (POINTER_TYPE_P (a_type))
-    {
-      switch (*code)
-        {
-        case MINUS_EXPR:
-          *b = fold_build1 (NEGATE_EXPR, b_type, *b);
-
-          /* Fall-through.  */
-        case PLUS_EXPR:
-          *code = POINTER_PLUS_EXPR;
-          break;
-        default:
-          gcc_unreachable ();
-        }
-    }
-  else
-    *b = fold_convert (a_type, *b);
-}
-
-/* Returns (TREE_TYPE (A))(A CODE B), where CODE is either PLUS_EXPR or
-   MINUS_EXPR.  Handles the case that A is a pointer robustly.  */
-
-static inline tree
-fold_build_plus (enum tree_code code, tree a, tree b)
-{
-  robust_plus (&code, a, &b);
-  return fold_build2 (code, TREE_TYPE (a), a, b);
-}
-
-/* Folds (TREE_TYPE (A))(A CODE B), where CODE is either PLUS_EXPR or
-   MINUS_EXPR.  Returns the folded expression if folding is successful.
-   Otherwise, return NULL_TREE.  Handles the case that A is a pointer
-   robustly.  */
-
-static inline tree
-fold_plus (enum tree_code code, tree a, tree b)
-{
-  tree a_type = TREE_TYPE (a);
-  tree res;
-
-  STRIP_NOPS (a);
-  robust_plus (&code, a, &b);
-
-  res = fold_binary (code, TREE_TYPE (a), a, b);
-  if (res == NULL_TREE)
-    return NULL_TREE;
-
-  return fold_convert (a_type, res);
-}
-
-/* Folds (TREE_TYPE (A))(A - B), possibly using the defining stmt of A.  Returns
-   the folded expression if folding is successful and resulted in an ssa_name.
-   Otherwise, return NULL_TREE.  */
-
-static inline tree
-fold_diff_to_ssa_name (tree a, tree b)
-{
-  tree a_type = TREE_TYPE (a);
-  tree res, a0, a1;
-  gimple def_stmt;
-
-  res = fold_plus (MINUS_EXPR, a, b);
-  if (res != NULL_TREE)
-    {
-      STRIP_NOPS (res);
-      if (TREE_CODE (res) == SSA_NAME)
-	return fold_convert (a_type, res);
-    }
-
-  STRIP_NOPS (a);
-  STRIP_NOPS (b);
-
-  if (TREE_CODE (a) == PLUS_EXPR && TREE_CODE (b) == PLUS_EXPR
-      && tree_int_cst_equal (TREE_OPERAND (a, 1), TREE_OPERAND (b, 1)))
-    {
-      a = TREE_OPERAND (a, 0);
-      b = TREE_OPERAND (b, 0);
-
-      STRIP_NOPS (a);
-      STRIP_NOPS (b);
-
-      res = fold_plus (MINUS_EXPR, a, b);
-      if (res != NULL_TREE)
-	{
-	  STRIP_NOPS (res);
-	  if (TREE_CODE (res) == SSA_NAME)
-	    return fold_convert (a_type, res);
-	}
-    }
-
-  if (TREE_CODE (a) != SSA_NAME)
-    return NULL_TREE;
-
-  def_stmt = SSA_NAME_DEF_STMT (a);
-  if (!is_gimple_assign (def_stmt)
-      || (gimple_assign_rhs_code (def_stmt) != PLUS_EXPR
-	  && gimple_assign_rhs_code (def_stmt) != POINTER_PLUS_EXPR))
-    return NULL_TREE;
-  a0 = gimple_assign_rhs1 (def_stmt);
-  a1 = gimple_assign_rhs2 (def_stmt);
-
-  res = fold_plus (MINUS_EXPR, fold_build_plus (PLUS_EXPR, a0, a1), b);
-  if (res != NULL_TREE)
-    {
-      STRIP_NOPS (res);
-      if (TREE_CODE (res) == SSA_NAME)
-	return fold_convert (a_type, res);
-    }
-
-  return NULL_TREE;
-}
+static comp_cost force_expr_to_var_cost (tree, bool);
 
 /* Number of uses recorded in DATA.  */
 
@@ -887,15 +774,13 @@ contains_abnormal_ssa_name_p (tree expr)
   return false;
 }
 
-/*  Returns tree describing number of iterations determined from
+/*  Returns the structure describing number of iterations determined from
     EXIT of DATA->current_loop, or NULL if something goes wrong.  */
 
-static tree
-niter_for_exit (struct ivopts_data *data, edge exit,
-                struct tree_niter_desc **desc_p)
+static struct tree_niter_desc *
+niter_for_exit (struct ivopts_data *data, edge exit)
 {
-  struct tree_niter_desc* desc = NULL;
-  tree niter;
+  struct tree_niter_desc *desc;
   void **slot;
 
   if (!data->niters)
@@ -912,41 +797,27 @@ niter_for_exit (struct ivopts_data *data, edge exit,
          names that appear in phi nodes on abnormal edges, so that we do not
          create overlapping life ranges for them (PR 27283).  */
       desc = XNEW (struct tree_niter_desc);
-      if (number_of_iterations_exit (data->current_loop,
-				     exit, desc, true)
-     	  && !contains_abnormal_ssa_name_p (desc->niter))
+      if (!number_of_iterations_exit (data->current_loop,
+				      exit, desc, true)
+     	  || contains_abnormal_ssa_name_p (desc->niter))
 	{
-	  if (!integer_zerop (desc->may_be_zero))
-            /* Construct COND_EXPR that describes the number of iterations.
-               Either the COND_EXPR is not too expensive, and we can use it as
-               loop bound, or we can deduce a LT_EXPR bound from it.  */
-	    niter
-	      = build3 (COND_EXPR, TREE_TYPE (desc->niter), desc->may_be_zero,
-			build_int_cst_type (TREE_TYPE (desc->niter), 0),
-			desc->niter);
-	  else
-	    niter = desc->niter;
+	  XDELETE (desc);
+	  desc = NULL;
 	}
-      else
-	niter = NULL_TREE;
-
-      desc->niter = niter;
       slot = pointer_map_insert (data->niters, exit);
       *slot = desc;
     }
   else
-    niter = ((struct tree_niter_desc *) *slot)->niter;
+    desc = (struct tree_niter_desc *) *slot;
 
-  if (desc_p)
-    *desc_p = (struct tree_niter_desc *) *slot;
-  return niter;
+  return desc;
 }
 
-/* Returns tree describing number of iterations determined from
+/* Returns the structure describing number of iterations determined from
    single dominating exit of DATA->current_loop, or NULL if something
    goes wrong.  */
 
-static tree
+static struct tree_niter_desc *
 niter_for_single_dom_exit (struct ivopts_data *data)
 {
   edge exit = single_dom_exit (data->current_loop);
@@ -954,7 +825,7 @@ niter_for_single_dom_exit (struct ivopts_data *data)
   if (!exit)
     return NULL;
 
-  return niter_for_exit (data, exit, NULL);
+  return niter_for_exit (data, exit);
 }
 
 /* Hash table equality function for expressions.  */
@@ -1160,7 +1031,7 @@ find_bivs (struct ivopts_data *data)
       if (step)
 	{
 	  if (POINTER_TYPE_P (type))
-	    step = fold_convert (sizetype, step);
+	    step = convert_to_ptrofftype (step);
 	  else
 	    step = fold_convert (type, step);
 	}
@@ -1299,12 +1170,17 @@ find_induction_variables (struct ivopts_data *data)
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      tree niter = niter_for_single_dom_exit (data);
+      struct tree_niter_desc *niter = niter_for_single_dom_exit (data);
 
       if (niter)
 	{
 	  fprintf (dump_file, "  number of iterations ");
-	  print_generic_expr (dump_file, niter, TDF_SLIM);
+	  print_generic_expr (dump_file, niter->niter, TDF_SLIM);
+	  if (!integer_zerop (niter->may_be_zero))
+	    {
+	      fprintf (dump_file, "; zero if ");
+	      print_generic_expr (dump_file, niter->may_be_zero, TDF_SLIM);
+	    }
 	  fprintf (dump_file, "\n\n");
     	};
 
@@ -1760,7 +1636,8 @@ may_be_unaligned_p (tree ref, tree step)
   base = get_inner_reference (ref, &bitsize, &bitpos, &toffset, &mode,
 			      &unsignedp, &volatilep, true);
   base_type = TREE_TYPE (base);
-  base_align = TYPE_ALIGN (base_type);
+  base_align = get_object_alignment (base);
+  base_align = MAX (base_align, TYPE_ALIGN (base_type));
 
   if (mode != BLKmode)
     {
@@ -2341,7 +2218,10 @@ add_candidate_1 (struct ivopts_data *data,
   struct iv_cand *cand = NULL;
   tree type, orig_type;
 
-  if (base)
+  /* For non-original variables, make sure their values are computed in a type
+     that does not invoke undefined behavior on overflows (since in general,
+     we cannot prove that these induction variables are non-wrapping).  */
+  if (pos != IP_ORIGINAL)
     {
       orig_type = TREE_TYPE (base);
       type = generic_type_for (orig_type);
@@ -2484,7 +2364,18 @@ add_autoinc_candidates (struct ivopts_data *data, tree base, tree step,
   if ((HAVE_PRE_INCREMENT && GET_MODE_SIZE (mem_mode) == cstepi)
       || (HAVE_PRE_DECREMENT && GET_MODE_SIZE (mem_mode) == -cstepi))
     {
-      tree new_base = fold_build_plus (MINUS_EXPR, base, step);
+      enum tree_code code = MINUS_EXPR;
+      tree new_base;
+      tree new_step = step;
+
+      if (POINTER_TYPE_P (TREE_TYPE (base)))
+	{
+	  new_step = fold_build1 (NEGATE_EXPR, TREE_TYPE (step), step);
+	  code = POINTER_PLUS_EXPR;
+	}
+      else
+	new_step = fold_convert (TREE_TYPE (base), new_step);
+      new_base = fold_build2 (code, TREE_TYPE (base), base, new_step);
       add_candidate_1 (data, new_base, step, important, IP_BEFORE_USE, use,
 		       use->stmt);
     }
@@ -2777,11 +2668,12 @@ infinite_cost_p (comp_cost cost)
 /* Sets cost of (USE, CANDIDATE) pair to COST and record that it depends
    on invariants DEPENDS_ON and that the value used in expressing it
    is VALUE, and in case of iv elimination the comparison operator is COMP.  */
+
 static void
 set_use_iv_cost (struct ivopts_data *data,
 		 struct iv_use *use, struct iv_cand *cand,
 		 comp_cost cost, bitmap depends_on, tree value,
-                 int inv_expr_id, enum tree_code comp)
+		 enum tree_code comp, int inv_expr_id)
 {
   unsigned i, s;
 
@@ -2797,8 +2689,8 @@ set_use_iv_cost (struct ivopts_data *data,
       use->cost_map[cand->id].cost = cost;
       use->cost_map[cand->id].depends_on = depends_on;
       use->cost_map[cand->id].value = value;
-      use->cost_map[cand->id].inv_expr_id = inv_expr_id;
       use->cost_map[cand->id].comp = comp;
+      use->cost_map[cand->id].inv_expr_id = inv_expr_id;
       return;
     }
 
@@ -2818,8 +2710,8 @@ found:
   use->cost_map[i].cost = cost;
   use->cost_map[i].depends_on = depends_on;
   use->cost_map[i].value = value;
-  use->cost_map[i].inv_expr_id = inv_expr_id;
   use->cost_map[i].comp = comp;
+  use->cost_map[i].inv_expr_id = inv_expr_id;
 }
 
 /* Gets cost of (USE, CANDIDATE) pair.  */
@@ -2868,7 +2760,7 @@ seq_cost (rtx seq, bool speed)
     {
       set = single_set (seq);
       if (set)
-	cost += rtx_cost (set, SET,speed);
+	cost += set_src_cost (SET_SRC (set), speed);
       else
 	cost++;
     }
@@ -2972,7 +2864,7 @@ computation_cost (tree expr, bool speed)
   unsigned cost;
   /* Avoid using hard regs in ways which may be unsupported.  */
   int regno = LAST_VIRTUAL_REGISTER + 1;
-  struct cgraph_node *node = cgraph_node (current_function_decl);
+  struct cgraph_node *node = cgraph_get_node (current_function_decl);
   enum node_frequency real_frequency = node->frequency;
 
   node->frequency = NODE_FREQUENCY_NORMAL;
@@ -2989,6 +2881,8 @@ computation_cost (tree expr, bool speed)
   if (MEM_P (rslt))
     cost += address_cost (XEXP (rslt, 0), TYPE_MODE (type),
 			  TYPE_ADDR_SPACE (type), speed);
+  else if (!REG_P (rslt))
+    cost += set_src_cost (rslt, speed);
 
   return cost;
 }
@@ -3002,26 +2896,6 @@ var_at_stmt (struct loop *loop, struct iv_cand *cand, gimple stmt)
     return cand->var_after;
   else
     return cand->var_before;
-}
-
-/* Return the most significant (sign) bit of T.  Similar to tree_int_cst_msb,
-   but the bit is determined from TYPE_PRECISION, not MODE_BITSIZE.  */
-
-int
-tree_int_cst_sign_bit (const_tree t)
-{
-  unsigned bitno = TYPE_PRECISION (TREE_TYPE (t)) - 1;
-  unsigned HOST_WIDE_INT w;
-
-  if (bitno < HOST_BITS_PER_WIDE_INT)
-    w = TREE_INT_CST_LOW (t);
-  else
-    {
-      w = TREE_INT_CST_HIGH (t);
-      bitno -= HOST_BITS_PER_WIDE_INT;
-    }
-
-  return (w >> bitno) & 1;
 }
 
 /* If A is (TYPE) BA and B is (TYPE) BB, and the types of BA and BB have the
@@ -3627,6 +3501,42 @@ get_address_cost (bool symbol_present, bool var_present,
   return new_cost (cost + acost, complexity);
 }
 
+ /* Calculate the SPEED or size cost of shiftadd EXPR in MODE.  MULT is the
+    the EXPR operand holding the shift.  COST0 and COST1 are the costs for
+    calculating the operands of EXPR.  Returns true if successful, and returns
+    the cost in COST.  */
+
+static bool
+get_shiftadd_cost (tree expr, enum machine_mode mode, comp_cost cost0,
+                   comp_cost cost1, tree mult, bool speed, comp_cost *cost)
+{
+  comp_cost res;
+  tree op1 = TREE_OPERAND (expr, 1);
+  tree cst = TREE_OPERAND (mult, 1);
+  tree multop = TREE_OPERAND (mult, 0);
+  int m = exact_log2 (int_cst_value (cst));
+  int maxm = MIN (BITS_PER_WORD, GET_MODE_BITSIZE (mode));
+  int sa_cost;
+
+  if (!(m >= 0 && m < maxm))
+    return false;
+
+  sa_cost = (TREE_CODE (expr) != MINUS_EXPR
+             ? shiftadd_cost[speed][mode][m]
+             : (mult == op1
+                ? shiftsub1_cost[speed][mode][m]
+                : shiftsub0_cost[speed][mode][m]));
+  res = new_cost (sa_cost, 0);
+  res = add_costs (res, mult == op1 ? cost0 : cost1);
+
+  STRIP_NOPS (multop);
+  if (!is_gimple_val (multop))
+    res = add_costs (res, force_expr_to_var_cost (multop, speed));
+
+  *cost = res;
+  return true;
+}
+
 /* Estimates cost of forcing expression EXPR into a variable.  */
 
 static comp_cost
@@ -3663,9 +3573,7 @@ force_expr_to_var_cost (tree expr, bool speed)
 	  symbol_cost[i] = computation_cost (addr, i) + 1;
 
 	  address_cost[i]
-	    = computation_cost (build2 (POINTER_PLUS_EXPR, type,
-					addr,
-					build_int_cst (sizetype, 2000)), i) + 1;
+	    = computation_cost (fold_build_pointer_plus_hwi (addr, 2000), i) + 1;
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "force_expr_to_var_cost %s costs:\n", i ? "speed" : "size");
@@ -3752,6 +3660,21 @@ force_expr_to_var_cost (tree expr, bool speed)
     case MINUS_EXPR:
     case NEGATE_EXPR:
       cost = new_cost (add_cost (mode, speed), 0);
+      if (TREE_CODE (expr) != NEGATE_EXPR)
+        {
+          tree mult = NULL_TREE;
+          comp_cost sa_cost;
+          if (TREE_CODE (op1) == MULT_EXPR)
+            mult = op1;
+          else if (TREE_CODE (op0) == MULT_EXPR)
+            mult = op0;
+
+          if (mult != NULL_TREE
+              && cst_and_fits_in_hwi (TREE_OPERAND (mult, 1))
+              && get_shiftadd_cost (expr, mode, cost0, cost1, mult, speed,
+                                    &sa_cost))
+            return sa_cost;
+        }
       break;
 
     case MULT_EXPR:
@@ -3958,6 +3881,28 @@ compare_aff_trees (aff_tree *aff1, aff_tree *aff2)
   return true;
 }
 
+/* Stores EXPR in DATA->inv_expr_tab, and assigns it an inv_expr_id.  */
+
+static int
+get_expr_id (struct ivopts_data *data, tree expr)
+{
+  struct iv_inv_expr_ent ent;
+  struct iv_inv_expr_ent **slot;
+
+  ent.expr = expr;
+  ent.hash = iterative_hash_expr (expr, 0);
+  slot = (struct iv_inv_expr_ent **) htab_find_slot (data->inv_expr_tab,
+                                                     &ent, INSERT);
+  if (*slot)
+    return (*slot)->id;
+
+  *slot = XNEW (struct iv_inv_expr_ent);
+  (*slot)->expr = expr;
+  (*slot)->hash = ent.hash;
+  (*slot)->id = data->inv_expr_id++;
+  return (*slot)->id;
+}
+
 /* Returns the pseudo expr id if expression UBASE - RATIO * CBASE
    requires a new compiler generated temporary.  Returns -1 otherwise.
    ADDRESS_P is a flag indicating if the expression is for address
@@ -3970,8 +3915,6 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
 {
   aff_tree ubase_aff, cbase_aff;
   tree expr, ub, cb;
-  struct iv_inv_expr_ent ent;
-  struct iv_inv_expr_ent **slot;
 
   STRIP_NOPS (ubase);
   STRIP_NOPS (cbase);
@@ -4059,18 +4002,7 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
   aff_combination_scale (&cbase_aff, shwi_to_double_int (-1 * ratio));
   aff_combination_add (&ubase_aff, &cbase_aff);
   expr = aff_combination_to_tree (&ubase_aff);
-  ent.expr = expr;
-  ent.hash = iterative_hash_expr (expr, 0);
-  slot = (struct iv_inv_expr_ent **) htab_find_slot (data->inv_expr_tab,
-                                                     &ent, INSERT);
-  if (*slot)
-    return (*slot)->id;
-
-  *slot = XNEW (struct iv_inv_expr_ent);
-  (*slot)->expr = expr;
-  (*slot)->hash = ent.hash;
-  (*slot)->id = data->inv_expr_id++;
-  return  (*slot)->id;
+  return get_expr_id (data, expr);
 }
 
 
@@ -4116,7 +4048,11 @@ get_computation_cost_at (struct ivopts_data *data,
       return infinite_cost;
     }
 
-  if (address_p)
+  if (address_p
+      || (use->iv->base_object
+	  && cand->iv->base_object
+	  && POINTER_TYPE_P (TREE_TYPE (use->iv->base_object))
+	  && POINTER_TYPE_P (TREE_TYPE (cand->iv->base_object))))
     {
       /* Do not try to express address of an object with computation based
 	 on address of a different object.  This may cause problems in rtl
@@ -4331,16 +4267,16 @@ determine_use_iv_cost_generic (struct ivopts_data *data,
   if (cand->pos == IP_ORIGINAL
       && cand->incremented_at == use->stmt)
     {
-      set_use_iv_cost (data, use, cand, zero_cost, NULL, NULL_TREE, -1,
-		       ERROR_MARK);
+      set_use_iv_cost (data, use, cand, zero_cost, NULL, NULL_TREE,
+                       ERROR_MARK, -1);
       return true;
     }
 
   cost = get_computation_cost (data, use, cand, false, &depends_on,
                                NULL, &inv_expr_id);
 
-  set_use_iv_cost (data, use, cand, cost, depends_on, NULL_TREE,
-                   inv_expr_id, ERROR_MARK);
+  set_use_iv_cost (data, use, cand, cost, depends_on, NULL_TREE, ERROR_MARK,
+                   inv_expr_id);
 
   return !infinite_cost_p (cost);
 }
@@ -4367,8 +4303,8 @@ determine_use_iv_cost_address (struct ivopts_data *data,
       else if (cand->pos == IP_AFTER_USE || cand->pos == IP_BEFORE_USE)
 	cost = infinite_cost;
     }
-  set_use_iv_cost (data, use, cand, cost, depends_on, NULL_TREE,
-                   inv_expr_id, ERROR_MARK);
+  set_use_iv_cost (data, use, cand, cost, depends_on, NULL_TREE, ERROR_MARK,
+                   inv_expr_id);
 
   return !infinite_cost_p (cost);
 }
@@ -4443,141 +4379,246 @@ iv_elimination_compare (struct ivopts_data *data, struct iv_use *use)
   return (exit->flags & EDGE_TRUE_VALUE ? EQ_EXPR : NE_EXPR);
 }
 
-/* Get the loop bound and comparison operator of USE->iv, and store them in
-   BOUND_P and COMP_P.  Returns false if unsuccessful.  */
-
-static bool
-get_use_lt_bound (struct iv_use *use, tree use_iv, tree *bound_p,
-		  enum tree_code *comp_p)
+static tree
+strip_wrap_conserving_type_conversions (tree exp)
 {
-  gimple stmt = use->stmt;
-
-  if (gimple_code (stmt) != GIMPLE_COND
-      || gimple_cond_lhs (stmt) != use_iv)
-    return false;
-
-  *comp_p = gimple_cond_code (stmt);
-  *bound_p = gimple_cond_rhs (stmt);
-
-  return true;
+  while (tree_ssa_useless_type_conversion (exp)
+	 && (nowrap_type_p (TREE_TYPE (exp))
+	     == nowrap_type_p (TREE_TYPE (TREE_OPERAND (exp, 0)))))
+    exp = TREE_OPERAND (exp, 0);
+  return exp;
 }
 
-/* Tries to replace loop exit test USE, by one formulated in terms of a LT_EXPR
-   comparison with CAND.  Stores the resulting comparison in COMP_P and bound in
-   BOUND_P.  */
+/* Walk the SSA form and check whether E == WHAT.  Fairly simplistic, we
+   check for an exact match.  */
 
 static bool
-iv_elimination_compare_lt (struct ivopts_data *data, struct iv_use *use,
-                           struct iv_cand *cand, tree *bound_p,
-			   enum tree_code *comp_p)
+expr_equal_p (tree e, tree what)
 {
-  enum tree_code use_comp, canon_comp;
-  tree base_ptr, use_lt_bound, bound, *use_iv, base_cand_at_use;
-  bool ok;
-  tree use_type, cand_type, cand_iv_base = cand->iv->base;
+  gimple stmt;
+  enum tree_code code;
 
-  /* Initialize cand_type, use_iv and use_type.  */
-  STRIP_NOPS (cand_iv_base);
-  cand_type = TREE_TYPE (cand_iv_base);
-  ok = extract_cond_operands (data, use->stmt, &use_iv, NULL, NULL, NULL);
-  gcc_assert (ok);
-  use_type = TREE_TYPE (*use_iv);
+  e = strip_wrap_conserving_type_conversions (e);
+  what = strip_wrap_conserving_type_conversions (what);
 
-  /* We're trying to replace 'i < n' with 'p < base + n' in
+  code = TREE_CODE (what);
+  if (TREE_TYPE (e) != TREE_TYPE (what))
+    return false;
 
-     void
-     f1 (char *base, unsigned long int s, unsigned long int n)
+  if (operand_equal_p (e, what, 0))
+    return true;
+
+  if (TREE_CODE (e) != SSA_NAME)
+    return false;
+
+  stmt = SSA_NAME_DEF_STMT (e);
+  if (gimple_code (stmt) != GIMPLE_ASSIGN
+      || gimple_assign_rhs_code (stmt) != code)
+    return false;
+
+  switch (get_gimple_rhs_class (code))
+    {
+    case GIMPLE_BINARY_RHS:
+      if (!expr_equal_p (gimple_assign_rhs2 (stmt), TREE_OPERAND (what, 1)))
+	return false;
+      /* Fallthru.  */
+
+    case GIMPLE_UNARY_RHS:
+    case GIMPLE_SINGLE_RHS:
+      return expr_equal_p (gimple_assign_rhs1 (stmt), TREE_OPERAND (what, 0));
+    default:
+      return false;
+    }
+}
+
+/* Returns true if we can prove that BASE - OFFSET does not overflow.  For now,
+   we only detect the situation that BASE = SOMETHING + OFFSET, where the
+   calculation is performed in non-wrapping type.
+
+   TODO: More generally, we could test for the situation that
+	 BASE = SOMETHING + OFFSET' and OFFSET is between OFFSET' and zero.
+	 This would require knowing the sign of OFFSET.
+
+	 Also, we only look for the first addition in the computation of BASE.
+	 More complex analysis would be better, but introducing it just for
+	 this optimization seems like an overkill.  */
+
+static bool
+difference_cannot_overflow_p (tree base, tree offset)
+{
+  enum tree_code code;
+  tree e1, e2;
+
+  if (!nowrap_type_p (TREE_TYPE (base)))
+    return false;
+
+  base = expand_simple_operations (base);
+
+  if (TREE_CODE (base) == SSA_NAME)
+    {
+      gimple stmt = SSA_NAME_DEF_STMT (base);
+
+      if (gimple_code (stmt) != GIMPLE_ASSIGN)
+	return false;
+
+      code = gimple_assign_rhs_code (stmt);
+      if (get_gimple_rhs_class (code) != GIMPLE_BINARY_RHS)
+	return false;
+
+      e1 = gimple_assign_rhs1 (stmt);
+      e2 = gimple_assign_rhs2 (stmt);
+    }
+  else
+    {
+      code = TREE_CODE (base);
+      if (get_gimple_rhs_class (code) != GIMPLE_BINARY_RHS)
+	return false;
+      e1 = TREE_OPERAND (base, 0);
+      e2 = TREE_OPERAND (base, 1);
+    }
+
+  /* TODO: deeper inspection may be necessary to prove the equality.  */
+  switch (code)
+    {
+    case PLUS_EXPR:
+      return expr_equal_p (e1, offset) || expr_equal_p (e2, offset);
+    case POINTER_PLUS_EXPR:
+      return expr_equal_p (e2, offset);
+
+    default:
+      return false;
+    }
+}
+
+/* Tries to replace loop exit by one formulated in terms of a LT_EXPR
+   comparison with CAND.  NITER describes the number of iterations of
+   the loops.  If successful, the comparison in COMP_P is altered accordingly.
+
+   We aim to handle the following situation:
+
+   sometype *base, *p;
+   int a, b, i;
+
+   i = a;
+   p = p_0 = base + a;
+
+   do
      {
-       unsigned long int i = s;
-       char *p = base + s;
-       do
-         {
-	   *p = '\0';
-	   p++;
-	   i++;
-	 }
-       while (i < n);
+       bla (*p);
+       p++;
+       i++;
      }
+   while (i < b);
 
-     Overflow of base + n can't happen because either:
-     - s < n, and i will step to n, and p will step to base + n, or
-     - s >= n, so base + n < base + s, and assuming pointer arithmetic
-       doesn't overflow, base + s doesn't overflow, so base + n won't.
+   Here, the number of iterations of the loop is (a + 1 > b) ? 0 : b - a - 1.
+   We aim to optimize this to
 
-     This transformation is not valid if i and n are signed, because
-     base + n might underflow.
-  */
+   p = p_0 = base + a;
+   do
+     {
+       bla (*p);
+       p++;
+     }
+   while (p < p_0 - a + b);
 
-  /* Use should be an unsigned integral.  */
-  if (!INTEGRAL_TYPE_P (use_type) || !TYPE_UNSIGNED (use_type))
+   This preserves the correctness, since the pointer arithmetics does not
+   overflow.  More precisely:
+
+   1) if a + 1 <= b, then p_0 - a + b is the final value of p, hence there is no
+      overflow in computing it or the values of p.
+   2) if a + 1 > b, then we need to verify that the expression p_0 - a does not
+      overflow.  To prove this, we use the fact that p_0 = base + a.  */
+
+static bool
+iv_elimination_compare_lt (struct ivopts_data *data,
+                           struct iv_cand *cand, enum tree_code *comp_p,
+			   struct tree_niter_desc *niter)
+{
+  tree cand_type, a, b, mbz, nit_type = TREE_TYPE (niter->niter), offset;
+  struct affine_tree_combination nit, tmpa, tmpb;
+  enum tree_code comp;
+  HOST_WIDE_INT step;
+
+  /* We need to know that the candidate induction variable does not overflow.
+     While more complex analysis may be used to prove this, for now just
+     check that the variable appears in the original program and that it
+     is computed in a type that guarantees no overflows.  */
+  cand_type = TREE_TYPE (cand->iv->base);
+  if (cand->pos != IP_ORIGINAL || !nowrap_type_p (cand_type))
     return false;
 
-  /* Cand should be a pointer, and pointer overflow should be undefined.  */
-  if (!POINTER_TYPE_P (cand_type) || !POINTER_TYPE_OVERFLOW_UNDEFINED)
-    return false;
-
-  /* Make sure that the loop iterates till the loop bound is hit.  */
+  /* Make sure that the loop iterates till the loop bound is hit, as otherwise
+     the calculation of the BOUND could overflow, making the comparison
+     invalid.  */
   if (!data->loop_single_exit_p)
     return false;
 
-  /* We only handle this case for the moment.  */
-  if (!tree_int_cst_equal (use->iv->step, cand->iv->step))
+  /* We need to be able to decide whether candidate is increasing or decreasing
+     in order to choose the right comparison operator.  */
+  if (!cst_and_fits_in_hwi (cand->iv->step))
     return false;
+  step = int_cst_value (cand->iv->step);
 
-  if (cand->pos == IP_ORIGINAL)
+  /* Check that the number of iterations matches the expected pattern:
+     a + 1 > b ? 0 : b - a - 1.  */
+  mbz = niter->may_be_zero;
+  if (TREE_CODE (mbz) == GT_EXPR)
     {
-      /* If cand is a src level ptr iv, we know that
-	 cand->iv->base + nit * cand->iv->step won't overflow.  */
-
-      /* Now get the base of var_at_stmt (cand, use->stmt).  */
-      if (stmt_after_increment (data->current_loop, cand, use->stmt))
-	/* Get the base of var_after.  */
-	base_cand_at_use = fold_build_plus (PLUS_EXPR, cand->iv->base,
-					     cand->iv->step);
+      /* Handle a + 1 > b.  */
+      tree op0 = TREE_OPERAND (mbz, 0);
+      if (TREE_CODE (op0) == PLUS_EXPR && integer_onep (TREE_OPERAND (op0, 1)))
+	{
+	  a = TREE_OPERAND (op0, 0);
+	  b = TREE_OPERAND (mbz, 1);
+	}
       else
-	/* Get the base of var_before.  */
-	base_cand_at_use = cand->iv->base;
+	return false;
+    }
+  else if (TREE_CODE (mbz) == LT_EXPR)
+    {
+      tree op1 = TREE_OPERAND (mbz, 1);
+
+      /* Handle b < a + 1.  */
+      if (TREE_CODE (op1) == PLUS_EXPR && integer_onep (TREE_OPERAND (op1, 1)))
+        {
+          a = TREE_OPERAND (op1, 0);
+          b = TREE_OPERAND (mbz, 0);
+        }
+      else
+	return false;
     }
   else
-    {
-      /* It is possible to also allow other pointer cands, provided we can prove
-	 cand->iv->base + nit * cand->iv->step doesn't overflow.  Return false
-	 for now.  */
-      return false;
-    }
-
-  /* Detect p = base + s.  */
-  base_ptr = fold_diff_to_ssa_name (base_cand_at_use,
-				    fold_convert (sizetype, use->iv->base));
-  if (base_ptr == NULL_TREE)
-    return false;
-  STRIP_NOPS (base_ptr);
-  /* Get the bound of the iv of the use.  */
-  if (!get_use_lt_bound (use, *use_iv, &use_lt_bound, &use_comp))
     return false;
 
-  /* Determine canon_comp.  */
+  /* Expected number of iterations is B - A - 1.  Check that it matches
+     the actual number, i.e., that B - A - NITER = 1.  */
+  tree_to_aff_combination (niter->niter, nit_type, &nit);
+  tree_to_aff_combination (fold_convert (nit_type, a), nit_type, &tmpa);
+  tree_to_aff_combination (fold_convert (nit_type, b), nit_type, &tmpb);
+  aff_combination_scale (&nit, double_int_minus_one);
+  aff_combination_scale (&tmpa, double_int_minus_one);
+  aff_combination_add (&tmpb, &tmpa);
+  aff_combination_add (&tmpb, &nit);
+  if (tmpb.n != 0 || !double_int_equal_p (tmpb.offset, double_int_one))
+    return false;
+
+  /* Finally, check that CAND->IV->BASE - CAND->IV->STEP * A does not
+     overflow.  */
+  offset = fold_build2 (MULT_EXPR, TREE_TYPE (cand->iv->step),
+			cand->iv->step,
+			fold_convert (TREE_TYPE (cand->iv->step), a));
+  if (!difference_cannot_overflow_p (cand->iv->base, offset))
+    return false;
+
+  /* Determine the new comparison operator.  */
+  comp = step < 0 ? GT_EXPR : LT_EXPR;
   if (*comp_p == NE_EXPR)
-    canon_comp = use_comp;
+    *comp_p = comp;
   else if (*comp_p == EQ_EXPR)
-    canon_comp = invert_tree_comparison (use_comp, false);
+    *comp_p = invert_tree_comparison (comp, false);
   else
     gcc_unreachable ();
 
-  /* Allow positive and negative step, and inclusive and exclusive bound.
-     To trigger inclusive bound, we need -funsafe-loop-optimizations.  */
-  if (canon_comp != LT_EXPR && canon_comp != GT_EXPR
-      && canon_comp != LE_EXPR && canon_comp != GE_EXPR)
-    return false;
-
-  /* Calculate bound.  */
-  bound = fold_build_plus (PLUS_EXPR, base_ptr,
-                           fold_convert (sizetype, use_lt_bound));
-  if (expression_expensive_p (bound))
-    return false;
-
-  *comp_p = use_comp;
-  *bound_p = bound;
   return true;
 }
 
@@ -4592,7 +4633,7 @@ may_eliminate_iv (struct ivopts_data *data,
 {
   basic_block ex_bb;
   edge exit;
-  tree nit, period;
+  tree period;
   struct loop *loop = data->current_loop;
   aff_tree bnd;
   struct tree_niter_desc *desc = NULL;
@@ -4614,8 +4655,8 @@ may_eliminate_iv (struct ivopts_data *data,
   if (flow_bb_inside_loop_p (loop, exit->dest))
     return false;
 
-  nit = niter_for_exit (data, exit, &desc);
-  if (!nit)
+  desc = niter_for_exit (data, exit);
+  if (!desc)
     return false;
 
   /* Determine whether we can use the variable to test the exit condition.
@@ -4624,10 +4665,19 @@ may_eliminate_iv (struct ivopts_data *data,
   period = iv_period (cand->iv);
 
   /* If the number of iterations is constant, compare against it directly.  */
-  if (TREE_CODE (nit) == INTEGER_CST)
+  if (TREE_CODE (desc->niter) == INTEGER_CST)
     {
-      if (tree_int_cst_lt (period, nit))
-        return false;
+      /* See cand_value_at.  */
+      if (stmt_after_increment (loop, cand, use->stmt))
+        {
+          if (!tree_int_cst_lt (desc->niter, period))
+            return false;
+        }
+      else
+        {
+          if (tree_int_cst_lt (period, desc->niter))
+            return false;
+        }
     }
 
   /* If not, and if this is the only possible exit of the loop, see whether
@@ -4638,14 +4688,17 @@ may_eliminate_iv (struct ivopts_data *data,
       double_int period_value, max_niter;
 
       max_niter = desc->max;
+      if (stmt_after_increment (loop, cand, use->stmt))
+        max_niter = double_int_add (max_niter, double_int_one);
       period_value = tree_to_double_int (period);
       if (double_int_ucmp (max_niter, period_value) > 0)
         {
           /* See if we can take advantage of infered loop bound information.  */
-          if (loop_only_exit_p (loop, exit))
+          if (data->loop_single_exit_p)
             {
               if (!estimated_loop_iterations (loop, true, &max_niter))
                 return false;
+              /* The loop bound is already adjusted by adding 1.  */
               if (double_int_ucmp (max_niter, period_value) > 0)
                 return false;
             }
@@ -4654,33 +4707,46 @@ may_eliminate_iv (struct ivopts_data *data,
         }
     }
 
-  cand_value_at (loop, cand, use->stmt, nit, &bnd);
+  cand_value_at (loop, cand, use->stmt, desc->niter, &bnd);
 
   *bound = aff_combination_to_tree (&bnd);
   *comp = iv_elimination_compare (data, use);
-
-  /* Try to implement nit using a '<' instead.  */
-  if (TREE_CODE (nit) == COND_EXPR)
-    {
-      if (iv_elimination_compare_lt (data, use, cand, bound, comp))
-        return true;
-
-      /* We could try to see if the non-lt bound is not too expensive, but the
-         cost infrastructure needs tuning for that first.  Even though
-         expression_expensive_p always returns true for COND_EXPRs, it happens
-         that the bound is folded into a MAX_EXPR, which is approved by
-         expression_expensive_p, but attributed a too low cost by force_var_cost
-         in case the MAX_EXPR would expand into control flow.  */
-      return false;
-    }
 
   /* It is unlikely that computing the number of iterations using division
      would be more profitable than keeping the original induction variable.  */
   if (expression_expensive_p (*bound))
     return false;
+
+  /* Sometimes, it is possible to handle the situation that the number of
+     iterations may be zero unless additional assumtions by using <
+     instead of != in the exit condition.
+
+     TODO: we could also calculate the value MAY_BE_ZERO ? 0 : NITER and
+	   base the exit condition on it.  However, that is often too
+	   expensive.  */
+  if (!integer_zerop (desc->may_be_zero))
+    return iv_elimination_compare_lt (data, cand, comp, desc);
+
   return true;
 }
 
+ /* Calculates the cost of BOUND, if it is a PARM_DECL.  A PARM_DECL must
+    be copied, if is is used in the loop body and DATA->body_includes_call.  */
+
+static int
+parm_decl_cost (struct ivopts_data *data, tree bound)
+{
+  tree sbound = bound;
+  STRIP_NOPS (sbound);
+
+  if (TREE_CODE (sbound) == SSA_NAME
+      && TREE_CODE (SSA_NAME_VAR (sbound)) == PARM_DECL
+      && gimple_nop_p (SSA_NAME_DEF_STMT (sbound))
+      && data->body_includes_call)
+    return COSTS_N_INSNS (1);
+
+  return 0;
+}
 
 /* Determines cost of basing replacement of USE on CAND in a condition.  */
 
@@ -4691,17 +4757,17 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
   tree bound = NULL_TREE;
   struct iv *cmp_iv;
   bitmap depends_on_elim = NULL, depends_on_express = NULL, depends_on;
-  comp_cost elim_cost, express_cost, cost;
+  comp_cost elim_cost, express_cost, cost, bound_cost;
   bool ok;
-  int inv_expr_id = -1;
+  int elim_inv_expr_id = -1, express_inv_expr_id = -1, inv_expr_id;
   tree *control_var, *bound_cst;
-  enum tree_code comp;
+  enum tree_code comp = ERROR_MARK;
 
   /* Only consider real candidates.  */
   if (!cand->iv)
     {
-      set_use_iv_cost (data, use, cand, infinite_cost, NULL, NULL_TREE, -1,
-		       ERROR_MARK);
+      set_use_iv_cost (data, use, cand, infinite_cost, NULL, NULL_TREE,
+		       ERROR_MARK, -1);
       return false;
     }
 
@@ -4709,6 +4775,21 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
   if (may_eliminate_iv (data, use, cand, &bound, &comp))
     {
       elim_cost = force_var_cost (data, bound, &depends_on_elim);
+      if (elim_cost.cost == 0)
+        elim_cost.cost = parm_decl_cost (data, bound);
+      else if (TREE_CODE (bound) == INTEGER_CST)
+        elim_cost.cost = 0;
+      /* If we replace a loop condition 'i < n' with 'p < base + n',
+	 depends_on_elim will have 'base' and 'n' set, which implies
+	 that both 'base' and 'n' will be live during the loop.	 More likely,
+	 'base + n' will be loop invariant, resulting in only one live value
+	 during the loop.  So in that case we clear depends_on_elim and set
+        elim_inv_expr_id instead.  */
+      if (depends_on_elim && bitmap_count_bits (depends_on_elim) > 1)
+	{
+	  elim_inv_expr_id = get_expr_id (data, bound);
+	  bitmap_clear (depends_on_elim);
+	}
       /* The bound is a loop invariant, so it will be only computed
 	 once.  */
       elim_cost.cost = adjust_setup_cost (data, elim_cost.cost);
@@ -4736,9 +4817,17 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
 
   express_cost = get_computation_cost (data, use, cand, false,
 				       &depends_on_express, NULL,
-                                       &inv_expr_id);
+                                       &express_inv_expr_id);
   fd_ivopts_data = data;
   walk_tree (&cmp_iv->base, find_depends, &depends_on_express, NULL);
+
+  /* Count the cost of the original bound as well.  */
+  bound_cost = force_var_cost (data, *bound_cst, NULL);
+  if (bound_cost.cost == 0)
+    bound_cost.cost = parm_decl_cost (data, *bound_cst);
+  else if (TREE_CODE (*bound_cst) == INTEGER_CST)
+    bound_cost.cost = 0;
+  express_cost.cost += bound_cost.cost;
 
   /* Choose the better approach, preferring the eliminated IV. */
   if (compare_costs (elim_cost, express_cost) <= 0)
@@ -4746,6 +4835,7 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
       cost = elim_cost;
       depends_on = depends_on_elim;
       depends_on_elim = NULL;
+      inv_expr_id = elim_inv_expr_id;
     }
   else
     {
@@ -4754,9 +4844,10 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
       depends_on_express = NULL;
       bound = NULL_TREE;
       comp = ERROR_MARK;
+      inv_expr_id = express_inv_expr_id;
     }
 
-  set_use_iv_cost (data, use, cand, cost, depends_on, bound, inv_expr_id, comp);
+  set_use_iv_cost (data, use, cand, cost, depends_on, bound, comp, inv_expr_id);
 
   if (depends_on_elim)
     BITMAP_FREE (depends_on_elim);
@@ -4960,6 +5051,11 @@ determine_iv_cost (struct ivopts_data *data, struct iv_cand *cand)
 
   base = cand->iv->base;
   cost_base = force_var_cost (data, base, NULL);
+  /* It will be exceptional that the iv register happens to be initialized with
+     the proper value at no cost.  In general, there will at least be a regcopy
+     or a const set.  */
+  if (cost_base.cost == 0)
+    cost_base.cost = COSTS_N_INSNS (1);
   cost_step = add_cost (TYPE_MODE (TREE_TYPE (base)), data->speed);
 
   cost = cost_step + adjust_setup_cost (data, cost_base.cost);
@@ -6074,35 +6170,24 @@ rewrite_use_nonlinear_expr (struct ivopts_data *data,
   if (cand->pos == IP_ORIGINAL
       && cand->incremented_at == use->stmt)
     {
-      tree step, ctype, utype;
-      enum tree_code incr_code = PLUS_EXPR, old_code;
+      enum tree_code stmt_code;
 
       gcc_assert (is_gimple_assign (use->stmt));
       gcc_assert (gimple_assign_lhs (use->stmt) == cand->var_after);
-
-      step = cand->iv->step;
-      ctype = TREE_TYPE (step);
-      utype = TREE_TYPE (cand->var_after);
-      if (TREE_CODE (step) == NEGATE_EXPR)
-	{
-	  incr_code = MINUS_EXPR;
-	  step = TREE_OPERAND (step, 0);
-	}
 
       /* Check whether we may leave the computation unchanged.
 	 This is the case only if it does not rely on other
 	 computations in the loop -- otherwise, the computation
 	 we rely upon may be removed in remove_unused_ivs,
 	 thus leading to ICE.  */
-      old_code = gimple_assign_rhs_code (use->stmt);
-      if (old_code == PLUS_EXPR
-	  || old_code == MINUS_EXPR
-	  || old_code == POINTER_PLUS_EXPR)
+      stmt_code = gimple_assign_rhs_code (use->stmt);
+      if (stmt_code == PLUS_EXPR
+	  || stmt_code == MINUS_EXPR
+	  || stmt_code == POINTER_PLUS_EXPR)
 	{
 	  if (gimple_assign_rhs1 (use->stmt) == cand->var_before)
 	    op = gimple_assign_rhs2 (use->stmt);
-	  else if (old_code != MINUS_EXPR
-		   && gimple_assign_rhs2 (use->stmt) == cand->var_before)
+	  else if (gimple_assign_rhs2 (use->stmt) == cand->var_before)
 	    op = gimple_assign_rhs1 (use->stmt);
 	  else
 	    op = NULL_TREE;
@@ -6110,23 +6195,12 @@ rewrite_use_nonlinear_expr (struct ivopts_data *data,
       else
 	op = NULL_TREE;
 
-      if (op
-	  && (TREE_CODE (op) == INTEGER_CST
-	      || operand_equal_p (op, step, 0)))
+      if (op && expr_invariant_in_loop_p (data->current_loop, op))
 	return;
+    }
 
-      /* Otherwise, add the necessary computations to express
-	 the iv.  */
-      op = fold_convert (ctype, cand->var_before);
-      comp = fold_convert (utype,
-			   build2 (incr_code, ctype, op,
-				   unshare_expr (step)));
-    }
-  else
-    {
-      comp = get_computation (data->current_loop, use, cand);
-      gcc_assert (comp != NULL_TREE);
-    }
+  comp = get_computation (data->current_loop, use, cand);
+  gcc_assert (comp != NULL_TREE);
 
   switch (gimple_code (use->stmt))
     {
@@ -6183,64 +6257,6 @@ rewrite_use_nonlinear_expr (struct ivopts_data *data,
     {
       gimple_assign_set_rhs_from_tree (&bsi, comp);
       use->stmt = gsi_stmt (bsi);
-    }
-}
-
-/* Copies the reference information from OLD_REF to NEW_REF.  */
-
-static void
-copy_ref_info (tree new_ref, tree old_ref)
-{
-  tree new_ptr_base = NULL_TREE;
-
-  TREE_SIDE_EFFECTS (new_ref) = TREE_SIDE_EFFECTS (old_ref);
-  TREE_THIS_VOLATILE (new_ref) = TREE_THIS_VOLATILE (old_ref);
-
-  new_ptr_base = TREE_OPERAND (new_ref, 0);
-
-  /* We can transfer points-to information from an old pointer
-     or decl base to the new one.  */
-  if (new_ptr_base
-      && TREE_CODE (new_ptr_base) == SSA_NAME
-      && !SSA_NAME_PTR_INFO (new_ptr_base))
-    {
-      tree base = get_base_address (old_ref);
-      if (!base)
-	;
-      else if ((TREE_CODE (base) == MEM_REF
-		|| TREE_CODE (base) == TARGET_MEM_REF)
-	       && TREE_CODE (TREE_OPERAND (base, 0)) == SSA_NAME
-	       && SSA_NAME_PTR_INFO (TREE_OPERAND (base, 0)))
-	{
-	  struct ptr_info_def *new_pi;
-	  duplicate_ssa_name_ptr_info
-	    (new_ptr_base, SSA_NAME_PTR_INFO (TREE_OPERAND (base, 0)));
-	  new_pi = SSA_NAME_PTR_INFO (new_ptr_base);
-	  /* We have to be careful about transfering alignment information.  */
-	  if (TREE_CODE (old_ref) == MEM_REF
-	      && !(TREE_CODE (new_ref) == TARGET_MEM_REF
-		   && (TMR_INDEX2 (new_ref)
-		       || (TMR_STEP (new_ref)
-			   && (TREE_INT_CST_LOW (TMR_STEP (new_ref))
-			       < new_pi->align)))))
-	    {
-	      new_pi->misalign += double_int_sub (mem_ref_offset (old_ref),
-						  mem_ref_offset (new_ref)).low;
-	      new_pi->misalign &= (new_pi->align - 1);
-	    }
-	  else
-	    {
-	      new_pi->align = 1;
-	      new_pi->misalign = 0;
-	    }
-	}
-      else if (TREE_CODE (base) == VAR_DECL
-	       || TREE_CODE (base) == PARM_DECL
-	       || TREE_CODE (base) == RESULT_DECL)
-	{
-	  struct ptr_info_def *pi = get_ptr_info (new_ptr_base);
-	  pt_solution_set_var (&pi->pt, base);
-	}
     }
 }
 
@@ -6526,8 +6542,7 @@ free_loop_data (struct ivopts_data *data)
       struct version_info *info;
 
       info = ver_info (data, i);
-      if (info->iv)
-	free (info->iv);
+      free (info->iv);
       info->iv = NULL;
       info->has_nonlin_use = false;
       info->preserve_biv = false;
@@ -6554,8 +6569,7 @@ free_loop_data (struct ivopts_data *data)
     {
       struct iv_cand *cand = iv_cand (data, i);
 
-      if (cand->iv)
-	free (cand->iv);
+      free (cand->iv);
       if (cand->depends_on)
 	BITMAP_FREE (cand->depends_on);
       free (cand);

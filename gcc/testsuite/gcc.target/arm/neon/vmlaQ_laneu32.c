@@ -18,5 +18,5 @@ void test_vmlaQ_laneu32 (void)
   out_uint32x4_t = vmlaq_lane_u32 (arg0_uint32x4_t, arg1_uint32x4_t, arg2_uint32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmla\.i32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmla\.i32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

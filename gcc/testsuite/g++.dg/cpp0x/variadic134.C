@@ -1,5 +1,5 @@
 // PR c++/53862
-// { dg-options "-std=c++0x" }
+// { dg-do compile { target c++11 } }
 
 typedef unsigned long size_t;
 

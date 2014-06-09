@@ -16,5 +16,5 @@ void test_vqshlQ_nu32 (void)
   out_uint32x4_t = vqshlq_n_u32 (arg0_uint32x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vqshl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqshl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

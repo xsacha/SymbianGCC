@@ -1,6 +1,6 @@
 #!/bin/sh 
 # Generates multilib.h.
-#   Copyright (C) 1994, 1995, 1996, 1997, 1999, 2002, 2007
+#   Copyright (C) 1994, 1995, 1996, 1997, 1999, 2002, 2007, 2012
 #   Free Software Foundation, Inc.
 
 #This file is part of GCC.
@@ -75,20 +75,6 @@
 
 # The optional eighth argument is the multiarch name.
 
-# The optional eighth option is a list of multilib aliases.  This takes the
-# same form as the third argument.  It specifies that the second multilib is
-# a synonym for the first.  This allows a suitable multilib to be selected
-# for all option combinations while only building a subset of all possible
-# multilibs.
-# For example:
-#   genmultilib "mbig-endian mthumb" "eb thumb" "" "" "" "" "" \
-#		"mbig-endian=mbig-endian/mthumb" yes
-# This produces:
-#   ". !mbig-endian !mthumb;",
-#   "be mbig-endian !mthumb;",
-#   "be mbig-endian mthumb;",
-#   "thumb !mbig-endian mthumb;",
-
 # The last option should be "yes" if multilibs are enabled.  If it is not
 # "yes", all GCC multilib dir names will be ".".
 
@@ -137,7 +123,7 @@ exceptions=$4
 extra=$5
 exclusions=$6
 osdirnames=$7
-aliases=$8
+multiarch=$8
 enable_multilib=$9
 
 echo "static const char *const multilib_raw[] = {"
@@ -145,23 +131,6 @@ echo "static const char *const multilib_raw[] = {"
 mkdir tmpmultilib.$$ || exit 1
 # Use cd ./foo to avoid CDPATH output.
 cd ./tmpmultilib.$$ || exit 1
-
-# Handle aliases
-cat >tmpmultilib3 <<\EOF
-#!/bin/sh
-# Output a list of aliases (including the original name) for a multilib.
-
-echo $1
-EOF
-for a in ${aliases}; do
-  l=`echo $a | sed -e 's/=.*$//' -e 's/?/=/g'`
-  r=`echo $a | sed -e 's/^.*=//' -e 's/?/=/g'`
-  echo "[ \$1 == /$l/ ] && echo /$r/" >>tmpmultilib3
-  
-  # Also add the alias to the exclusion list
-  exceptions="${exceptions} $r"
-done
-chmod +x tmpmultilib3
 
 # What we want to do is select all combinations of the sets in
 # options.  Each combination which includes a set of mutually
@@ -228,21 +197,6 @@ EOF
   chmod +x tmpmultilib2
   combinations=`./tmpmultilib2 ${combinations}`
 fi
-
-# Check that all the aliases actually exist
-for a in ${aliases}; do
-  l=`echo $a | sed -e 's/=.*$//' -e 's/?/=/g'`
-  for c in ${combinations}; do
-    if [ "/$l/" = "$c" ]; then
-      l=""
-      break;
-    fi
-  done
-  if [ -n "$l" ] ;then
-    echo "Missing multilib $l for alias $a" 1>&2
-    exit 1
-  fi
-done
 
 # Construct a sed pattern which will convert option names to directory
 # names.
@@ -398,25 +352,23 @@ for combo in ${combinations}; do
     fi
   fi
 
-  for optcombo in `./tmpmultilib3 ${combo}`; do
-    # Look through the options.  We must output each option that is
-    # present, and negate each option that is not present.
-    optout=
-    for set in ${options}; do
-      setopts=`echo ${set} | sed -e 's_[/|]_ _g'`
-      for opt in ${setopts}; do
-	if expr "${optcombo} " : ".*/${opt}/.*" > /dev/null; then
-	  optout="${optout} ${opt}"
-	else
-	  optout="${optout} !${opt}"
-	fi
-      done
+  # Look through the options.  We must output each option that is
+  # present, and negate each option that is not present.
+  optout=
+  for set in ${options}; do
+    setopts=`echo ${set} | sed -e 's_[/|]_ _g'`
+    for opt in ${setopts}; do
+      if expr "${combo} " : ".*/${opt}/.*" > /dev/null; then
+	optout="${optout} ${opt}"
+      else
+	optout="${optout} !${opt}"
+      fi
     done
-    optout=`echo ${optout} | sed -e 's/^ //'`
-
-    # Output the line with all appropriate matches.
-    dirout="${dirout}" optout="${optout}" ./tmpmultilib2
   done
+  optout=`echo ${optout} | sed -e 's/^ //'`
+
+  # Output the line with all appropriate matches.
+  dirout="${dirout}" optout="${optout}" ./tmpmultilib2
 done
 
 # Terminate the list of string.

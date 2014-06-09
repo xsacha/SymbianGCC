@@ -17,5 +17,5 @@ void test_vceqQp8 (void)
   out_uint8x16_t = vceqq_p8 (arg0_poly8x16_t, arg1_poly8x16_t);
 }
 
-/* { dg-final { scan-assembler "vceq\.i8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vceq\.i8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

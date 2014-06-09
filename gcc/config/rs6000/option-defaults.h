@@ -58,7 +58,7 @@
   {"tune", "%{!mtune=*:%{!mcpu=*:-mtune=%(VALUE)}}" }, \
   {"tune_32", "%{" OPT_ARCH32 ":%{!mtune=*:%{!mcpu=*:-mtune=%(VALUE)}}}" }, \
   {"tune_64", "%{" OPT_ARCH64 ":%{!mtune=*:%{!mcpu=*:-mtune=%(VALUE)}}}" }, \
-  {"cpu", "%{mcpu=*|te500mc|te500v1|te500v2|te600:;:-mcpu=%(VALUE)}" }, \
-  {"cpu_32", "%{" OPT_ARCH32 ":%{mcpu=*|te500mc|te500v1|te500v2|te600:;:-mcpu=%(VALUE)}}" }, \
-  {"cpu_64", "%{" OPT_ARCH64 ":%{mcpu=*|te500mc|te500v1|te500v2|te600:;:-mcpu=%(VALUE)}}" }, \
+  {"cpu", "%{!mcpu=*:-mcpu=%(VALUE)}" }, \
+  {"cpu_32", "%{" OPT_ARCH32 ":%{!mcpu=*:-mcpu=%(VALUE)}}" }, \
+  {"cpu_64", "%{" OPT_ARCH64 ":%{!mcpu=*:-mcpu=%(VALUE)}}" }, \
   {"float", "%{!msoft-float:%{!mhard-float:-m%(VALUE)-float}}" }

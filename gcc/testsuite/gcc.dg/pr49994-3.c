@@ -1,5 +1,7 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -fsched2-use-superblocks -g -w" } */
+/* { dg-options "-O2 -fsched2-use-superblocks -g -mbackchain" { target s390*-*-* } } */
+/* { dg-require-effective-target scheduling } */
 
 void *
 foo (int offset)

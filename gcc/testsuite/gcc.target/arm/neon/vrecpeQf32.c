@@ -16,5 +16,5 @@ void test_vrecpeQf32 (void)
   out_float32x4_t = vrecpeq_f32 (arg0_float32x4_t);
 }
 
-/* { dg-final { scan-assembler "vrecpe\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrecpe\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

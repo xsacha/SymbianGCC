@@ -16,5 +16,5 @@ void test_vrecpeu32 (void)
   out_uint32x2_t = vrecpe_u32 (arg0_uint32x2_t);
 }
 
-/* { dg-final { scan-assembler "vrecpe\.u32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrecpe\.u32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -18,5 +18,5 @@ void test_vmlas8 (void)
   out_int8x8_t = vmla_s8 (arg0_int8x8_t, arg1_int8x8_t, arg2_int8x8_t);
 }
 
-/* { dg-final { scan-assembler "vmla\.i8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmla\.i8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

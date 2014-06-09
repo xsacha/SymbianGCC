@@ -16,5 +16,5 @@ void test_vpaddlu8 (void)
   out_uint16x4_t = vpaddl_u8 (arg0_uint8x8_t);
 }
 
-/* { dg-final { scan-assembler "vpaddl\.u8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vpaddl\.u8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -1,6 +1,6 @@
 ## Makefile for the python subdirectory of the GNU C++ Standard library.
 ##
-## Copyright (C) 2009 Free Software Foundation, Inc.
+## Copyright (C) 2009, 2012 Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
 ## Process this file with automake to produce Makefile.in.
@@ -23,7 +23,11 @@
 include $(top_srcdir)/fragment.am
 
 ## Where to install the module code.
-pythondir = $(tooldir)/share/gcc-$(gcc_version)/python
+if ENABLE_PYTHONDIR
+pythondir = $(prefix)/$(python_mod_dir)
+else
+pythondir = $(datadir)/gcc-$(gcc_version)/python
+endif
 
 all-local: gdb.py
 
@@ -36,7 +40,6 @@ gdb.py: hook.in Makefile
 	sed -e 's,@pythondir@,$(pythondir),' \
 	    -e 's,@toolexeclibdir@,$(toolexeclibdir),' < $(srcdir)/hook.in > $@
 
-if GLIBCXX_HOSTED
 install-data-local: gdb.py
 	@$(mkdir_p) $(DESTDIR)$(toolexeclibdir)
 ## We want to install gdb.py as SOMETHING-gdb.py.  SOMETHING is the
@@ -58,4 +61,3 @@ install-data-local: gdb.py
 	cd $$here; \
 	echo " $(INSTALL_DATA) gdb.py $(DESTDIR)$(toolexeclibdir)/$$libname-gdb.py"; \
 	$(INSTALL_DATA) gdb.py $(DESTDIR)$(toolexeclibdir)/$$libname-gdb.py
-endif

@@ -23,8 +23,6 @@ extern void dw2_assemble_integer (int, rtx);
 
 extern void dw2_asm_output_data_raw (int, unsigned HOST_WIDE_INT);
 
-extern void dw2_asm_output_comment (const char *, ...);
-
 extern void dw2_asm_output_data (int, unsigned HOST_WIDE_INT,
 				 const char *, ...)
      ATTRIBUTE_NULL_PRINTF_3;
@@ -69,10 +67,6 @@ extern void dw2_asm_output_data_sleb128	(HOST_WIDE_INT,
 
 extern void dw2_asm_output_delta_uleb128 (const char *, const char *,
 					  const char *, ...)
-     ATTRIBUTE_NULL_PRINTF_3;
-
-extern void dw2_asm_output_delta_setbit0_uleb128 (const char *, const char *,
-					          const char *, ...)
      ATTRIBUTE_NULL_PRINTF_3;
 
 extern int size_of_uleb128 (unsigned HOST_WIDE_INT);

@@ -17,5 +17,5 @@ void test_vmull_nu16 (void)
   out_uint32x4_t = vmull_n_u16 (arg0_uint16x4_t, arg1_uint16_t);
 }
 
-/* { dg-final { scan-assembler "vmull\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmull\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

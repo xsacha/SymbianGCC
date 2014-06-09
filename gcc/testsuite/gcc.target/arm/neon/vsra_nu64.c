@@ -17,5 +17,5 @@ void test_vsra_nu64 (void)
   out_uint64x1_t = vsra_n_u64 (arg0_uint64x1_t, arg1_uint64x1_t, 1);
 }
 
-/* { dg-final { scan-assembler "vsra\.u64\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsra\.u64\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

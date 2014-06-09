@@ -17,5 +17,5 @@ void test_vmulQf32 (void)
   out_float32x4_t = vmulq_f32 (arg0_float32x4_t, arg1_float32x4_t);
 }
 
-/* { dg-final { scan-assembler "vmul\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmul\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

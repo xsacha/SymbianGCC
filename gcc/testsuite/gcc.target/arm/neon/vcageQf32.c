@@ -17,5 +17,5 @@ void test_vcageQf32 (void)
   out_uint32x4_t = vcageq_f32 (arg0_float32x4_t, arg1_float32x4_t);
 }
 
-/* { dg-final { scan-assembler "vacge\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vacge\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

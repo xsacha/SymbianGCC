@@ -212,21 +212,3 @@ _GLIBCXX_END_NAMESPACE_VERSION
   extern "C" void ldbl (void) __attribute__ ((alias (#dbl)))
 _GLIBCXX_LDBL_COMPAT(_ZSt14__convert_to_vIdEvPKcRT_RSt12_Ios_IostateRKP15__locale_struct, _ZSt14__convert_to_vIeEvPKcRT_RSt12_Ios_IostateRKP15__locale_struct);
 #endif // _GLIBCXX_LONG_DOUBLE_COMPAT
-
-/* Because of a bad cross-compilation fallback in a configure test,
-   Sourcery G++ toolchains for GNU/Linux targets formerly used the
-   "generic" locale model in libstdc++.  Improve compatibility with
-   those toolchains by exporting symbol aliases under the "generic"
-   names for the "gnu" functions.  */
-#define _GLIBCXX_LOCALE_COMPAT(generic, gnu) \
-  extern "C" void generic (void) __attribute__ ((alias (#gnu), weak))
-
-_GLIBCXX_LOCALE_COMPAT (_ZNSt6locale5facet17_S_clone_c_localeERPi, _ZNSt6locale5facet17_S_clone_c_localeERP15__locale_struct);
-_GLIBCXX_LOCALE_COMPAT (_ZNSt6locale5facet18_S_create_c_localeERPiPKcS1_, _ZNSt6locale5facet18_S_create_c_localeERP15__locale_structPKcS2_);
-_GLIBCXX_LOCALE_COMPAT (_ZNSt6locale5facet19_S_destroy_c_localeERPi, _ZNSt6locale5facet19_S_destroy_c_localeERP15__locale_struct);
-_GLIBCXX_LOCALE_COMPAT (_ZSt14__convert_to_vIdEvPKcRT_RSt12_Ios_IostateRKPi, _ZSt14__convert_to_vIdEvPKcRT_RSt12_Ios_IostateRKP15__locale_struct);
-_GLIBCXX_LOCALE_COMPAT (_ZSt14__convert_to_vIfEvPKcRT_RSt12_Ios_IostateRKPi, _ZSt14__convert_to_vIfEvPKcRT_RSt12_Ios_IostateRKP15__locale_struct);
-_GLIBCXX_LOCALE_COMPAT (_ZSt14__convert_to_vIeEvPKcRT_RSt12_Ios_IostateRKPi, _ZSt14__convert_to_vIeEvPKcRT_RSt12_Ios_IostateRKP15__locale_struct);
-#ifdef _GLIBCXX_LONG_DOUBLE_COMPAT
-_GLIBCXX_LOCALE_COMPAT (_ZSt14__convert_to_vIgEvPKcRT_RSt12_Ios_IostateRKPi, _ZSt14__convert_to_vIgEvPKcRT_RSt12_Ios_IostateRKP15__locale_struct);
-#endif

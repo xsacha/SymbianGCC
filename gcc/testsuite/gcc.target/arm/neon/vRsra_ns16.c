@@ -17,5 +17,5 @@ void test_vRsra_ns16 (void)
   out_int16x4_t = vrsra_n_s16 (arg0_int16x4_t, arg1_int16x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vrsra\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrsra\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

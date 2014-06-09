@@ -17,5 +17,5 @@ void test_vtstQs8 (void)
   out_uint8x16_t = vtstq_s8 (arg0_int8x16_t, arg1_int8x16_t);
 }
 
-/* { dg-final { scan-assembler "vtst\.8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vtst\.8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

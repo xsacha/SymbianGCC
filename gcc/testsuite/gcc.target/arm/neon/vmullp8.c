@@ -17,5 +17,5 @@ void test_vmullp8 (void)
   out_poly16x8_t = vmull_p8 (arg0_poly8x8_t, arg1_poly8x8_t);
 }
 
-/* { dg-final { scan-assembler "vmull\.p8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmull\.p8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

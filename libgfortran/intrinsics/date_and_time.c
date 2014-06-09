@@ -31,10 +31,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #include "time_1.h"
 
-#ifndef abs
-#define abs(x) ((x)>=0 ? (x) : -(x))
-#endif
-
 
 /* If the re-entrant version of gmtime is not available, provide a
    fallback implementation.  On some targets where the _r version is
@@ -143,7 +139,6 @@ date_and_time (char *__date, char *__time, char *__zone,
   char zone[ZONE_LEN + 1];
   GFC_INTEGER_4 values[VALUES_SIZE];
 
-#ifndef HAVE_NO_DATE_TIME
   time_t lt;
   struct tm local_time;
   struct tm UTC_time;
@@ -168,7 +163,6 @@ date_and_time (char *__date, char *__time, char *__zone,
       values[5] = local_time.tm_min;
       values[6] = local_time.tm_sec;
 
-#if HAVE_SNPRINTF
       if (__date)
 	snprintf (date, DATE_LEN + 1, "%04d%02d%02d",
 		  values[0], values[1], values[2]);
@@ -179,18 +173,6 @@ date_and_time (char *__date, char *__time, char *__zone,
       if (__zone)
 	snprintf (zone, ZONE_LEN + 1, "%+03d%02d",
 		  values[3] / 60, abs (values[3] % 60));
-#else
-      if (__date)
-	sprintf (date, "%04d%02d%02d", values[0], values[1], values[2]);
-
-      if (__time)
-	sprintf (timec, "%02d%02d%02d.%03d",
-		 values[4], values[5], values[6], values[7]);
-
-      if (__zone)
-	sprintf (zone, "%+03d%02d",
-		 values[3] / 60, abs (values[3] % 60));
-#endif
     }
   else
     {
@@ -206,21 +188,6 @@ date_and_time (char *__date, char *__time, char *__zone,
       for (i = 0; i < VALUES_SIZE; i++)
 	values[i] = - GFC_INTEGER_4_HUGE;
     }   
-#else /* if defined HAVE_NO_DATE_TIME  */
-  /* We really have *nothing* to return, so return blanks and HUGE(0).  */
-      
-  memset (date, ' ', DATE_LEN);
-  date[DATE_LEN] = '\0';
-
-  memset (timec, ' ', TIME_LEN);
-  timec[TIME_LEN] = '\0';
-
-  memset (zone, ' ', ZONE_LEN);
-  zone[ZONE_LEN] = '\0';
-
-  for (i = 0; i < VALUES_SIZE; i++)
-    values[i] = - GFC_INTEGER_4_HUGE;
-#endif  /* HAVE_NO_DATE_TIME  */
 
   /* Copy the values into the arguments.  */
   if (__values)
@@ -334,7 +301,6 @@ secnds (GFC_REAL_4 *x)
 static void
 itime0 (int x[3])
 {
-#ifndef HAVE_NO_DATE_TIME
   time_t lt;
   struct tm local_time;
 
@@ -348,9 +314,6 @@ itime0 (int x[3])
       x[1] = local_time.tm_min;
       x[2] = local_time.tm_sec;
     }
-#else
-  x[0] = x[1] = x[2] = -1;
-#endif
 }
 
 extern void itime_i4 (gfc_array_i4 *);
@@ -416,7 +379,6 @@ itime_i8 (gfc_array_i8 *__values)
 static void
 idate0 (int x[3])
 {
-#ifndef HAVE_NO_DATE_TIME
   time_t lt;
   struct tm local_time;
 
@@ -430,9 +392,6 @@ idate0 (int x[3])
       x[1] = 1 + local_time.tm_mon;
       x[2] = 1900 + local_time.tm_year;
     }
-#else
-  x[0] = x[1] = x[2] = -1;
-#endif
 }
 
 extern void idate_i4 (gfc_array_i4 *);

@@ -17,5 +17,5 @@ void test_vshlQs64 (void)
   out_int64x2_t = vshlq_s64 (arg0_int64x2_t, arg1_int64x2_t);
 }
 
-/* { dg-final { scan-assembler "vshl\.s64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vshl\.s64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

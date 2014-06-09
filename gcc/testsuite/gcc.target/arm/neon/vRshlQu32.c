@@ -17,5 +17,5 @@ void test_vRshlQu32 (void)
   out_uint32x4_t = vrshlq_u32 (arg0_uint32x4_t, arg1_int32x4_t);
 }
 
-/* { dg-final { scan-assembler "vrshl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrshl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

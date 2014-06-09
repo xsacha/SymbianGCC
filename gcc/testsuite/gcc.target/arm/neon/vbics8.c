@@ -17,5 +17,5 @@ void test_vbics8 (void)
   out_int8x8_t = vbic_s8 (arg0_int8x8_t, arg1_int8x8_t);
 }
 
-/* { dg-final { scan-assembler "vbic\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vbic\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

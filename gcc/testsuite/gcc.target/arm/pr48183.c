@@ -1,3 +1,5 @@
+/* testsuite/gcc.target/arm/pr48183.c */
+
 /* { dg-do compile } */
 /* { dg-require-effective-target arm_neon_ok } */
 /* { dg-options "-O -g" } */

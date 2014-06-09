@@ -1,6 +1,5 @@
 // PR c++/51406
-// { dg-do run }
-// { dg-options "-std=c++0x" }
+// { dg-do run { target c++11 } }
 
 extern "C" int printf(const char *,...);
 extern "C" void abort();

@@ -17,5 +17,5 @@ void test_vsubQu64 (void)
   out_uint64x2_t = vsubq_u64 (arg0_uint64x2_t, arg1_uint64x2_t);
 }
 
-/* { dg-final { scan-assembler "vsub\.i64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsub\.i64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

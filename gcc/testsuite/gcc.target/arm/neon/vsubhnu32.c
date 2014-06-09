@@ -17,5 +17,5 @@ void test_vsubhnu32 (void)
   out_uint16x4_t = vsubhn_u32 (arg0_uint32x4_t, arg1_uint32x4_t);
 }
 
-/* { dg-final { scan-assembler "vsubhn\.i32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsubhn\.i32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

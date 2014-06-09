@@ -17,5 +17,5 @@ void test_vsubls16 (void)
   out_int32x4_t = vsubl_s16 (arg0_int16x4_t, arg1_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vsubl\.s16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsubl\.s16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -36,21 +36,11 @@
 # include <cstdlib>
 #endif
 
-#if _GLIBCXX_HOSTED
-#define DEFAULT_TERMINATE_HANDLER __gnu_cxx::__verbose_terminate_handler
-#else
-#define DEFAULT_TERMINATE_HANDLER std::abort
-#endif
 /* The current installed user handler.  */
-#ifdef __symbian__
-/* SymbianOS does not allow initialized data, so use a constructor function.  */
-std::terminate_handler __cxxabiv1::__terminate_handler;
-
-void __cxxabiv1::__init_terminate_handler(void)
-{
-  __cxxabiv1::__terminate_handler = DEFAULT_TERMINATE_HANDLER;
-}
-#else /* !__symbian__ */
 std::terminate_handler __cxxabiv1::__terminate_handler =
-  DEFAULT_TERMINATE_HANDLER;
+#if _GLIBCXX_HOSTED
+	__gnu_cxx::__verbose_terminate_handler;
+#else
+	std::abort;
 #endif
+

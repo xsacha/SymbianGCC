@@ -27,12 +27,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include "io.h"
 #include "fbuf.h"
 #include "unix.h"
-
-#ifdef HAVE_STDLIB_H
 #include <stdlib.h>
-#endif
-
 #include <string.h>
+
 
 static const int five = 5;
 static const int six = 6;
@@ -206,7 +203,7 @@ flush_i4 (GFC_INTEGER_4 *unit)
       us = find_unit (*unit);
       if (us != NULL)
 	{
-	  flush_sync (us->s);
+	  sflush (us->s);
 	  unlock_unit (us);
 	}
     }
@@ -229,7 +226,7 @@ flush_i8 (GFC_INTEGER_8 *unit)
       us = find_unit (*unit);
       if (us != NULL)
 	{
-	  flush_sync (us->s);
+	  sflush (us->s);
 	  unlock_unit (us);
 	}
     }
@@ -246,7 +243,7 @@ fseek_sub (int * unit, GFC_IO_INT * offset, int * whence, int * status)
   gfc_unit * u = find_unit (*unit);
   ssize_t result = -1;
 
-  if (u != NULL && is_seekable(u->s))
+  if (u != NULL)
     {
       result = sseek(u->s, *offset, *whence);
 

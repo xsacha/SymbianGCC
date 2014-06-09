@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O3 -dp -mavx -mavx256-split-unaligned-load" } */
+/* { dg-options "-O3 -dp -mavx -mavx256-split-unaligned-load -mtune=generic" } */
 
 #define N 1024
 
@@ -14,6 +14,6 @@ avx_test (void)
     c[i] = a[i] * b[i+3];
 }
 
-/* { dg-final { scan-assembler-not "avx_movupd256/1" } } */
-/* { dg-final { scan-assembler "avx_movupd/1" } } */
+/* { dg-final { scan-assembler-not "avx_loadupd256" } } */
+/* { dg-final { scan-assembler "sse2_loadupd" } } */
 /* { dg-final { scan-assembler "vinsertf128" } } */

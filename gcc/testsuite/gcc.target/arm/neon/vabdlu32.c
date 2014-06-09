@@ -17,5 +17,5 @@ void test_vabdlu32 (void)
   out_uint64x2_t = vabdl_u32 (arg0_uint32x2_t, arg1_uint32x2_t);
 }
 
-/* { dg-final { scan-assembler "vabdl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vabdl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

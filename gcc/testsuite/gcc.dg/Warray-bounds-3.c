@@ -1,7 +1,5 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -Warray-bounds" } */
-/* { dg-options "-O2 -Warray-bounds -fno-unroll-loops" { target arm*-*-* } } */
-
 /* based on PR 31227 */
 
 typedef __SIZE_TYPE__ size_t;

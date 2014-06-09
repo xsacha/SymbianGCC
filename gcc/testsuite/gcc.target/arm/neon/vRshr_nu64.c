@@ -16,5 +16,5 @@ void test_vRshr_nu64 (void)
   out_uint64x1_t = vrshr_n_u64 (arg0_uint64x1_t, 1);
 }
 
-/* { dg-final { scan-assembler "vrshr\.u64\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrshr\.u64\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

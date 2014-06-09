@@ -44,7 +44,7 @@ set additional_flags "-fno-inline"
 if [istarget "i\[34567\]86-*-*"] then {
   lappend additional_flags "-ffloat-store"
 }
-if { [istarget "x86_64-*-*"] && [check_effective_target_ilp32] } then {
+if { [istarget "x86_64-*-*"] && [check_effective_target_ia32] } then {
   lappend additional_flags "-ffloat-store"
 }
 if [istarget "m68k-*-*"] then {
@@ -53,9 +53,6 @@ if [istarget "m68k-*-*"] then {
 if { [istarget "alpha*-*-*"] 
      || [istarget "sh*-*-*"] } then {
   lappend additional_flags "-mieee"
-}
-if [istarget "mips*-sde-*"] then {
-  lappend additional_flags "-Wl,--defsym=__cs3_mips_float_type=2" "-lcs3-mips-cp1" "-lcs3-mips-fpemu"
 }
 
 # load support procs

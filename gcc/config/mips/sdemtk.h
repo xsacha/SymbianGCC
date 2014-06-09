@@ -99,14 +99,5 @@ extern void mips_sync_icache (void *beg, unsigned long len);
 #undef MIPS_SAVE_REG_FOR_PROFILING_P
 #define MIPS_SAVE_REG_FOR_PROFILING_P(REGNO) ((REGNO) == RETURN_ADDR_REGNUM)
 
-/* From mips.h, with mno-float option added.  */
-
-#undef MIPS_ARCH_FLOAT_SPEC
-#define MIPS_ARCH_FLOAT_SPEC \
-  "%{mhard-float|msoft-float|mno-float|march=mips*:; \
-     march=vr41*|march=m4k|march=4k*|march=24kc|march=24kec|march=m14k* \
-     |march=34kc|march=34kn|march=74kc|march=1004kc|march=5kc|march=octeon|march=xlr: -msoft-float; \
-     march=*: -mhard-float}"
-
 /* Compile in support for the -mno-float option.  */
 #define TARGET_SUPPORTS_NO_FLOAT 1

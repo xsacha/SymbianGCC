@@ -28,13 +28,13 @@ const (
 
 func main() {
 
-	r := 5 + 0i
+	var r complex64 = 5 + 0i
 	if r != R {
 		println("opcode 1", r, R)
 		panic("fail")
 	}
 
-	i := 6i
+	var i complex64 = 6i
 	if i != I {
 		println("opcode 2", i, I)
 		panic("fail")
@@ -103,6 +103,18 @@ func main() {
 	ce := cd * c6
 	if ce != Ce {
 		println("opcode x", ce, Ce)
+		panic("fail")
+	}
+	
+	r32 := real(complex64(ce))
+	if r32 != float32(real(Ce)) {
+		println("real(complex64(ce))", r32, real(Ce))
+		panic("fail")
+	}
+	
+	r64 := real(complex128(ce))
+	if r64 != real(Ce) {
+		println("real(complex128(ce))", r64, real(Ce))
 		panic("fail")
 	}
 }

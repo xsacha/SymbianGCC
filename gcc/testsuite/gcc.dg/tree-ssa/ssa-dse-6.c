@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -fdump-tree-dse1 -fno-remove-local-statics" } */
+/* { dg-options "-O2 -fdump-tree-dse1" } */
 
 int foo11 (int c)
 {

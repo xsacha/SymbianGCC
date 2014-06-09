@@ -39,42 +39,18 @@ enum sched_pass_id_t { SCHED_PASS_UNKNOWN, SCHED_RGN_PASS, SCHED_EBB_PASS,
 
 typedef VEC (basic_block, heap) *bb_vec_t;
 typedef VEC (rtx, heap) *insn_vec_t;
-typedef VEC(rtx, heap) *rtx_vec_t;
-
-struct sched_scan_info_def
-{
-  /* This hook notifies scheduler frontend to extend its internal per basic
-     block data structures.  This hook should be called once before a series of
-     calls to bb_init ().  */
-  void (*extend_bb) (void);
-
-  /* This hook makes scheduler frontend to initialize its internal data
-     structures for the passed basic block.  */
-  void (*init_bb) (basic_block);
-
-  /* This hook notifies scheduler frontend to extend its internal per insn data
-     structures.  This hook should be called once before a series of calls to
-     insn_init ().  */
-  void (*extend_insn) (void);
-
-  /* This hook makes scheduler frontend to initialize its internal data
-     structures for the passed insn.  */
-  void (*init_insn) (rtx);
-};
-
-extern const struct sched_scan_info_def *sched_scan_info;
-
-extern void sched_scan (const struct sched_scan_info_def *,
-			bb_vec_t, basic_block, insn_vec_t, rtx);
+typedef VEC (rtx, heap) *rtx_vec_t;
 
 extern void sched_init_bbs (void);
 
-extern void sched_init_luids (bb_vec_t, basic_block, insn_vec_t, rtx);
+extern void sched_extend_luids (void);
+extern void sched_init_insn_luid (rtx);
+extern void sched_init_luids (bb_vec_t);
 extern void sched_finish_luids (void);
 
 extern void sched_extend_target (void);
 
-extern void haifa_init_h_i_d (bb_vec_t, basic_block, insn_vec_t, rtx);
+extern void haifa_init_h_i_d (bb_vec_t);
 extern void haifa_finish_h_i_d (void);
 
 /* Hooks that are common to all the schedulers.  */
@@ -154,7 +130,6 @@ extern void sched_insns_init (rtx);
 extern void sched_insns_finish (void);
 
 extern void *xrecalloc (void *, size_t, size_t, size_t);
-extern rtx bb_note (basic_block);
 
 extern void reemit_notes (rtx);
 
@@ -676,9 +651,9 @@ extern struct haifa_sched_info *current_sched_info;
    up.  */
 extern bool sched_pressure_p;
 
-/* Map regno -> its cover class.  The map defined only when
+/* Map regno -> its pressure class.  The map defined only when
    SCHED_PRESSURE_P is true.  */
-extern enum reg_class *sched_regno_cover_class;
+extern enum reg_class *sched_regno_pressure_class;
 
 /* Indexed by INSN_UID, the collection of all data associated with
    a single instruction.  */
@@ -745,7 +720,7 @@ struct _haifa_deps_insn_data
 #define INCREASE_BITS 8
 
 /* The structure describes how the corresponding insn increases the
-   register pressure for each cover class.  */
+   register pressure for each pressure class.  */
 struct reg_pressure_data
 {
   /* Pressure increase for given class because of clobber.  */
@@ -774,7 +749,7 @@ struct reg_use_data
 };
 
 /* The following structure describes used sets of registers by insns.
-   Registers are pseudos whose cover class is not NO_REGS or hard
+   Registers are pseudos whose pressure class is not NO_REGS or hard
    registers available for allocations.  */
 struct reg_set_data
 {
@@ -866,7 +841,7 @@ struct _haifa_insn_data
   struct reg_pressure_data *reg_pressure;
   /* The following array contains maximal reg pressure between last
      scheduled insn and given insn.  There is an element for each
-     cover class of pseudos referenced in insns.  This info updated
+     pressure class of pseudos referenced in insns.  This info updated
      after scheduling each insn for each insn between the two
      mentioned insns.  */
   int *max_reg_pressure;
@@ -1262,6 +1237,7 @@ extern void init_deps_global (void);
 extern void finish_deps_global (void);
 extern void deps_analyze_insn (struct deps_desc *, rtx);
 extern void remove_from_deps (struct deps_desc *, rtx);
+extern void init_insn_reg_pressure_info (rtx);
 
 extern dw_t get_dep_weak_1 (ds_t, ds_t);
 extern dw_t get_dep_weak (ds_t, ds_t);
@@ -1305,7 +1281,7 @@ extern int dep_cost (dep_t);
 extern int set_priorities (rtx, rtx);
 
 extern void sched_setup_bb_reg_pressure_info (basic_block, rtx);
-extern bool schedule_block (basic_block *, state_t);
+extern bool schedule_block (basic_block *);
 
 extern int cycle_issued_insns;
 extern int issue_rate;
@@ -1328,7 +1304,12 @@ extern rtx sched_emit_insn (rtx);
 extern rtx get_ready_element (int);
 extern int number_in_ready (void);
 
+/* Types and functions in sched-ebb.c.  */
 
+extern basic_block schedule_ebb (rtx, rtx, bool);
+extern void schedule_ebbs_init (void);
+extern void schedule_ebbs_finish (void);
+
 /* Types and functions in sched-rgn.c.  */
 
 /* A region is the main entity for interblock scheduling: insns

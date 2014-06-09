@@ -17,5 +17,5 @@ void test_vorrQu64 (void)
   out_uint64x2_t = vorrq_u64 (arg0_uint64x2_t, arg1_uint64x2_t);
 }
 
-/* { dg-final { scan-assembler "vorr\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vorr\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

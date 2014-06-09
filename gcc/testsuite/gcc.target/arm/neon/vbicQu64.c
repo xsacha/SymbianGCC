@@ -17,5 +17,5 @@ void test_vbicQu64 (void)
   out_uint64x2_t = vbicq_u64 (arg0_uint64x2_t, arg1_uint64x2_t);
 }
 
-/* { dg-final { scan-assembler "vbic\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vbic\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

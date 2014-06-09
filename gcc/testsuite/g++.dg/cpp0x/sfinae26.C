@@ -30,11 +30,9 @@ struct is_same<T, T> {
 template<class... T>
 struct S {
   template<class... U,
-    typename enable_if<and_<is_same<T, U>...>::value>::type*& = enabler
+    typename enable_if<and_<is_same<T, U>...>::value>::type*& = enabler // { dg-error "no type" }
   >
-  S(U...){} // #
+  S(U...){}
 };
 
 S<bool> s(0);			// { dg-error "no match" }
-
-// { dg-prune-output "note" }

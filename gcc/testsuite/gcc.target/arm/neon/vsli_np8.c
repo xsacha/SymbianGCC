@@ -17,5 +17,5 @@ void test_vsli_np8 (void)
   out_poly8x8_t = vsli_n_p8 (arg0_poly8x8_t, arg1_poly8x8_t, 1);
 }
 
-/* { dg-final { scan-assembler "vsli\.8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsli\.8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

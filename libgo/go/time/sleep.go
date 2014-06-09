@@ -4,148 +4,92 @@
 
 package time
 
-import (
-	"os"
-	"syscall"
-	"sync"
-	"container/heap"
-)
+// Sleep pauses the current goroutine for the duration d.
+func Sleep(d Duration)
 
-// The event type represents a single After or AfterFunc event.
-type event struct {
-	t        int64       // The absolute time that the event should fire.
-	f        func(int64) // The function to call when the event fires.
-	sleeping bool        // A sleeper is sleeping for this event.
+func nano() int64 {
+	sec, nsec := now()
+	return sec*1e9 + int64(nsec)
 }
 
-type eventHeap []*event
-
-var events eventHeap
-var eventMutex sync.Mutex
-
-func init() {
-	events.Push(&event{1 << 62, nil, true}) // sentinel
+// Interface to timers implemented in package runtime.
+// Must be in sync with ../runtime/runtime.h:/^struct.Timer$
+type runtimeTimer struct {
+	i      int32
+	when   int64
+	period int64
+	f      func(int64, interface{})
+	arg    interface{}
 }
 
-// Sleep pauses the current goroutine for at least ns nanoseconds.
-// Higher resolution sleeping may be provided by syscall.Nanosleep 
-// on some operating systems.
-func Sleep(ns int64) os.Error {
-	_, err := sleep(Nanoseconds(), ns)
-	return err
+func startTimer(*runtimeTimer)
+func stopTimer(*runtimeTimer) bool
+
+// The Timer type represents a single event.
+// When the Timer expires, the current time will be sent on C,
+// unless the Timer was created by AfterFunc.
+type Timer struct {
+	C <-chan Time
+	r runtimeTimer
 }
 
-// sleep takes the current time and a duration,
-// pauses for at least ns nanoseconds, and
-// returns the current time and an error.
-func sleep(t, ns int64) (int64, os.Error) {
-	// TODO(cw): use monotonic-time once it's available
-	end := t + ns
-	for t < end {
-		errno := syscall.Sleep(end - t)
-		if errno != 0 && errno != syscall.EINTR {
-			return 0, os.NewSyscallError("sleep", errno)
-		}
-		t = Nanoseconds()
+// Stop prevents the Timer from firing.
+// It returns true if the call stops the timer, false if the timer has already
+// expired or stopped.
+func (t *Timer) Stop() (ok bool) {
+	return stopTimer(&t.r)
+}
+
+// NewTimer creates a new Timer that will send
+// the current time on its channel after at least duration d.
+func NewTimer(d Duration) *Timer {
+	c := make(chan Time, 1)
+	t := &Timer{
+		C: c,
+		r: runtimeTimer{
+			when: nano() + int64(d),
+			f:    sendTime,
+			arg:  c,
+		},
 	}
-	return t, nil
+	startTimer(&t.r)
+	return t
 }
 
-// After waits at least ns nanoseconds before sending the current time
+func sendTime(now int64, c interface{}) {
+	// Non-blocking send of time on c.
+	// Used in NewTimer, it cannot block anyway (buffer).
+	// Used in NewTicker, dropping sends on the floor is
+	// the desired behavior when the reader gets behind,
+	// because the sends are periodic.
+	select {
+	case c.(chan Time) <- Unix(0, now):
+	default:
+	}
+}
+
+// After waits for the duration to elapse and then sends the current time
 // on the returned channel.
-func After(ns int64) <-chan int64 {
-	c := make(chan int64, 1)
-	after(ns, func(t int64) { c <- t })
-	return c
+// It is equivalent to NewTimer(d).C.
+func After(d Duration) <-chan Time {
+	return NewTimer(d).C
 }
 
-// AfterFunc waits at least ns nanoseconds before calling f
-// in its own goroutine.
-func AfterFunc(ns int64, f func()) {
-	after(ns, func(_ int64) {
-		go f()
-	})
-}
-
-// after is the implementation of After and AfterFunc.
-// When the current time is after ns, it calls f with the current time.
-// It assumes that f will not block.
-func after(ns int64, f func(int64)) {
-	t := Nanoseconds() + ns
-	eventMutex.Lock()
-	t0 := events[0].t
-	heap.Push(events, &event{t, f, false})
-	if t < t0 {
-		go sleeper()
+// AfterFunc waits for the duration to elapse and then calls f
+// in its own goroutine. It returns a Timer that can
+// be used to cancel the call using its Stop method.
+func AfterFunc(d Duration, f func()) *Timer {
+	t := &Timer{
+		r: runtimeTimer{
+			when: nano() + int64(d),
+			f:    goFunc,
+			arg:  f,
+		},
 	}
-	eventMutex.Unlock()
+	startTimer(&t.r)
+	return t
 }
 
-// sleeper continually looks at the earliest event in the queue, marks it
-// as sleeping, waits until it happens, then removes any events
-// in the queue that are due. It stops when it finds an event that is
-// already marked as sleeping. When an event is inserted before the first item,
-// a new sleeper is started.
-//
-// Scheduling vagaries mean that sleepers may not wake up in
-// exactly the order of the events that they are waiting for,
-// but this does not matter as long as there are at least as
-// many sleepers as events marked sleeping (invariant). This ensures that
-// there is always a sleeper to service the remaining events.
-//
-// A sleeper will remove at least the event it has been waiting for
-// unless the event has already been removed by another sleeper.  Both
-// cases preserve the invariant described above.
-func sleeper() {
-	eventMutex.Lock()
-	e := events[0]
-	for !e.sleeping {
-		t := Nanoseconds()
-		if dt := e.t - t; dt > 0 {
-			e.sleeping = true
-			eventMutex.Unlock()
-			if nt, err := sleep(t, dt); err != nil {
-				// If sleep has encountered an error,
-				// there's not much we can do. We pretend
-				// that time really has advanced by the required
-				// amount and lie to the rest of the system.
-				t = e.t
-			} else {
-				t = nt
-			}
-			eventMutex.Lock()
-			e = events[0]
-		}
-		for t >= e.t {
-			e.f(t)
-			heap.Pop(events)
-			e = events[0]
-		}
-	}
-	eventMutex.Unlock()
-}
-
-func (eventHeap) Len() int {
-	return len(events)
-}
-
-func (eventHeap) Less(i, j int) bool {
-	return events[i].t < events[j].t
-}
-
-func (eventHeap) Swap(i, j int) {
-	events[i], events[j] = events[j], events[i]
-}
-
-func (eventHeap) Push(x interface{}) {
-	events = append(events, x.(*event))
-}
-
-func (eventHeap) Pop() interface{} {
-	// TODO: possibly shrink array.
-	n := len(events) - 1
-	e := events[n]
-	events[n] = nil
-	events = events[0:n]
-	return e
+func goFunc(now int64, arg interface{}) {
+	go arg.(func())()
 }

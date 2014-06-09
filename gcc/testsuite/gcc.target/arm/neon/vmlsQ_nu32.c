@@ -18,5 +18,5 @@ void test_vmlsQ_nu32 (void)
   out_uint32x4_t = vmlsq_n_u32 (arg0_uint32x4_t, arg1_uint32x4_t, arg2_uint32_t);
 }
 
-/* { dg-final { scan-assembler "vmls\.i32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmls\.i32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

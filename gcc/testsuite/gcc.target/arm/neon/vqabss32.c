@@ -16,5 +16,5 @@ void test_vqabss32 (void)
   out_int32x2_t = vqabs_s32 (arg0_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vqabs\.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqabs\.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

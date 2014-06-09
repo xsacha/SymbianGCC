@@ -18,5 +18,5 @@ void test_vabaQs32 (void)
   out_int32x4_t = vabaq_s32 (arg0_int32x4_t, arg1_int32x4_t, arg2_int32x4_t);
 }
 
-/* { dg-final { scan-assembler "vaba\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vaba\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

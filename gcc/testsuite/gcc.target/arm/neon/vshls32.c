@@ -17,5 +17,5 @@ void test_vshls32 (void)
   out_int32x2_t = vshl_s32 (arg0_int32x2_t, arg1_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vshl\.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vshl\.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

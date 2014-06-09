@@ -7,14 +7,15 @@
 #include "go-assert.h"
 #include "go-string.h"
 #include "runtime.h"
+#include "arch.h"
 #include "malloc.h"
 
 struct __go_string
-__go_int_array_to_string (const void* p, size_t len)
+__go_int_array_to_string (const void* p, int len)
 {
   const int *ints;
-  size_t slen;
-  size_t i;
+  int slen;
+  int i;
   unsigned char *retdata;
   struct __go_string ret;
   unsigned char *s;
@@ -41,7 +42,7 @@ __go_int_array_to_string (const void* p, size_t len)
 	slen += 4;
     }
 
-  retdata = runtime_mallocgc (slen, RefNoPointers, 1, 0);
+  retdata = runtime_mallocgc (slen, FlagNoPointers, 1, 0);
   ret.__data = retdata;
   ret.__length = slen;
 
@@ -79,7 +80,7 @@ __go_int_array_to_string (const void* p, size_t len)
 	}
     }
 
-  __go_assert ((size_t) (s - retdata) == slen);
+  __go_assert (s - retdata == slen);
 
   return ret;
 }

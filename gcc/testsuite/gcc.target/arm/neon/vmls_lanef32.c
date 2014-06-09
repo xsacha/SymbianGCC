@@ -18,5 +18,5 @@ void test_vmls_lanef32 (void)
   out_float32x2_t = vmls_lane_f32 (arg0_float32x2_t, arg1_float32x2_t, arg2_float32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmls\.f32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmls\.f32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

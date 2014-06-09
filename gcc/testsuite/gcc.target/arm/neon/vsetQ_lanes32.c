@@ -17,5 +17,5 @@ void test_vsetQ_lanes32 (void)
   out_int32x4_t = vsetq_lane_s32 (arg0_int32_t, arg1_int32x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmov\.32\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmov\.32\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

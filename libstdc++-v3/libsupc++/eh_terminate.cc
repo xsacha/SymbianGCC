@@ -47,7 +47,7 @@ __cxxabiv1::__terminate (std::terminate_handler handler) throw ()
 void
 std::terminate () throw()
 {
-  __terminate (__get_terminate_handler ());
+  __terminate (__terminate_handler);
 }
 
 void
@@ -60,7 +60,7 @@ __cxxabiv1::__unexpected (std::unexpected_handler handler)
 void
 std::unexpected ()
 {
-  __unexpected (__get_unexpected_handler ());
+  __unexpected (__unexpected_handler);
 }
 
 std::terminate_handler

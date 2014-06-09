@@ -20,7 +20,7 @@ f2 ()
   int i;
 #pragma omp parallel if (foo (A ())) num_threads (foo (A ()))
   ;
-#pragma omp task if (foo (A ()))
+#pragma omp task if (foo (A ())) final (foo (A ()))
   ;
 #pragma omp for schedule (static, foo (A ()))
   for (i = 0; i < 10; i++)

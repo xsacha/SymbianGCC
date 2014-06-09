@@ -78,10 +78,8 @@ eoshift2 (gfc_array_char *ret, const gfc_array_char *array,
       ret->offset = 0;
       ret->dtype = array->dtype;
 
-      if (arraysize > 0)
-	ret->data = internal_malloc_size (size * arraysize);
-      else
-	ret->data = internal_malloc_size (1);
+      /* internal_malloc_size allocates a single byte for zero size.  */
+      ret->data = internal_malloc_size (size * arraysize);
 
       for (i = 0; i < GFC_DESCRIPTOR_RANK (array); i++)
         {

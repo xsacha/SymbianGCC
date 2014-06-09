@@ -16,5 +16,5 @@ void test_vqmovnu64 (void)
   out_uint32x2_t = vqmovn_u64 (arg0_uint64x2_t);
 }
 
-/* { dg-final { scan-assembler "vqmovn\.u64\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqmovn\.u64\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

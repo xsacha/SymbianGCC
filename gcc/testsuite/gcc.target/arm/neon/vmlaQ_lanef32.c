@@ -18,5 +18,5 @@ void test_vmlaQ_lanef32 (void)
   out_float32x4_t = vmlaq_lane_f32 (arg0_float32x4_t, arg1_float32x4_t, arg2_float32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmla\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmla\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

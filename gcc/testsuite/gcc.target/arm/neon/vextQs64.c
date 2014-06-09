@@ -17,5 +17,5 @@ void test_vextQs64 (void)
   out_int64x2_t = vextq_s64 (arg0_int64x2_t, arg1_int64x2_t, 0);
 }
 
-/* { dg-final { scan-assembler "vext\.64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vext\.64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

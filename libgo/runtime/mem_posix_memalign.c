@@ -1,6 +1,7 @@
 #include <errno.h>
 
 #include "runtime.h"
+#include "arch.h"
 #include "malloc.h"
 
 void*
@@ -32,7 +33,16 @@ runtime_SysFree(void *v, uintptr n)
 	free(v);
 }
 
-void
-runtime_SysMemInit(void)
+void*
+runtime_SysReserve(void *v, uintptr n)
 {
+	USED(v);
+	return runtime_SysAlloc(n);
+}
+
+void
+runtime_SysMap(void *v, uintptr n)
+{
+	USED(v);
+	USED(n);
 }

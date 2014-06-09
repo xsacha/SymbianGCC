@@ -70,6 +70,7 @@ match_subscript (gfc_array_ref *ar, int init, bool match_star)
 
   i = ar->dimen + ar->codimen;
 
+  gfc_gobble_whitespace ();
   ar->c_where[i] = gfc_current_locus;
   ar->start[i] = ar->end[i] = ar->stride[i] = NULL;
 
@@ -235,6 +236,12 @@ coarray:
 			 corank, ar->codimen);
 	      return MATCH_ERROR;
 	    }
+	  if (ar->codimen > corank)
+	    {
+	      gfc_error ("Too many codimensions at %C, expected %d not %d",
+			 corank, ar->codimen);
+	      return MATCH_ERROR;
+	    }
 	  return MATCH_YES;
 	}
 
@@ -288,7 +295,7 @@ gfc_free_array_spec (gfc_array_spec *as)
       gfc_free_expr (as->upper[i]);
     }
 
-  gfc_free (as);
+  free (as);
 }
 
 
@@ -575,6 +582,13 @@ coarray:
       goto cleanup;
     }
 
+  if (as->rank >= GFC_MAX_DIMENSIONS)
+    {
+      gfc_error ("Array specification at %C has more than %d "
+		 "dimensions", GFC_MAX_DIMENSIONS);
+      goto cleanup;
+    }
+
   for (;;)
     {
       as->corank++;
@@ -643,7 +657,7 @@ coarray:
 	  goto cleanup;
 	}
 
-      if (as->corank >= GFC_MAX_DIMENSIONS)
+      if (as->rank + as->corank >= GFC_MAX_DIMENSIONS)
 	{
 	  gfc_error ("Array specification at %C has more than %d "
 		     "dimensions", GFC_MAX_DIMENSIONS);
@@ -756,7 +770,7 @@ gfc_set_array_spec (gfc_symbol *sym, gfc_array_spec *as, locus *error_loc)
 	}
     }
 
-  gfc_free (as);
+  free (as);
   return SUCCESS;
 }
 
@@ -2103,6 +2117,9 @@ gfc_array_dimen_size (gfc_expr *array, int dimen, mpz_t *result)
   gfc_ref *ref;
   int i;
 
+  if (array->ts.type == BT_CLASS)
+    return FAILURE;
+
   if (dimen < 0 || array == NULL || dimen > array->rank - 1)
     gfc_internal_error ("gfc_array_dimen_size(): Bad dimension");
 
@@ -2180,6 +2197,9 @@ gfc_array_size (gfc_expr *array, mpz_t *result)
   gfc_ref *ref;
   int i;
   gfc_try t;
+
+  if (array->ts.type == BT_CLASS)
+    return FAILURE;
 
   switch (array->expr_type)
     {
@@ -2288,8 +2308,7 @@ gfc_find_array_ref (gfc_expr *e)
 
   for (ref = e->ref; ref; ref = ref->next)
     if (ref->type == REF_ARRAY
-	&& (ref->u.ar.type == AR_FULL || ref->u.ar.type == AR_SECTION
-	    || (ref->u.ar.type == AR_ELEMENT && ref->u.ar.dimen == 0)))
+	&& (ref->u.ar.type == AR_FULL || ref->u.ar.type == AR_SECTION))
       break;
 
   if (ref == NULL)

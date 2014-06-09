@@ -1,6 +1,6 @@
 /* Procedure integration for GCC.
    Copyright (C) 1988, 1991, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
@@ -35,6 +35,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "output.h"
 #include "recog.h"
+/* For reg_equivs.  */
+#include "reload.h"
 #include "integrate.h"
 #include "except.h"
 #include "function.h"
@@ -55,7 +57,6 @@ along with GCC; see the file COPYING3.  If not see
 typedef struct GTY(()) initial_value_pair {
   rtx hard_reg;
   rtx pseudo;
-  bool initialized;
 } initial_value_pair;
 typedef struct GTY(()) initial_value_struct {
   int num_entries;
@@ -113,7 +114,8 @@ set_block_origin_self (tree stmt)
 	for (local_decl = BLOCK_VARS (stmt);
 	     local_decl != NULL_TREE;
 	     local_decl = DECL_CHAIN (local_decl))
-	  set_decl_origin_self (local_decl);	/* Potential recursion.  */
+	  if (! DECL_EXTERNAL (local_decl))
+	    set_decl_origin_self (local_decl);	/* Potential recursion.  */
       }
 
       {
@@ -174,7 +176,8 @@ set_block_abstract_flags (tree stmt, int setting)
   for (local_decl = BLOCK_VARS (stmt);
        local_decl != NULL_TREE;
        local_decl = DECL_CHAIN (local_decl))
-    set_decl_abstract_flags (local_decl, setting);
+    if (! DECL_EXTERNAL (local_decl))
+      set_decl_abstract_flags (local_decl, setting);
 
   for (i = 0; i < BLOCK_NUM_NONLOCALIZED_VARS (stmt); i++)
     {
@@ -239,7 +242,6 @@ get_hard_reg_initial_val (enum machine_mode mode, unsigned int regno)
 {
   struct initial_value_struct *ivs;
   rtx rv;
-  int entry;
 
   rv = has_hard_reg_initial_val (mode, regno);
   if (rv)
@@ -255,19 +257,17 @@ get_hard_reg_initial_val (enum machine_mode mode, unsigned int regno)
       crtl->hard_reg_initial_vals = ivs;
     }
 
-  entry = ivs->num_entries++;
-  if (entry >= ivs->max_entries)
+  if (ivs->num_entries >= ivs->max_entries)
     {
       ivs->max_entries += 5;
       ivs->entries = GGC_RESIZEVEC (initial_value_pair, ivs->entries,
 				    ivs->max_entries);
     }
 
-  ivs->entries[entry].hard_reg = gen_rtx_REG (mode, regno);
-  ivs->entries[entry].pseudo = gen_reg_rtx (mode);
-  ivs->entries[entry].initialized = false;
+  ivs->entries[ivs->num_entries].hard_reg = gen_rtx_REG (mode, regno);
+  ivs->entries[ivs->num_entries].pseudo = gen_reg_rtx (mode);
 
-  return ivs->entries[entry].pseudo;
+  return ivs->entries[ivs->num_entries++].pseudo;
 }
 
 /* See if get_hard_reg_initial_val has been used to create a pseudo
@@ -302,16 +302,7 @@ emit_initial_value_sets (void)
 
   start_sequence ();
   for (i = 0; i < ivs->num_entries; i++)
-    {
-      if (ivs->entries[i].initialized)
-	continue;
-      ivs->entries[i].initialized = true;
-      emit_move_insn (ivs->entries[i].pseudo, ivs->entries[i].hard_reg);
-#ifdef HAVE_use_initial_val
-      if (HAVE_use_initial_val)
-	emit_insn (gen_use_initial_val (ivs->entries[i].pseudo));
-#endif
-    }
+    emit_move_insn (ivs->entries[i].pseudo, ivs->entries[i].hard_reg);
   seq = get_insns ();
   end_sequence ();
 
@@ -334,14 +325,14 @@ struct rtl_opt_pass pass_initial_value_sets =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func                        /* todo_flags_finish */
+  0                                     /* todo_flags_finish */
  }
 };
 
 /* If the backend knows where to allocate pseudos for hard
    register initial values, register these allocations now.  */
 void
-allocate_initial_values (rtx *reg_equiv_memory_loc)
+allocate_initial_values (VEC (reg_equivs_t, gc) *reg_equivs)
 {
   if (targetm.allocate_initial_value)
     {
@@ -359,7 +350,7 @@ allocate_initial_values (rtx *reg_equiv_memory_loc)
 	  if (x && REG_N_SETS (REGNO (ivs->entries[i].pseudo)) <= 1)
 	    {
 	      if (MEM_P (x))
-		reg_equiv_memory_loc[regno] = x;
+		reg_equiv_memory_loc (regno) = x;
 	      else
 		{
 		  basic_block bb;

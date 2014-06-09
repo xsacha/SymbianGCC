@@ -1,20 +1,19 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -fshrink-wrap -fdump-rtl-pro_and_epilogue" } */
+/* { dg-skip-if "No shrink-wrapping preformed" { x86_64-*-mingw* } { "*" } { "" } } */
 
 #include <string.h>
 
 int c;
 int x[2000];
-__attribute__((regparm(1))) int foo (int a, int b)
+__attribute__((regparm(1))) void foo (int a, int b)
  {
    int t[200];
-   if (a == 0)
-     return 1;
-   if (c == 0)
-     return 2;
+   if (a == 0 || c == 0)
+     return;
    memcpy (t, x + b, sizeof t);
-   return t[a];
+   c = t[a];
  }
 
-/* { dg-final { scan-rtl-dump "Prologue moved down" "pro_and_epilogue" } } */
+/* { dg-final { scan-rtl-dump "Performing shrink-wrapping" "pro_and_epilogue" } } */
 /* { dg-final { cleanup-rtl-dump "pro_and_epilogue" } } */

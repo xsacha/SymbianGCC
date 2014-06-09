@@ -17,5 +17,5 @@ void test_vzipp8 (void)
   out_poly8x8x2_t = vzip_p8 (arg0_poly8x8_t, arg1_poly8x8_t);
 }
 
-/* { dg-final { scan-assembler "vzip\.8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vzip\.8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

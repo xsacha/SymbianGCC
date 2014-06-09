@@ -16,5 +16,5 @@ void test_vcvt_nf32_s32 (void)
   out_float32x2_t = vcvt_n_f32_s32 (arg0_int32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vcvt\.f32.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcvt\.f32.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -1,7 +1,7 @@
 /* PR rtl-optimization/52139 */
 /* { dg-do compile } */
 /* { dg-options "-O -fno-tree-dominator-opts -fno-tree-fre" } */
-/* { dg-options "-O -fno-tree-dominator-opts -fno-tree-fre -fpic" { target fpic } } */
+/* { dg-additional-options "-fpic" { target fpic } } */
 
 void *p;
 

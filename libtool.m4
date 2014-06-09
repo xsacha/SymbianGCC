@@ -2506,21 +2506,6 @@ newsos6)
   shlibpath_overrides_runpath=yes
   ;;
 
-nucleus*)
-  case $host_vendor in
-    samsung)
-      version_type=linux
-      library_names_spec='${libname}${release}${shared_ext}$versuffix $libname${shared_ext}'
-      soname_spec='$libname${shared_ext}$major'
-      shlibpath_var=LD_LIBRARY_PATH
-      hardcode_into_libs=yes
-      ;;
-    *)
-      dynamic_linker=no
-      ;;
-  esac
-  ;;
-
 *nto* | *qnx*)
   version_type=qnx
   need_lib_prefix=no
@@ -2606,14 +2591,6 @@ sunos4*)
     need_lib_prefix=no
   fi
   need_version=yes
-  ;;
-
-symbian*)
-  version_type=windows
-  shrext_cmds=".dll"
-  need_version=no
-  need_lib_prefix=no
-  library_names_spec='${libname}.dll'
   ;;
 
 sysv4 | sysv4.3*)
@@ -3037,10 +3014,6 @@ cegcc*)
   lt_cv_file_magic_cmd='$OBJDUMP -f'
   ;;
 
-nucleuseabi*)
-  lt_cv_deplibs_check_method=pass_all
-  ;;
-
 darwin* | rhapsody*)
   lt_cv_deplibs_check_method=pass_all
   ;;
@@ -3142,10 +3115,6 @@ rdos*)
   ;;
 
 solaris*)
-  lt_cv_deplibs_check_method=pass_all
-  ;;
-
-symbian*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
@@ -3649,10 +3618,6 @@ m4_if([$1], [CXX], [
     interix[[3-9]]*)
       # Interix 3.x gcc -fpic/-fPIC options generate broken code.
       # Instead, we relocate shared libraries at runtime.
-      ;;
-    symbian*)
-      # symbian does not have PIC, the loader relocates non-pic shared objects
-      _LT_TAGVAR(lt_prog_compiler_pic, $1)=
       ;;
     sysv4*MP*)
       if test -d /usr/nec; then

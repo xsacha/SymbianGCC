@@ -32,6 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cp-objcp-common.h"
 #include "hashtab.h"
 #include "target.h"
+#include "parser.h"
 
 enum c_language_kind c_language = clk_cxx;
 static void cp_init_ts (void);
@@ -100,32 +101,12 @@ objcp_tsubst_copy_and_build (tree t ATTRIBUTE_UNUSED,
   return NULL_TREE;
 }
 
-
 static void
 cp_init_ts (void)
 {
-  tree_contains_struct[NAMESPACE_DECL][TS_DECL_NON_COMMON] = 1;
-  tree_contains_struct[USING_DECL][TS_DECL_NON_COMMON] = 1;
-  tree_contains_struct[TEMPLATE_DECL][TS_DECL_NON_COMMON] = 1;
-
-  tree_contains_struct[NAMESPACE_DECL][TS_DECL_WITH_VIS] = 1;
-  tree_contains_struct[USING_DECL][TS_DECL_WITH_VIS] = 1;
-  tree_contains_struct[TEMPLATE_DECL][TS_DECL_WITH_VIS] = 1;
-
-  tree_contains_struct[NAMESPACE_DECL][TS_DECL_WRTL] = 1;
-  tree_contains_struct[USING_DECL][TS_DECL_WRTL] = 1;
-  tree_contains_struct[TEMPLATE_DECL][TS_DECL_WRTL] = 1;
-
-  tree_contains_struct[NAMESPACE_DECL][TS_DECL_COMMON] = 1;
-  tree_contains_struct[USING_DECL][TS_DECL_COMMON] = 1;
-  tree_contains_struct[TEMPLATE_DECL][TS_DECL_COMMON] = 1;
-
-  tree_contains_struct[NAMESPACE_DECL][TS_DECL_MINIMAL] = 1;
-  tree_contains_struct[USING_DECL][TS_DECL_MINIMAL] = 1;
-  tree_contains_struct[TEMPLATE_DECL][TS_DECL_MINIMAL] = 1;
+  cp_common_init_ts ();
 
   init_shadowed_var_for_decl ();
-
 }
 
 static const char *
@@ -161,10 +142,7 @@ cp_eh_personality (void)
   if (!cp_eh_personality_decl)
     {
       const char *lang = (pragma_java_exceptions ? "gcj" : "gxx");
-      cp_eh_personality_decl = build_personality_function (lang, false);
-      if (TARGET_COMPACT_EH)
-	 DECL_FUNCTION_PERSONALITY2 (current_function_decl) =
-           build_personality_function (lang, true);
+      cp_eh_personality_decl = build_personality_function (lang);
     }
 
   return cp_eh_personality_decl;

@@ -16,5 +16,5 @@ void test_vRshrn_nu32 (void)
   out_uint16x4_t = vrshrn_n_u32 (arg0_uint32x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vrshrn\.i32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrshrn\.i32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

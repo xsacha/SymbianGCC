@@ -13,5 +13,3 @@
 /* { dg-final { scan-assembler-not "\tbl\t__gnu_h\[a-z\]*_ieee" } } */
 /* { dg-final { scan-assembler-not "\tbl\t__gnu_h2f_ieee" } } */
 /* { dg-final { scan-assembler-not "\tbl\t__gnu_f2h_ieee" } } */
-/* { dg-final { scan-assembler-not "\tbl\t__aeabi_h2f" } } */
-/* { dg-final { scan-assembler-not "\tbl\t__aeabi_f2h" } } */

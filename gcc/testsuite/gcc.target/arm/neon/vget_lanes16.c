@@ -16,5 +16,5 @@ void test_vget_lanes16 (void)
   out_int16_t = vget_lane_s16 (arg0_int16x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmov\.s16\[ 	\]+\[rR\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmov\.s16\[ 	\]+\[rR\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

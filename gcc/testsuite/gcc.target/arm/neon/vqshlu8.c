@@ -17,5 +17,5 @@ void test_vqshlu8 (void)
   out_uint8x8_t = vqshl_u8 (arg0_uint8x8_t, arg1_int8x8_t);
 }
 
-/* { dg-final { scan-assembler "vqshl\.u8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqshl\.u8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

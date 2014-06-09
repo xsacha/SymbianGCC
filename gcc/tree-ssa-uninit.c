@@ -349,9 +349,6 @@ convert_control_dep_chain_into_preds (VEC(edge, heap) **dep_chains,
   if (num_chains == 0 || num_chains >= MAX_NUM_CHAINS)
     return false;
 
-  /* Now convert CD chains into predicates  */
-  has_valid_pred = true;
-
   /* Now convert the control dep chain into a set
      of predicates.  */
   *preds = XCNEWVEC (VEC(use_pred_info_t, heap) *,
@@ -361,6 +358,8 @@ convert_control_dep_chain_into_preds (VEC(edge, heap) **dep_chains,
   for (i = 0; i < num_chains; i++)
     {
       VEC(edge, heap) *one_cd_chain = dep_chains[i];
+
+      has_valid_pred = false;
       for (j = 0; j < VEC_length (edge, one_cd_chain); j++)
         {
           gimple cond_stmt;
@@ -412,6 +411,7 @@ convert_control_dep_chain_into_preds (VEC(edge, heap) **dep_chains,
           one_pred->cond = cond_stmt;
           one_pred->invert = !!(e->flags & EDGE_FALSE_VALUE);
           VEC_safe_push (use_pred_info_t, heap, (*preds)[i], one_pred);
+	  has_valid_pred = true;
         }
 
       if (!has_valid_pred)
@@ -1088,9 +1088,7 @@ use_pred_not_overlap_with_undef_path_pred (
 static inline bool
 is_and_or_or (enum tree_code tc, tree typ)
 {
-  return (tc == TRUTH_AND_EXPR
-          || tc == TRUTH_OR_EXPR
-          || tc == BIT_IOR_EXPR
+  return (tc == BIT_IOR_EXPR
           || (tc == BIT_AND_EXPR
               && (typ == 0 || TREE_CODE (typ) == BOOLEAN_TYPE)));
 }
@@ -1415,15 +1413,15 @@ is_norm_cond_subset_of (norm_cond_t norm_cond1,
   code1 = norm_cond1->cond_code;
   code2 = norm_cond2->cond_code;
 
-  if (code1 == TRUTH_AND_EXPR || code1 == BIT_AND_EXPR)
+  if (code1 == BIT_AND_EXPR)
     {
       /* Both conditions are AND expressions.  */
-      if (code2 == TRUTH_AND_EXPR || code2 == BIT_AND_EXPR)
+      if (code2 == BIT_AND_EXPR)
         return is_and_set_subset_of (norm_cond1, norm_cond2);
       /* NORM_COND1 is an AND expression, and NORM_COND2 is an OR
          expression. In this case, returns true if any subexpression
          of NORM_COND1 is a subset of any subexpression of NORM_COND2.  */
-      else if (code2 == TRUTH_OR_EXPR || code2 == BIT_IOR_EXPR)
+      else if (code2 == BIT_IOR_EXPR)
         {
           size_t len1;
           len1 = VEC_length (gimple, norm_cond1->conds);
@@ -1444,7 +1442,7 @@ is_norm_cond_subset_of (norm_cond_t norm_cond1,
         }
     }
   /* NORM_COND1 is an OR expression  */
-  else if (code1 == TRUTH_OR_EXPR || code1 == BIT_IOR_EXPR)
+  else if (code1 == BIT_IOR_EXPR)
     {
       if (code2 != code1)
         return false;
@@ -1457,10 +1455,10 @@ is_norm_cond_subset_of (norm_cond_t norm_cond1,
       gcc_assert (VEC_length (gimple, norm_cond1->conds) == 1);
       /* Conservatively returns false if NORM_COND1 is non-decomposible
          and NORM_COND2 is an AND expression.  */
-      if (code2 == TRUTH_AND_EXPR || code2 == BIT_AND_EXPR)
+      if (code2 == BIT_AND_EXPR)
         return false;
 
-      if (code2 == TRUTH_OR_EXPR || code2 == BIT_IOR_EXPR)
+      if (code2 == BIT_IOR_EXPR)
         return is_subset_of_any (VEC_index (gimple, norm_cond1->conds, 0),
                                  norm_cond1->invert, norm_cond2, false);
 
@@ -1955,7 +1953,8 @@ warn_uninitialized_phi (gimple phi, VEC(gimple, heap) **worklist,
     return;
 
   uninit_op = gimple_phi_arg_def (phi, MASK_FIRST_SET_BIT (uninit_opnds));
-  warn_uninit (uninit_op,
+  warn_uninit (OPT_Wmaybe_uninitialized, uninit_op, SSA_NAME_VAR (uninit_op),
+	       SSA_NAME_VAR (uninit_op),
                "%qD may be used uninitialized in this function",
                uninit_use_stmt);
 

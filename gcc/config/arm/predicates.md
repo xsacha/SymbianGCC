@@ -129,11 +129,17 @@
   (ior (match_operand 0 "arm_rhs_operand")
        (match_operand 0 "memory_operand")))
 
+;; This doesn't have to do much because the constant is already checked
+;; in the shift_operator predicate.
 (define_predicate "shift_amount_operand"
   (ior (and (match_test "TARGET_ARM")
 	    (match_operand 0 "s_register_operand"))
-       (and (match_code "const_int")
-	    (match_test "((unsigned HOST_WIDE_INT) INTVAL (op)) < 32"))))
+       (match_operand 0 "const_int_operand")))
+
+(define_predicate "const_neon_scalar_shift_amount_operand"
+  (and (match_code "const_int")
+       (match_test "((unsigned HOST_WIDE_INT) INTVAL (op)) <= GET_MODE_BITSIZE (mode)
+	&& ((unsigned HOST_WIDE_INT) INTVAL (op)) > 0")))
 
 (define_predicate "arm_add_operand"
   (ior (match_operand 0 "arm_rhs_operand")
@@ -219,13 +225,20 @@
        (match_test "mode == GET_MODE (op)")))
 
 ;; True for shift operators.
+;; Notes:
+;;  * mult is only permitted with a constant shift amount
+;;  * patterns that permit register shift amounts only in ARM mode use
+;;    shift_amount_operand, patterns that always allow registers do not,
+;;    so we don't have to worry about that sort of thing here.
 (define_special_predicate "shift_operator"
   (and (ior (ior (and (match_code "mult")
 		      (match_test "power_of_two_operand (XEXP (op, 1), mode)"))
 		 (and (match_code "rotate")
 		      (match_test "GET_CODE (XEXP (op, 1)) == CONST_INT
 				   && ((unsigned HOST_WIDE_INT) INTVAL (XEXP (op, 1))) < 32")))
-	    (match_code "ashift,ashiftrt,lshiftrt,rotatert"))
+	    (and (match_code "ashift,ashiftrt,lshiftrt,rotatert")
+		 (match_test "GET_CODE (XEXP (op, 1)) != CONST_INT
+			      || ((unsigned HOST_WIDE_INT) INTVAL (XEXP (op, 1))) < 32")))
        (match_test "mode == GET_MODE (op)")))
 
 ;; True for shift operators which can be used with saturation instructions.
@@ -517,6 +530,34 @@
   return true;
 })
 
+(define_predicate "push_mult_memory_operand"
+  (match_code "mem")
+{
+  /* ??? Given how PUSH_MULT is generated in the prologues, is there
+     any point in testing for thumb1 specially?  All of the variants
+     use the same form.  */
+  if (TARGET_THUMB1)
+    {
+      /* ??? No attempt is made to represent STMIA, or validate that
+	 the stack adjustment matches the register count.  This is
+	 true of the ARM/Thumb2 path as well.  */
+      rtx x = XEXP (op, 0);
+      if (GET_CODE (x) != PRE_MODIFY)
+	return false;
+      if (XEXP (x, 0) != stack_pointer_rtx)
+	return false;
+      x = XEXP (x, 1);
+      if (GET_CODE (x) != PLUS)
+	return false;
+      if (XEXP (x, 0) != stack_pointer_rtx)
+	return false;
+      return CONST_INT_P (XEXP (x, 1));
+    }
+
+  /* ARM and Thumb2 handle pre-modify in their legitimate_address.  */
+  return memory_operand (op, mode);
+})
+
 ;;-------------------------------------------------------------------------
 ;;
 ;; Thumb predicates
@@ -593,6 +634,26 @@
 {
   return neon_immediate_valid_for_move (op, mode, NULL, NULL);
 })
+
+(define_predicate "imm_for_neon_lshift_operand"
+  (match_code "const_vector")
+{
+  return neon_immediate_valid_for_shift (op, mode, NULL, NULL, true);
+})
+
+(define_predicate "imm_for_neon_rshift_operand"
+  (match_code "const_vector")
+{
+  return neon_immediate_valid_for_shift (op, mode, NULL, NULL, false);
+})
+
+(define_predicate "imm_lshift_or_reg_neon"
+  (ior (match_operand 0 "s_register_operand")
+       (match_operand 0 "imm_for_neon_lshift_operand")))
+
+(define_predicate "imm_rshift_or_reg_neon"
+  (ior (match_operand 0 "s_register_operand")
+       (match_operand 0 "imm_for_neon_rshift_operand")))
 
 (define_predicate "imm_for_neon_logic_operand"
   (match_code "const_vector")
@@ -693,5 +754,22 @@
   return true; 
 })
 
+(define_predicate "const_double_vcvt_power_of_two_reciprocal"
+  (and (match_code "const_double")
+       (match_test "TARGET_32BIT && TARGET_VFP 
+       		   && vfp3_const_double_for_fract_bits (op)")))
+
+(define_predicate "neon_struct_operand"
+  (and (match_code "mem")
+       (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 2)")))
+
+(define_predicate "neon_struct_or_register_operand"
+  (ior (match_operand 0 "neon_struct_operand")
+       (match_operand 0 "s_register_operand")))
+
 (define_special_predicate "add_operator"
-			 (match_code "plus"))
+  (match_code "plus"))
+
+(define_predicate "mem_noofs_operand"
+  (and (match_code "mem")
+       (match_code "reg" "0")))

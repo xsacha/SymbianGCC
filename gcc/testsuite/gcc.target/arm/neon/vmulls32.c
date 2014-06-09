@@ -17,5 +17,5 @@ void test_vmulls32 (void)
   out_int64x2_t = vmull_s32 (arg0_int32x2_t, arg1_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vmull\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmull\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -17,5 +17,5 @@ void test_vpadalQs8 (void)
   out_int16x8_t = vpadalq_s8 (arg0_int16x8_t, arg1_int8x16_t);
 }
 
-/* { dg-final { scan-assembler "vpadal\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vpadal\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -89,6 +89,7 @@ gfc_free_statement (gfc_code *p)
     {
     case EXEC_NOP:
     case EXEC_END_BLOCK:
+    case EXEC_END_NESTED_BLOCK:
     case EXEC_ASSIGN:
     case EXEC_INIT_ASSIGN:
     case EXEC_GOTO:
@@ -113,6 +114,8 @@ gfc_free_statement (gfc_code *p)
     case EXEC_SYNC_ALL:
     case EXEC_SYNC_IMAGES:
     case EXEC_SYNC_MEMORY:
+    case EXEC_LOCK:
+    case EXEC_UNLOCK:
       break;
 
     case EXEC_BLOCK:
@@ -175,6 +178,7 @@ gfc_free_statement (gfc_code *p)
 	 be freed.  */
       break;
 
+    case EXEC_DO_CONCURRENT:
     case EXEC_FORALL:
       gfc_free_forall_iterator (p->ext.forall_iterator);
       break;
@@ -193,7 +197,7 @@ gfc_free_statement (gfc_code *p)
       break;
 
     case EXEC_OMP_CRITICAL:
-      gfc_free (CONST_CAST (char *, p->ext.omp_name));
+      free (CONST_CAST (char *, p->ext.omp_name));
       break;
 
     case EXEC_OMP_FLUSH:
@@ -206,6 +210,7 @@ gfc_free_statement (gfc_code *p)
     case EXEC_OMP_ORDERED:
     case EXEC_OMP_END_NOWAIT:
     case EXEC_OMP_TASKWAIT:
+    case EXEC_OMP_TASKYIELD:
       break;
 
     default:
@@ -228,7 +233,7 @@ gfc_free_statements (gfc_code *p)
       if (p->block)
 	gfc_free_statements (p->block);
       gfc_free_statement (p);
-      gfc_free (p);
+      free (p);
     }
 }
 
@@ -242,5 +247,5 @@ gfc_free_association_list (gfc_association_list* assoc)
     return;
 
   gfc_free_association_list (assoc->next);
-  gfc_free (assoc);
+  free (assoc);
 }

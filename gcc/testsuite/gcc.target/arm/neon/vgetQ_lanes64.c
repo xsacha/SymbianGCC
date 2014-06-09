@@ -16,5 +16,5 @@ void test_vgetQ_lanes64 (void)
   out_int64_t = vgetq_lane_s64 (arg0_int64x2_t, 0);
 }
 
-/* { dg-final { scan-assembler "vmov\[ 	\]+\[rR\]\[0-9\]+, \[rR\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmov\[ 	\]+\[rR\]\[0-9\]+, \[rR\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

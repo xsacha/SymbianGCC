@@ -33,7 +33,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "output.h"
 #include "tm_p.h"
 #include "function.h"
-#include "integrate.h"
 #include "tree-pass.h"
 #include "timevar.h"
 #include "df.h"
@@ -500,6 +499,7 @@ optimize_mode_switching (void)
 	{
 	  struct seginfo *ptr;
 	  int last_mode = no_mode;
+	  bool any_set_required = false;
 	  HARD_REG_SET live_now;
 
 	  REG_SET_TO_HARD_REG_SET (live_now, df_get_live_in (bb));
@@ -528,6 +528,7 @@ optimize_mode_switching (void)
 
 		  if (mode != no_mode && mode != last_mode)
 		    {
+		      any_set_required = true;
 		      last_mode = mode;
 		      ptr = new_seginfo (mode, insn, bb->index, live_now);
 		      add_seginfo (info + bb->index, ptr);
@@ -549,8 +550,10 @@ optimize_mode_switching (void)
 	    }
 
 	  info[bb->index].computing = last_mode;
-	  /* Check for blocks without ANY mode requirements.  */
-	  if (last_mode == no_mode)
+	  /* Check for blocks without ANY mode requirements.
+	     N.B. because of MODE_AFTER, last_mode might still be different
+	     from no_mode.  */
+	  if (!any_set_required)
 	    {
 	      ptr = new_seginfo (no_mode, BB_END (bb), bb->index, live_now);
 	      add_seginfo (info + bb->index, ptr);
@@ -752,7 +755,6 @@ rest_of_handle_mode_switching (void)
 {
 #ifdef OPTIMIZE_MODE_SWITCHING
   optimize_mode_switching ();
-  emit_initial_value_sets ();
 #endif /* OPTIMIZE_MODE_SWITCHING */
   return 0;
 }
@@ -774,6 +776,6 @@ struct rtl_opt_pass pass_mode_switching =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func                        /* todo_flags_finish */
+  0                                     /* todo_flags_finish */
  }
 };

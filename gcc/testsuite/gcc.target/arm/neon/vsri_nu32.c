@@ -17,5 +17,5 @@ void test_vsri_nu32 (void)
   out_uint32x2_t = vsri_n_u32 (arg0_uint32x2_t, arg1_uint32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vsri\.32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsri\.32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

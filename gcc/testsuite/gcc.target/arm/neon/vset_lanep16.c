@@ -17,5 +17,5 @@ void test_vset_lanep16 (void)
   out_poly16x4_t = vset_lane_p16 (arg0_poly16_t, arg1_poly16x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmov\.16\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmov\.16\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

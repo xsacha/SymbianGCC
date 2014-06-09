@@ -16,5 +16,5 @@ void test_vqshrun_ns16 (void)
   out_uint8x8_t = vqshrun_n_s16 (arg0_int16x8_t, 1);
 }
 
-/* { dg-final { scan-assembler "vqshrun\.s16\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqshrun\.s16\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

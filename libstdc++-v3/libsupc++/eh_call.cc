@@ -38,10 +38,8 @@ using namespace __cxxabiv1;
 // terminate.
 
 extern "C" void
-__cxxabiv1::__cxa_call_terminate(__gnu_cxa_call_arg exc_obj_in) throw ()
- {
-  _Unwind_Exception* ue_header
-    = reinterpret_cast<_Unwind_Exception*>(exc_obj_in);
+__cxa_call_terminate(_Unwind_Exception* ue_header) throw ()
+{
 
   if (ue_header)
     {
@@ -67,7 +65,7 @@ __cxxabiv1::__cxa_call_terminate(__gnu_cxa_call_arg exc_obj_in) throw ()
 // The ARM EABI __cxa_call_unexpected has the same semantics as the generic
 // routine, but the exception specification has a different format.
 extern "C" void
-__cxxabiv1::__cxa_call_unexpected(_Unwind_Control_Block* exc_obj_in)
+__cxa_call_unexpected(void* exc_obj_in)
 {
   _Unwind_Exception* exc_obj
     = reinterpret_cast<_Unwind_Exception*>(exc_obj_in);
@@ -75,6 +73,7 @@ __cxxabiv1::__cxa_call_unexpected(_Unwind_Control_Block* exc_obj_in)
   int rtti_count = 0;
   _Unwind_Word rtti_stride = 0;
   _Unwind_Word* rtti_list = NULL;
+  _Unwind_Ptr rtti_base = 0;
   bool foreign_exception;
   std::unexpected_handler unexpectedHandler = NULL;
   std::terminate_handler terminateHandler = NULL;
@@ -86,7 +85,7 @@ __cxxabiv1::__cxa_call_unexpected(_Unwind_Control_Block* exc_obj_in)
       unexpectedHandler = xh->unexpectedHandler;
       terminateHandler = xh->terminateHandler;
       rtti_count = exc_obj->barrier_cache.bitpattern[1];
-
+      rtti_base = (_Unwind_Ptr) exc_obj->barrier_cache.bitpattern[2];
       rtti_stride = exc_obj->barrier_cache.bitpattern[3];
       rtti_list = (_Unwind_Word*) exc_obj->barrier_cache.bitpattern[4];
       foreign_exception = false;
@@ -136,7 +135,7 @@ __cxxabiv1::__cxa_call_unexpected(_Unwind_Control_Block* exc_obj_in)
 	  _Unwind_Word offset;
 
 	  offset = (_Unwind_Word) &rtti_list[n * (rtti_stride >> 2)];
-	  offset = _Unwind_decode_target2(offset);
+	  offset = _Unwind_decode_typeinfo_ptr(rtti_base, offset);
 	  catch_type = (const std::type_info*) (offset);
 
 	  if (__cxa_type_match(&new_xh->unwindHeader, catch_type, false,

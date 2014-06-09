@@ -16,5 +16,5 @@ void test_vmvnu16 (void)
   out_uint16x4_t = vmvn_u16 (arg0_uint16x4_t);
 }
 
-/* { dg-final { scan-assembler "vmvn\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmvn\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

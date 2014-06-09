@@ -8,15 +8,134 @@ var expr bool
 
 func use(x interface{}) {}
 
+// Formatting of multi-line return statements.
+func _f() {
+	return
+	return x, y, z
+	return T{}
+	return T{1, 2, 3},
+		x, y, z
+	return T{1, 2, 3},
+		x, y,
+		z
+	return T{1,
+		2,
+		3}
+	return T{1,
+		2,
+		3,
+	}
+	return T{
+		1,
+		2,
+		3}
+	return T{
+		1,
+		2,
+		3,
+	}
+	return T{
+		1,
+		T{1, 2, 3},
+		3,
+	}
+	return T{
+		1,
+		T{1,
+			2, 3},
+		3,
+	}
+	return T{
+		1,
+		T{1,
+			2,
+			3},
+		3,
+	}
+	return T{
+			1,
+			2,
+		}, nil
+	return T{
+			1,
+			2,
+		},
+		T{
+			x: 3,
+			y: 4,
+		}, nil
+	return T{
+			1,
+			2,
+		},
+		nil
+	return T{
+			1,
+			2,
+		},
+		T{
+			x: 3,
+			y: 4,
+		},
+		nil
+	return x + y +
+		z
+	return func() {}
+	return func() {
+		_ = 0
+	}, T{
+		1, 2,
+	}
+	return func() {
+		_ = 0
+	}
+	return func() T {
+		return T {
+			1, 2,
+		}
+	}
+}
+
+// Formatting of multi-line returns: test cases from issue 1207.
+func F() (*T, os.Error) {
+       return &T{
+               X: 1,
+               Y: 2,
+       },
+               nil
+}
+
+func G() (*T, *T, os.Error) {
+       return &T{
+               X: 1,
+               Y: 2,
+       },
+               &T{
+                       X: 3,
+                       Y: 4,
+               },
+               nil
+}
+
+func _() interface{} {
+	return &fileStat{
+			name:    basename(file.name),
+			size:    mkSize(d.FileSizeHigh, d.FileSizeLow),
+			modTime: mkModTime(d.LastWriteTime),
+			mode:    mkMode(d.FileAttributes),
+			sys:     mkSysFromFI(&d),
+		}, nil
+}
+
 // Formatting of if-statement headers.
 func _() {
-	if {}
-	if;{}  // no semicolon printed
+	if true {}
+	if; true {}  // no semicolon printed
 	if expr{}
 	if;expr{}  // no semicolon printed
 	if (expr){}  // no parens printed
 	if;((expr)){}  // no semicolon and parens printed
-	if x:=expr;{
+	if x:=expr;true{
 	use(x)}
 	if x:=expr; expr {use(x)}
 }
@@ -88,6 +207,19 @@ func _() {
 	/* and more */
 	case 5:
 	}
+}
+
+
+// Formatting of selected select statements.
+func _() {
+	select {
+	}
+	select { /* this comment should not be tab-aligned because the closing } is on the same line */ }
+	select { /* this comment should be tab-aligned */
+	}
+	select { // this comment should be tab-aligned
+	}
+	select { case <-c: }
 }
 
 
@@ -271,14 +403,14 @@ func _() {
 
 
 func _() {
-	if {
+	if true {
 		_ = 0
 	}
 	_ = 0  // the indentation here should not be affected by the long label name
 AnOverlongLabel:
 	_ = 0
 	
-	if {
+	if true {
 		_ = 0
 	}
 	_ = 0

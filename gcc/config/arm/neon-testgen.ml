@@ -177,7 +177,7 @@ let rec analyze_shape shape =
       let alt2 = commas (fun x -> x) (n_things n elt_regexp) "" in
         "\\\\\\{((" ^ alt1 ^ ")|(" ^ alt2 ^ "))\\\\\\}"
     | (PtrTo elt | CstPtrTo elt) ->
-      "\\\\\\[" ^ (analyze_shape_elt elt) ^ "\\\\\\]"
+      "\\\\\\[" ^ (analyze_shape_elt elt) ^ "\\(:\\[0-9\\]+\\)?\\\\\\]"
     | Element_of_dreg -> (analyze_shape_elt Dreg) ^ "\\\\\\[\\[0-9\\]+\\\\\\]"
     | Element_of_qreg -> (analyze_shape_elt Qreg) ^ "\\\\\\[\\[0-9\\]+\\\\\\]"
     | All_elements_of_dreg -> (analyze_shape_elt Dreg) ^ "\\\\\\[\\\\\\]"
@@ -257,7 +257,7 @@ let test_intrinsic dir opcode features shape name munge elt_ty =
      intrinsic expands to.  Watch out for any writeback character and
      comments after the instruction.  *)
   let regexps = List.map (fun regexp -> insn_regexp ^ "\\[ \t\\]+" ^ regexp ^
-			  "!?\\(\\[ \t\\]+@.*\\)?\\n")
+			  "!?\\(\\[ \t\\]+@\\[a-zA-Z0-9 \\]+\\)?\\n")
                          (analyze_all_shapes features shape analyze_shape)
   in
     (* Emit file and function prologues.  *)

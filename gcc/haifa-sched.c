@@ -1,6 +1,6 @@
 /* Instruction scheduling pass.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) Enhanced by,
    and currently maintained by, Jim Wilson (wilson@cygnus.com)
@@ -141,6 +141,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "sched-int.h"
 #include "target.h"
+#include "common/common-target.h"
 #include "output.h"
 #include "params.h"
 #include "vecprim.h"
@@ -378,8 +379,6 @@ const struct common_sched_info_def haifa_common_sched_info =
     haifa_luid_for_non_insn, /* luid_for_non_insn */
     SCHED_PASS_UNKNOWN /* sched_pass_id */
   };
-
-const struct sched_scan_info_def *sched_scan_info;
 
 /* Mapping from instruction UID to its Logical UID.  */
 VEC (int, heap) *sched_luids = NULL;
@@ -858,10 +857,6 @@ static void sched_remove_insn (rtx);
 static void clear_priorities (rtx, rtx_vec_t *);
 static void calc_priorities (rtx_vec_t);
 static void add_jump_dependencies (rtx, rtx);
-#ifdef ENABLE_CHECKING
-static int has_edge_p (VEC(edge,gc) *, int);
-static void check_cfg (rtx, rtx);
-#endif
 
 #endif /* INSN_SCHEDULING */
 
@@ -879,11 +874,11 @@ schedule_insns (void)
    up.  */
 bool sched_pressure_p;
 
-/* Map regno -> its cover class.  The map defined only when
+/* Map regno -> its pressure class.  The map defined only when
    SCHED_PRESSURE_P is true.  */
-enum reg_class *sched_regno_cover_class;
+enum reg_class *sched_regno_pressure_class;
 
-/* The current register pressure.  Only elements corresponding cover
+/* The current register pressure.  Only elements corresponding pressure
    classes are defined.  */
 static int curr_reg_pressure[N_REG_CLASSES];
 
@@ -913,39 +908,41 @@ sched_init_region_reg_pressure_info (void)
 static void
 mark_regno_birth_or_death (int regno, bool birth_p)
 {
-  enum reg_class cover_class;
+  enum reg_class pressure_class;
 
-  cover_class = sched_regno_cover_class[regno];
+  pressure_class = sched_regno_pressure_class[regno];
   if (regno >= FIRST_PSEUDO_REGISTER)
     {
-      if (cover_class != NO_REGS)
+      if (pressure_class != NO_REGS)
 	{
 	  if (birth_p)
 	    {
 	      bitmap_set_bit (curr_reg_live, regno);
-	      curr_reg_pressure[cover_class]
-		+= ira_reg_class_nregs[cover_class][PSEUDO_REGNO_MODE (regno)];
+	      curr_reg_pressure[pressure_class]
+		+= (ira_reg_class_max_nregs
+		    [pressure_class][PSEUDO_REGNO_MODE (regno)]);
 	    }
 	  else
 	    {
 	      bitmap_clear_bit (curr_reg_live, regno);
-	      curr_reg_pressure[cover_class]
-		-= ira_reg_class_nregs[cover_class][PSEUDO_REGNO_MODE (regno)];
+	      curr_reg_pressure[pressure_class]
+		-= (ira_reg_class_max_nregs
+		    [pressure_class][PSEUDO_REGNO_MODE (regno)]);
 	    }
 	}
     }
-  else if (cover_class != NO_REGS
+  else if (pressure_class != NO_REGS
 	   && ! TEST_HARD_REG_BIT (ira_no_alloc_regs, regno))
     {
       if (birth_p)
 	{
 	  bitmap_set_bit (curr_reg_live, regno);
-	  curr_reg_pressure[cover_class]++;
+	  curr_reg_pressure[pressure_class]++;
 	}
       else
 	{
 	  bitmap_clear_bit (curr_reg_live, regno);
-	  curr_reg_pressure[cover_class]--;
+	  curr_reg_pressure[pressure_class]--;
 	}
     }
 }
@@ -959,8 +956,8 @@ initiate_reg_pressure_info (bitmap live)
   unsigned int j;
   bitmap_iterator bi;
 
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    curr_reg_pressure[ira_reg_class_cover[i]] = 0;
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    curr_reg_pressure[ira_pressure_classes[i]] = 0;
   bitmap_clear (curr_reg_live);
   EXECUTE_IF_SET_IN_BITMAP (live, 0, j, bi)
     if (current_nr_blocks == 1 || bitmap_bit_p (region_ref_regs, j))
@@ -978,11 +975,11 @@ setup_ref_regs (rtx x)
   if (REG_P (x))
     {
       regno = REGNO (x);
-      if (regno >= FIRST_PSEUDO_REGISTER)
-	bitmap_set_bit (region_ref_regs, REGNO (x));
+      if (HARD_REGISTER_NUM_P (regno))
+	bitmap_set_range (region_ref_regs, regno,
+			  hard_regno_nregs[regno][GET_MODE (x)]);
       else
-	for (i = hard_regno_nregs[regno][GET_MODE (x)] - 1; i >= 0; i--)
-	  bitmap_set_bit (region_ref_regs, regno + i);
+	bitmap_set_bit (region_ref_regs, REGNO (x));
       return;
     }
   fmt = GET_RTX_FORMAT (code);
@@ -1029,9 +1026,9 @@ save_reg_pressure (void)
 {
   int i;
 
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    saved_reg_pressure[ira_reg_class_cover[i]]
-      = curr_reg_pressure[ira_reg_class_cover[i]];
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    saved_reg_pressure[ira_pressure_classes[i]]
+      = curr_reg_pressure[ira_pressure_classes[i]];
   bitmap_copy (saved_reg_live, curr_reg_live);
 }
 
@@ -1041,9 +1038,9 @@ restore_reg_pressure (void)
 {
   int i;
 
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    curr_reg_pressure[ira_reg_class_cover[i]]
-      = saved_reg_pressure[ira_reg_class_cover[i]];
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    curr_reg_pressure[ira_pressure_classes[i]]
+      = saved_reg_pressure[ira_pressure_classes[i]];
   bitmap_copy (curr_reg_live, saved_reg_live);
 }
 
@@ -1061,7 +1058,7 @@ dying_use_p (struct reg_use_data *use)
 }
 
 /* Print info about the current register pressure and its excess for
-   each cover class.  */
+   each pressure class.  */
 static void
 print_curr_reg_pressure (void)
 {
@@ -1069,9 +1066,9 @@ print_curr_reg_pressure (void)
   enum reg_class cl;
 
   fprintf (sched_dump, ";;\t");
-  for (i = 0; i < ira_reg_class_cover_size; i++)
+  for (i = 0; i < ira_pressure_classes_num; i++)
     {
-      cl = ira_reg_class_cover[i];
+      cl = ira_pressure_classes[i];
       gcc_assert (curr_reg_pressure[cl] >= 0);
       fprintf (sched_dump, "  %s:%d(%d)", reg_class_names[cl],
 	       curr_reg_pressure[cl],
@@ -1181,33 +1178,20 @@ recompute_todo_spec (rtx next)
       regno = REGNO (XEXP (cond, 0));
 
       /* Find the last scheduled insn that modifies the condition register.
-	 If we have a true dependency on it, it sets it to the correct value,
-	 otherwise it must be a later insn scheduled in-between that clobbers
-	 the condition.  */
-      FOR_EACH_VEC_ELT_REVERSE (rtx, scheduled_insns, i, prev)
-	{
-	  sd_iterator_def sd_it;
-	  dep_t dep;
-	  HARD_REG_SET t;
-	  bool found;
+	 We can stop looking once we find the insn we depend on through the
+	 REG_DEP_CONTROL; if the condition register isn't modified after it,
+	 we know that it still has the right value.  */
+      if (QUEUE_INDEX (pro) == QUEUE_SCHEDULED)
+	FOR_EACH_VEC_ELT_REVERSE (rtx, scheduled_insns, i, prev)
+	  {
+	    HARD_REG_SET t;
 
-	  find_all_hard_reg_sets (prev, &t);
-	  if (!TEST_HARD_REG_BIT (t, regno))
-	    continue;
-
-	  found = false;
-	  FOR_EACH_DEP (next, SD_LIST_RES_BACK, sd_it, dep)
-	    {
-	      if (DEP_PRO (dep) == prev && DEP_TYPE (dep) == REG_DEP_TRUE)
-		{
-		  found = true;
-		  break;
-		}
-	    }
-	  if (!found)
-	    return HARD_DEP;
-	  break;
-	}
+	    find_all_hard_reg_sets (prev, &t);
+	    if (TEST_HARD_REG_BIT (t, regno))
+	      return HARD_DEP;
+	    if (prev == pro)
+	      break;
+	  }
       if (ORIG_PAT (next) == NULL_RTX)
 	{
 	  ORIG_PAT (next) = PATTERN (next);
@@ -1348,7 +1332,7 @@ dep_cost_1 (dep_t link, dw_t dw)
   /* A USE insn should never require the value used to be computed.
      This allows the computation of a function's result and parameter
      values to overlap the return and call.  We don't care about the
-     the dependence cost when only decreasing register pressure.  */
+     dependence cost when only decreasing register pressure.  */
   if (recog_memoized (used) < 0)
     {
       cost = 0;
@@ -1613,23 +1597,24 @@ setup_insn_reg_pressure_info (rtx insn)
   gcc_checking_assert (!DEBUG_INSN_P (insn));
 
   excess_cost_change = 0;
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    death[ira_reg_class_cover[i]] = 0;
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    death[ira_pressure_classes[i]] = 0;
   for (use = INSN_REG_USE_LIST (insn); use != NULL; use = use->next_insn_use)
     if (dying_use_p (use))
       {
-	cl = sched_regno_cover_class[use->regno];
+	cl = sched_regno_pressure_class[use->regno];
 	if (use->regno < FIRST_PSEUDO_REGISTER)
 	  death[cl]++;
 	else
-	  death[cl] += ira_reg_class_nregs[cl][PSEUDO_REGNO_MODE (use->regno)];
+	  death[cl]
+	    += ira_reg_class_max_nregs[cl][PSEUDO_REGNO_MODE (use->regno)];
       }
   pressure_info = INSN_REG_PRESSURE (insn);
   max_reg_pressure = INSN_MAX_REG_PRESSURE (insn);
   gcc_assert (pressure_info != NULL && max_reg_pressure != NULL);
-  for (i = 0; i < ira_reg_class_cover_size; i++)
+  for (i = 0; i < ira_pressure_classes_num; i++)
     {
-      cl = ira_reg_class_cover[i];
+      cl = ira_pressure_classes[i];
       gcc_assert (curr_reg_pressure[cl] >= 0);
       change = (int) pressure_info[i].set_increase - death[cl];
       before = MAX (0, max_reg_pressure[i] - ira_available_class_regs[cl]);
@@ -1662,8 +1647,10 @@ rank_for_schedule (const void *x, const void *y)
       /* Schedule debug insns as early as possible.  */
       if (DEBUG_INSN_P (tmp) && !DEBUG_INSN_P (tmp2))
 	return -1;
-      else if (DEBUG_INSN_P (tmp2))
+      else if (!DEBUG_INSN_P (tmp) && DEBUG_INSN_P (tmp2))
 	return 1;
+      else if (DEBUG_INSN_P (tmp) && DEBUG_INSN_P (tmp2))
+	return INSN_LUID (tmp) - INSN_LUID (tmp2);
     }
 
   /* The insn in a schedule group should be issued the first.  */
@@ -2094,9 +2081,9 @@ setup_insn_max_reg_pressure (rtx after, bool update_p)
   static int max_reg_pressure[N_REG_CLASSES];
 
   save_reg_pressure ();
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    max_reg_pressure[ira_reg_class_cover[i]]
-      = curr_reg_pressure[ira_reg_class_cover[i]];
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    max_reg_pressure[ira_pressure_classes[i]]
+      = curr_reg_pressure[ira_pressure_classes[i]];
   for (insn = NEXT_INSN (after);
        insn != NULL_RTX && ! BARRIER_P (insn)
 	 && BLOCK_FOR_INSN (insn) == BLOCK_FOR_INSN (after);
@@ -2104,24 +2091,24 @@ setup_insn_max_reg_pressure (rtx after, bool update_p)
     if (NONDEBUG_INSN_P (insn))
       {
 	eq_p = true;
-	for (i = 0; i < ira_reg_class_cover_size; i++)
+	for (i = 0; i < ira_pressure_classes_num; i++)
 	  {
-	    p = max_reg_pressure[ira_reg_class_cover[i]];
+	    p = max_reg_pressure[ira_pressure_classes[i]];
 	    if (INSN_MAX_REG_PRESSURE (insn)[i] != p)
 	      {
 		eq_p = false;
 		INSN_MAX_REG_PRESSURE (insn)[i]
-		  = max_reg_pressure[ira_reg_class_cover[i]];
+		  = max_reg_pressure[ira_pressure_classes[i]];
 	      }
 	  }
 	if (update_p && eq_p)
 	  break;
 	update_register_pressure (insn);
-	for (i = 0; i < ira_reg_class_cover_size; i++)
-	  if (max_reg_pressure[ira_reg_class_cover[i]]
-	      < curr_reg_pressure[ira_reg_class_cover[i]])
-	    max_reg_pressure[ira_reg_class_cover[i]]
-	      = curr_reg_pressure[ira_reg_class_cover[i]];
+	for (i = 0; i < ira_pressure_classes_num; i++)
+	  if (max_reg_pressure[ira_pressure_classes[i]]
+	      < curr_reg_pressure[ira_pressure_classes[i]])
+	    max_reg_pressure[ira_pressure_classes[i]]
+	      = curr_reg_pressure[ira_pressure_classes[i]];
       }
   restore_reg_pressure ();
 }
@@ -2135,13 +2122,13 @@ update_reg_and_insn_max_reg_pressure (rtx insn)
   int i;
   int before[N_REG_CLASSES];
 
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    before[i] = curr_reg_pressure[ira_reg_class_cover[i]];
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    before[i] = curr_reg_pressure[ira_pressure_classes[i]];
   update_register_pressure (insn);
-  for (i = 0; i < ira_reg_class_cover_size; i++)
-    if (curr_reg_pressure[ira_reg_class_cover[i]] != before[i])
+  for (i = 0; i < ira_pressure_classes_num; i++)
+    if (curr_reg_pressure[ira_pressure_classes[i]] != before[i])
       break;
-  if (i < ira_reg_class_cover_size)
+  if (i < ira_pressure_classes_num)
     setup_insn_max_reg_pressure (insn, true);
 }
 
@@ -2248,9 +2235,9 @@ schedule_insn (rtx insn)
       if (pressure_info != NULL)
 	{
 	  fputc (':', sched_dump);
-	  for (i = 0; i < ira_reg_class_cover_size; i++)
+	  for (i = 0; i < ira_pressure_classes_num; i++)
 	    fprintf (sched_dump, "%s%+d(%d)",
-		     reg_class_names[ira_reg_class_cover[i]],
+		     reg_class_names[ira_pressure_classes[i]],
 		     pressure_info[i].set_increase, pressure_info[i].change);
 	}
       fputc ('\n', sched_dump);
@@ -3647,7 +3634,8 @@ max_issue (struct ready_list *ready, int privileged_n, state_t state,
 		{
 		  n = privileged_n;
 		  /* Try to find issued privileged insn.  */
-		  while (n && !ready_try[--n]);
+		  while (n && !ready_try[--n])
+		    ;
 		}
 
 	      if (/* If all insns are equally good...  */
@@ -3958,106 +3946,88 @@ static void
 prune_ready_list (state_t temp_state, bool first_cycle_insn_p,
 		  bool shadows_only_p, bool modulo_epilogue_p)
 {
-  int i, pass;
+  int i;
   bool sched_group_found = false;
-  int min_cost_group = 1;
 
+ restart:
   for (i = 0; i < ready.n_ready; i++)
     {
       rtx insn = ready_element (&ready, i);
-      if (SCHED_GROUP_P (insn))
+      int cost = 0;
+      const char *reason = "resource conflict";
+
+      if (DEBUG_INSN_P (insn))
+	continue;
+
+      if (SCHED_GROUP_P (insn) && !sched_group_found)
 	{
 	  sched_group_found = true;
-	  break;
+	  if (i > 0)
+	    goto restart;
 	}
-    }
 
-  /* Make two passes if there's a SCHED_GROUP_P insn; make sure to handle
-     such an insn first and note its cost, then schedule all other insns
-     for one cycle later.  */
-  for (pass = sched_group_found ? 0 : 1; pass < 2; )
-    {
-      int n = ready.n_ready;
-      for (i = 0; i < n; i++)
+      if (sched_group_found && !SCHED_GROUP_P (insn))
 	{
-	  rtx insn = ready_element (&ready, i);
-	  int cost = 0;
-	  const char *reason = "resource conflict";
+	  cost = 1;
+	  reason = "not in sched group";
+	}
+      else if (modulo_epilogue_p && INSN_EXACT_TICK (insn) == INVALID_TICK)
+	{
+	  cost = max_insn_queue_index;
+	  reason = "not an epilogue insn";
+	}
+      else if (shadows_only_p && !SHADOW_P (insn))
+	{
+	  cost = 1;
+	  reason = "not a shadow";
+	}
+      else if (recog_memoized (insn) < 0)
+	{
+	  if (!first_cycle_insn_p
+	      && (GET_CODE (PATTERN (insn)) == ASM_INPUT
+		  || asm_noperands (PATTERN (insn)) >= 0))
+	    cost = 1;
+	  reason = "asm";
+	}
+      else if (sched_pressure_p)
+	cost = 0;
+      else
+	{
+	  int delay_cost = 0;
 
-	  if (DEBUG_INSN_P (insn))
-	    continue;
+	  if (delay_htab)
+	    {
+	      struct delay_pair *delay_entry;
+	      delay_entry
+		= (struct delay_pair *)htab_find_with_hash (delay_htab, insn,
+							    htab_hash_pointer (insn));
+	      while (delay_entry && delay_cost == 0)
+		{
+		  delay_cost = estimate_shadow_tick (delay_entry);
+		  if (delay_cost > max_insn_queue_index)
+		    delay_cost = max_insn_queue_index;
+		  delay_entry = delay_entry->next_same_i1;
+		}
+	    }
 
-	  if (sched_group_found && !SCHED_GROUP_P (insn))
-	    {
-	      if (pass == 0)
-		continue;
-	      cost = min_cost_group;
-	      reason = "not in sched group";
-	    }
-	  else if (modulo_epilogue_p
-		   && INSN_EXACT_TICK (insn) == INVALID_TICK)
-	    {
-	      cost = max_insn_queue_index;
-	      reason = "not an epilogue insn";
-	    }
-	  else if (shadows_only_p && !SHADOW_P (insn))
-	    {
-	      cost = 1;
-	      reason = "not a shadow";
-	    }
-	  else if (recog_memoized (insn) < 0)
-	    {
-	      if (!first_cycle_insn_p
-		  && (GET_CODE (PATTERN (insn)) == ASM_INPUT
-		      || asm_noperands (PATTERN (insn)) >= 0))
-		cost = 1;
-	      reason = "asm";
-	    }
-	  else if (sched_pressure_p)
+	  memcpy (temp_state, curr_state, dfa_state_size);
+	  cost = state_transition (temp_state, insn);
+	  if (cost < 0)
 	    cost = 0;
-	  else
+	  else if (cost == 0)
+	    cost = 1;
+	  if (cost < delay_cost)
 	    {
-	      int delay_cost = 0;
-
-	      if (delay_htab)
-		{
-		  struct delay_pair *delay_entry;
-		  delay_entry
-		    = (struct delay_pair *)htab_find_with_hash (delay_htab, insn,
-								htab_hash_pointer (insn));
-		  while (delay_entry && delay_cost == 0)
-		    {
-		      delay_cost = estimate_shadow_tick (delay_entry);
-		      if (delay_cost > max_insn_queue_index)
-			delay_cost = max_insn_queue_index;
-		      delay_entry = delay_entry->next_same_i1;
-		    }
-		}
-
-	      memcpy (temp_state, curr_state, dfa_state_size);
-	      cost = state_transition (temp_state, insn);
-	      if (cost < 0)
-		cost = 0;
-	      else if (cost == 0)
-		cost = 1;
-	      if (cost < delay_cost)
-		{
-		  cost = delay_cost;
-		  reason = "shadow tick";
-		}
-	    }
-	  if (cost >= 1)
-	    {
-	      if (SCHED_GROUP_P (insn) && cost > min_cost_group)
-		min_cost_group = cost;
-	      ready_remove (&ready, i);
-	      queue_insn (insn, cost, reason);
-	      if (i + 1 < n)
-		break;
+	      cost = delay_cost;
+	      reason = "shadow tick";
 	    }
 	}
-      if (i == n)
-	pass++;
+      if (cost >= 1)
+	{
+	  ready_remove (&ready, i);
+	  queue_insn (insn, cost, reason);
+	  goto restart;
+	}
     }
 }
 
@@ -4120,7 +4090,7 @@ verify_shadows (void)
    region.  */
 
 bool
-schedule_block (basic_block *target_bb, state_t init_state)
+schedule_block (basic_block *target_bb)
 {
   int i;
   bool success = modulo_ii == 0;
@@ -4151,10 +4121,7 @@ schedule_block (basic_block *target_bb, state_t init_state)
   if (sched_verbose)
     dump_new_block_header (0, *target_bb, head, tail);
 
-  if (init_state == NULL)
-    state_reset (curr_state);
-  else
-    memcpy (curr_state, init_state, dfa_state_size);
+  state_reset (curr_state);
 
   /* Clear the ready list.  */
   ready.first = ready.veclen - 1;
@@ -4504,7 +4471,7 @@ schedule_block (basic_block *target_bb, state_t init_state)
 
 	  /* Update counters, etc in the scheduler's front end.  */
 	  (*current_sched_info->begin_schedule_ready) (insn);
- 	  VEC_safe_push (rtx, heap, scheduled_insns, insn);
+	  VEC_safe_push (rtx, heap, scheduled_insns, insn);
 	  gcc_assert (NONDEBUG_INSN_P (insn));
 	  last_nondebug_scheduled_insn = last_scheduled_insn = insn;
 
@@ -4606,9 +4573,7 @@ schedule_block (basic_block *target_bb, state_t init_state)
     }
   if (ls.modulo_epilogue)
     success = true;
-
  end_schedule:
-  advance_one_cycle ();
   if (modulo_ii > 0)
     {
       /* Once again, debug insn suckiness: they can be on the ready list
@@ -4717,7 +4682,7 @@ schedule_block (basic_block *target_bb, state_t init_state)
 	 in its md_finish () hook.  These new insns don't have any data
 	 initialized and to identify them we extend h_i_d so that they'll
 	 get zero luids.  */
-      sched_init_luids (NULL, NULL, NULL, NULL);
+      sched_extend_luids ();
     }
 
   if (sched_verbose)
@@ -4887,14 +4852,18 @@ sched_init (void)
     {
       int i, max_regno = max_reg_num ();
 
+      if (sched_dump != NULL)
+	/* We need info about pseudos for rtl dumps about pseudo
+	   classes and costs.  */
+	regstat_init_n_sets_and_refs ();
       ira_set_pseudo_classes (sched_verbose ? sched_dump : NULL);
-      sched_regno_cover_class
+      sched_regno_pressure_class
 	= (enum reg_class *) xmalloc (max_regno * sizeof (enum reg_class));
       for (i = 0; i < max_regno; i++)
-	sched_regno_cover_class[i]
+	sched_regno_pressure_class[i]
 	  = (i < FIRST_PSEUDO_REGISTER
-	     ? ira_class_translate[REGNO_REG_CLASS (i)]
-	     : reg_cover_class (i));
+	     ? ira_pressure_class_translate[REGNO_REG_CLASS (i)]
+	     : ira_pressure_class_translate[reg_allocno_class (i)]);
       curr_reg_live = BITMAP_ALLOC (NULL);
       saved_reg_live = BITMAP_ALLOC (NULL);
       region_ref_regs = BITMAP_ALLOC (NULL);
@@ -4930,10 +4899,10 @@ haifa_sched_init (void)
 
     FOR_EACH_BB (bb)
       VEC_quick_push (basic_block, bbs, bb);
-    sched_init_luids (bbs, NULL, NULL, NULL);
+    sched_init_luids (bbs);
     sched_deps_init (true);
     sched_extend_target ();
-    haifa_init_h_i_d (bbs, NULL, NULL, NULL);
+    haifa_init_h_i_d (bbs);
 
     VEC_free (basic_block, heap, bbs);
   }
@@ -4942,13 +4911,6 @@ haifa_sched_init (void)
   sched_split_block = sched_split_block_1;
   sched_create_empty_bb = sched_create_empty_bb_1;
   haifa_recovery_bb_ever_added_p = false;
-
-#ifdef ENABLE_CHECKING
-  /* This is used preferably for finding bugs in check_cfg () itself.
-     We must call sched_bbs_init () before check_cfg () because check_cfg ()
-     assumes that the last insn in the last bb has a non-null successor.  */
-  check_cfg (0, 0);
-#endif
 
   nr_begin_data = nr_begin_control = nr_be_in_data = nr_be_in_control = 0;
   before_recovery = 0;
@@ -5005,7 +4967,9 @@ sched_finish (void)
   haifa_finish_h_i_d ();
   if (sched_pressure_p)
     {
-      free (sched_regno_cover_class);
+      if (regstat_n_sets_and_refs != NULL)
+	regstat_free_n_sets_and_refs ();
+      free (sched_regno_pressure_class);
       BITMAP_FREE (region_ref_regs);
       BITMAP_FREE (saved_reg_live);
       BITMAP_FREE (curr_reg_live);
@@ -5020,12 +4984,6 @@ sched_finish (void)
   regstat_free_calls_crossed ();
 
   dfa_finish ();
-
-#ifdef ENABLE_CHECKING
-  /* After reload ia64 backend clobbers CFG, so can't check anything.  */
-  if (!reload_completed)
-    check_cfg (0, 0);
-#endif
 }
 
 /* Free all delay_pair structures that were recorded.  */
@@ -5861,7 +5819,7 @@ sched_create_recovery_edges (basic_block first_bb, basic_block rec,
     {
       /* Rewritten from cfgrtl.c.  */
       if (flag_reorder_blocks_and_partition
-	  && targetm.have_named_sections)
+	  && targetm_common.have_named_sections)
 	{
 	  /* We don't need the same note for the check because
 	     any_condjump_p (check) == true.  */
@@ -6557,249 +6515,9 @@ add_jump_dependencies (rtx insn, rtx jump)
   gcc_assert (!sd_lists_empty_p (jump, SD_LIST_BACK));
 }
 
-/* Return the NOTE_INSN_BASIC_BLOCK of BB.  */
-rtx
-bb_note (basic_block bb)
-{
-  rtx note;
-
-  note = BB_HEAD (bb);
-  if (LABEL_P (note))
-    note = NEXT_INSN (note);
-
-  gcc_assert (NOTE_INSN_BASIC_BLOCK_P (note));
-  return note;
-}
-
-#ifdef ENABLE_CHECKING
-/* Helper function for check_cfg.
-   Return nonzero, if edge vector pointed to by EL has edge with TYPE in
-   its flags.  */
-static int
-has_edge_p (VEC(edge,gc) *el, int type)
-{
-  edge e;
-  edge_iterator ei;
-
-  FOR_EACH_EDGE (e, ei, el)
-    if (e->flags & type)
-      return 1;
-  return 0;
-}
-
-/* Search back, starting at INSN, for an insn that is not a
-   NOTE_INSN_VAR_LOCATION.  Don't search beyond HEAD, and return it if
-   no such insn can be found.  */
-static inline rtx
-prev_non_location_insn (rtx insn, rtx head)
-{
-  while (insn != head && NOTE_P (insn)
-	 && NOTE_KIND (insn) == NOTE_INSN_VAR_LOCATION)
-    insn = PREV_INSN (insn);
-
-  return insn;
-}
-
-/* Check few properties of CFG between HEAD and TAIL.
-   If HEAD (TAIL) is NULL check from the beginning (till the end) of the
-   instruction stream.  */
-static void
-check_cfg (rtx head, rtx tail)
-{
-  rtx next_tail;
-  basic_block bb = 0;
-  int not_first = 0, not_last;
-
-  if (head == NULL)
-    head = get_insns ();
-  if (tail == NULL)
-    tail = get_last_insn ();
-  next_tail = NEXT_INSN (tail);
-
-  do
-    {
-      not_last = head != tail;
-
-      if (not_first)
-	gcc_assert (NEXT_INSN (PREV_INSN (head)) == head);
-      if (not_last)
-	gcc_assert (PREV_INSN (NEXT_INSN (head)) == head);
-
-      if (LABEL_P (head)
-	  || (NOTE_INSN_BASIC_BLOCK_P (head)
-	      && (!not_first
-		  || (not_first && !LABEL_P (PREV_INSN (head))))))
-	{
-	  gcc_assert (bb == 0);
-	  bb = BLOCK_FOR_INSN (head);
-	  if (bb != 0)
-	    gcc_assert (BB_HEAD (bb) == head);
-	  else
-	    /* This is the case of jump table.  See inside_basic_block_p ().  */
-	    gcc_assert (LABEL_P (head) && !inside_basic_block_p (head));
-	}
-
-      if (bb == 0)
-	{
-	  gcc_assert (!inside_basic_block_p (head));
-	  head = NEXT_INSN (head);
-	}
-      else
-	{
-	  gcc_assert (inside_basic_block_p (head)
-		      || NOTE_P (head));
-	  gcc_assert (BLOCK_FOR_INSN (head) == bb);
-
-	  if (LABEL_P (head))
-	    {
-	      head = NEXT_INSN (head);
-	      gcc_assert (NOTE_INSN_BASIC_BLOCK_P (head));
-	    }
-	  else
-	    {
-	      if (control_flow_insn_p (head))
-		{
-		  gcc_assert (prev_non_location_insn (BB_END (bb), head)
-			      == head);
-
-		  if (any_uncondjump_p (head))
-		    gcc_assert (EDGE_COUNT (bb->succs) == 1
-				&& BARRIER_P (NEXT_INSN (head)));
-		  else if (any_condjump_p (head))
-		    gcc_assert (/* Usual case.  */
-                                (EDGE_COUNT (bb->succs) > 1
-                                 && !BARRIER_P (NEXT_INSN (head)))
-				/* Special cases, see cfglayout.c:
-				   fixup_reorder_chain.  */
-				|| (EDGE_COUNT (bb->succs) == 1
-				    && (!onlyjump_p (head)
-					|| returnjump_p (head)))
-                                /* Or jump to the next instruction.  */
-                                || (EDGE_COUNT (bb->succs) == 1
-                                    && (BB_HEAD (EDGE_I (bb->succs, 0)->dest)
-                                        == JUMP_LABEL (head))));
-		}
-	      if (BB_END (bb) == head)
-		{
-		  if (EDGE_COUNT (bb->succs) > 1)
-		    gcc_assert (control_flow_insn_p (prev_non_location_insn
-						     (head, BB_HEAD (bb)))
-				|| has_edge_p (bb->succs, EDGE_COMPLEX));
-		  bb = 0;
-		}
-
-	      head = NEXT_INSN (head);
-	    }
-	}
-
-      not_first = 1;
-    }
-  while (head != next_tail);
-
-  gcc_assert (bb == 0);
-}
-
-#endif /* ENABLE_CHECKING */
-
-/* Extend per basic block data structures.  */
-static void
-extend_bb (void)
-{
-  if (sched_scan_info->extend_bb)
-    sched_scan_info->extend_bb ();
-}
-
-/* Init data for BB.  */
-static void
-init_bb (basic_block bb)
-{
-  if (sched_scan_info->init_bb)
-    sched_scan_info->init_bb (bb);
-}
-
-/* Extend per insn data structures.  */
-static void
-extend_insn (void)
-{
-  if (sched_scan_info->extend_insn)
-    sched_scan_info->extend_insn ();
-}
-
-/* Init data structures for INSN.  */
-static void
-init_insn (rtx insn)
-{
-  if (sched_scan_info->init_insn)
-    sched_scan_info->init_insn (insn);
-}
-
-/* Init all insns in BB.  */
-static void
-init_insns_in_bb (basic_block bb)
-{
-  rtx insn;
-
-  FOR_BB_INSNS (bb, insn)
-    init_insn (insn);
-}
-
-/* A driver function to add a set of basic blocks (BBS),
-   a single basic block (BB), a set of insns (INSNS) or a single insn (INSN)
-   to the scheduling region.  */
-void
-sched_scan (const struct sched_scan_info_def *ssi,
-	    bb_vec_t bbs, basic_block bb, insn_vec_t insns, rtx insn)
-{
-  sched_scan_info = ssi;
-
-  if (bbs != NULL || bb != NULL)
-    {
-      extend_bb ();
-
-      if (bbs != NULL)
-	{
-	  unsigned i;
-	  basic_block x;
-
-	  FOR_EACH_VEC_ELT (basic_block, bbs, i, x)
-	    init_bb (x);
-	}
-
-      if (bb != NULL)
-	init_bb (bb);
-    }
-
-  extend_insn ();
-
-  if (bbs != NULL)
-    {
-      unsigned i;
-      basic_block x;
-
-      FOR_EACH_VEC_ELT (basic_block, bbs, i, x)
-	init_insns_in_bb (x);
-    }
-
-  if (bb != NULL)
-    init_insns_in_bb (bb);
-
-  if (insns != NULL)
-    {
-      unsigned i;
-      rtx x;
-
-      FOR_EACH_VEC_ELT (rtx, insns, i, x)
-	init_insn (x);
-    }
-
-  if (insn != NULL)
-    init_insn (insn);
-}
-
-
 /* Extend data structures for logical insn UID.  */
-static void
-luids_extend_insn (void)
+void
+sched_extend_luids (void)
 {
   int new_luids_max_uid = get_max_uid () + 1;
 
@@ -6807,8 +6525,8 @@ luids_extend_insn (void)
 }
 
 /* Initialize LUID for INSN.  */
-static void
-luids_init_insn (rtx insn)
+void
+sched_init_insn_luid (rtx insn)
 {
   int i = INSN_P (insn) ? 1 : common_sched_info->luid_for_non_insn (insn);
   int luid;
@@ -6824,21 +6542,23 @@ luids_init_insn (rtx insn)
   SET_INSN_LUID (insn, luid);
 }
 
-/* Initialize luids for BBS, BB, INSNS and INSN.
+/* Initialize luids for BBS.
    The hook common_sched_info->luid_for_non_insn () is used to determine
    if notes, labels, etc. need luids.  */
 void
-sched_init_luids (bb_vec_t bbs, basic_block bb, insn_vec_t insns, rtx insn)
+sched_init_luids (bb_vec_t bbs)
 {
-  const struct sched_scan_info_def ssi =
-    {
-      NULL, /* extend_bb */
-      NULL, /* init_bb */
-      luids_extend_insn, /* extend_insn */
-      luids_init_insn /* init_insn */
-    };
+  int i;
+  basic_block bb;
 
-  sched_scan (&ssi, bbs, bb, insns, insn);
+  sched_extend_luids ();
+  FOR_EACH_VEC_ELT (basic_block, bbs, i, bb)
+    {
+      rtx insn;
+
+      FOR_BB_INSNS (bb, insn)
+	sched_init_insn_luid (insn);
+    }
 }
 
 /* Free LUIDs.  */
@@ -6896,19 +6616,21 @@ init_h_i_d (rtx insn)
     }
 }
 
-/* Initialize haifa_insn_data for BBS, BB, INSNS and INSN.  */
+/* Initialize haifa_insn_data for BBS.  */
 void
-haifa_init_h_i_d (bb_vec_t bbs, basic_block bb, insn_vec_t insns, rtx insn)
+haifa_init_h_i_d (bb_vec_t bbs)
 {
-  const struct sched_scan_info_def ssi =
-    {
-      NULL, /* extend_bb */
-      NULL, /* init_bb */
-      extend_h_i_d, /* extend_insn */
-      init_h_i_d /* init_insn */
-    };
+  int i;
+  basic_block bb;
 
-  sched_scan (&ssi, bbs, bb, insns, insn);
+  extend_h_i_d ();
+  FOR_EACH_VEC_ELT (basic_block, bbs, i, bb)
+    {
+      rtx insn;
+
+      FOR_BB_INSNS (bb, insn)
+	init_h_i_d (insn);
+    }
 }
 
 /* Finalize haifa_insn_data.  */
@@ -6921,8 +6643,7 @@ haifa_finish_h_i_d (void)
 
   FOR_EACH_VEC_ELT (haifa_insn_data_def, h_i_d, i, data)
     {
-      if (data->reg_pressure != NULL)
-	free (data->reg_pressure);
+      free (data->reg_pressure);
       for (use = data->reg_use_list; use != NULL; use = next)
 	{
 	  next = use->next_insn_use;
@@ -6938,10 +6659,12 @@ haifa_init_insn (rtx insn)
 {
   gcc_assert (insn != NULL);
 
-  sched_init_luids (NULL, NULL, NULL, insn);
+  sched_extend_luids ();
+  sched_init_insn_luid (insn);
   sched_extend_target ();
   sched_deps_init (false);
-  haifa_init_h_i_d (NULL, NULL, NULL, insn);
+  extend_h_i_d ();
+  init_h_i_d (insn);
 
   if (adding_bb_to_current_region_p)
     {
@@ -6950,6 +6673,8 @@ haifa_init_insn (rtx insn)
       /* Extend dependency caches by one element.  */
       extend_dependency_caches (1, false);
     }
+  if (sched_pressure_p)
+    init_insn_reg_pressure_info (insn);
 }
 
 /* Init data for the new basic block BB which comes after AFTER.  */

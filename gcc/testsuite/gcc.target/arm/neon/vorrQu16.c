@@ -17,5 +17,5 @@ void test_vorrQu16 (void)
   out_uint16x8_t = vorrq_u16 (arg0_uint16x8_t, arg1_uint16x8_t);
 }
 
-/* { dg-final { scan-assembler "vorr\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vorr\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

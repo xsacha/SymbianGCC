@@ -16,5 +16,5 @@ void test_vrev32Qs16 (void)
   out_int16x8_t = vrev32q_s16 (arg0_int16x8_t);
 }
 
-/* { dg-final { scan-assembler "vrev32\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrev32\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

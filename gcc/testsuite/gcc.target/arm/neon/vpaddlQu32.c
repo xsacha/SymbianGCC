@@ -16,5 +16,5 @@ void test_vpaddlQu32 (void)
   out_uint64x2_t = vpaddlq_u32 (arg0_uint32x4_t);
 }
 
-/* { dg-final { scan-assembler "vpaddl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vpaddl\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

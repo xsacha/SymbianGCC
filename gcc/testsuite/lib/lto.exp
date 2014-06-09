@@ -25,6 +25,9 @@ proc lto_prune_warns { text } {
     # Many tests that use visibility will still pass on platforms that don't support it.
     regsub -all "(^|\n)\[^\n\]*: warning: visibility attribute not supported in this configuration; ignored\[^\n\]*" $text "" text
 
+    # Allow mixed-language LTO tests to pass with make check-c++0x
+    regsub -all "(^|\n)\[^\n\]*: warning: command line option '-std=\[^\n\]*" $text "" text
+
     # And any stray location lines.
     regsub -all "(^|\n)\[^\n\]*: In function \[^\n\]*" $text "" text
     regsub -all "(^|\n)In file included from \[^\n\]*" $text "" text
@@ -63,14 +66,25 @@ proc lto_init { args } {
     # You can put this in the environment before site.exp is written or
     # add it to site.exp directly.
     if ![info exists LTO_OPTIONS] {
-	set LTO_OPTIONS [list	\
-	    {-O0 -flto -flto-partition=none } \
-	    {-O2 -flto -flto-partition=none } \
-	    {-O0 -flto -flto-partition=1to1 } \
-	    {-O2 -flto -flto-partition=1to1 } \
-	    {-O0 -flto}		\
-	    {-O2 -flto}		\
-	]
+        if [check_linker_plugin_available] {
+	  set LTO_OPTIONS [list	\
+	      {-O0 -flto -flto-partition=none -fuse-linker-plugin} \
+	      {-O2 -flto -flto-partition=none -fuse-linker-plugin -fno-fat-lto-objects } \
+	      {-O0 -flto -flto-partition=1to1 -fno-use-linker-plugin } \
+	      {-O2 -flto -flto-partition=1to1 -fno-use-linker-plugin } \
+	      {-O0 -flto -fuse-linker-plugin -fno-fat-lto-objects }	\
+	      {-O2 -flto -fuse-linker-plugin}	\
+	  ]
+ 	} else {
+	  set LTO_OPTIONS [list	\
+	      {-O0 -flto -flto-partition=none } \
+	      {-O2 -flto -flto-partition=none } \
+	      {-O0 -flto -flto-partition=1to1 } \
+	      {-O2 -flto -flto-partition=1to1 } \
+	      {-O0 -flto }	\
+	      {-O2 -flto}		\
+	  ]
+	}
     }
 }
 
@@ -418,13 +432,6 @@ proc lto-execute { src1 sid } {
 	set lto_option_list $LTO_OPTIONS
     }
 
-    # Check whether this test is supported for this target.
-    if { [lindex ${dg-do-what} 1 ] == "N" } {
-	unsupported "$src1"
-	verbose "$src1 not supported on this target, skipping it" 3
-	return
-    }
-
     # Set up the names of the other source files.
     set dir [file dirname $src1]
     set base [file rootname $src1]
@@ -478,11 +485,6 @@ proc lto-execute { src1 sid } {
 	set testcase [string range "$testcase" [string length "$tmpdir/"] end]
 	set testcase "tmpdir-$testcase"
     }
-    regsub "_0.*" $testcase "" testcase
-
-    # Set up the base name of executable files so they'll be unique.
-    regsub -all "\[./\]" $testcase "-" execbase
-
     # If we couldn't rip $srcdir out of `src1' then just do the best we can.
     # The point is to reduce the unnecessary noise in the logs.  Don't strip
     # out too much because different testcases with the same name can confuse
@@ -490,6 +492,18 @@ proc lto-execute { src1 sid } {
     if [string match "/*" $testcase] then {
         set testcase "[file tail [file dirname $src1]]/[file tail $src1]"
     }
+
+    # Check whether this test is supported for this target.
+    if { [lindex ${dg-do-what} 1 ] == "N" } {
+	unsupported "$testcase"
+	verbose "$testcase not supported on this target, skipping it" 3
+	return
+    }
+
+    regsub "_0.*" $testcase "" testcase
+
+    # Set up the base name of executable files so they'll be unique.
+    regsub -all "\[./\]" $testcase "-" execbase
 
     # Loop through all of the option lists used for this test.
     set count 0

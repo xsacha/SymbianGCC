@@ -16,5 +16,5 @@ void test_vrsqrteQf32 (void)
   out_float32x4_t = vrsqrteq_f32 (arg0_float32x4_t);
 }
 
-/* { dg-final { scan-assembler "vrsqrte\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrsqrte\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -18,5 +18,5 @@ void test_vmlss32 (void)
   out_int32x2_t = vmls_s32 (arg0_int32x2_t, arg1_int32x2_t, arg2_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vmls\.i32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmls\.i32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

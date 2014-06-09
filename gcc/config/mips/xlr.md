@@ -28,15 +28,10 @@
        (eq_attr "type" "slt"))
   "xlr_main_pipe")
 
-(define_insn_reservation "ir_xlr_alu_clz" 2
-  (and (eq_attr "cpu" "xlr") 
-       (eq_attr "type" "clz"))
-  "xlr_main_pipe")
-
 ;; Integer arithmetic instructions.
 (define_insn_reservation "ir_xlr_alu" 1
   (and (eq_attr "cpu" "xlr") 
-       (eq_attr "type" "move,arith,shift,logical,signext,const,unknown,multi,nop,trap"))
+       (eq_attr "type" "move,arith,shift,clz,logical,signext,const,unknown,multi,nop,trap"))
   "xlr_main_pipe")
 
 ;; Integer arithmetic instructions.

@@ -16,7 +16,7 @@ export LC_CTYPE=C
 
 GC=${GC:-gccgo}
 GL=${GL:-${GC-gccgo}}
-GOLIBS=
+GOLIBS=${GOLIBS:-}
 export GC GL GOLIBS
 
 NM=${NM:-nm}
@@ -30,8 +30,13 @@ gofiles=""
 pkgfiles=""
 loop=true
 keep=false
+pkgpath=
 prefix=
 dejagnu=no
+GOARCH=""
+timeout=240
+testname=""
+trace=false
 while $loop; do
 	case "x$1" in
         x--srcdir)
@@ -50,6 +55,15 @@ while $loop; do
 		;;
 	x--basedir=*)
 		basedir=`echo $1 | sed -e 's/^--basedir=//'`
+		shift
+		;;
+	x--pkgpath)
+		pkgpath=$2
+		shift
+		shift
+		;;
+	x--pkgpath=*)
+		pkgpath=`echo $1 | sed -e 's/^--pkgpath=//'`
 		shift
 		;;
 	x--prefix)
@@ -83,6 +97,37 @@ while $loop; do
 		dejagnu=`echo $1 | sed -e 's/^--dejagnu=//'`
 		shift
 		;;
+	x--goarch)
+		GOARCH=$2
+		shift
+		shift
+		;;
+	x--goarch=*)
+		GOARCH=`echo $1 | sed -e 's/^--goarch=//'`
+		shift
+		;;
+	x--timeout)
+		timeout=$2
+		shift
+		shift
+		;;
+	x--timeout=*)
+		timeout=`echo $1 | sed -e 's/^--timeout=//'`
+		shift
+		;;
+	x--testname)
+		testname=$2
+		shift
+		shift
+		;;
+	x--testname=*)
+		testname=`echo $1 | sed -e 's/^--testname=//'`
+		shift
+		;;
+	x--trace)
+		trace=true
+		shift
+		;;
 	x-*)
 		loop=false
 		;;
@@ -101,18 +146,20 @@ rm -rf $DIR
 mkdir $DIR
 
 cd $DIR
+mkdir test
+cd test
 
 if test $keep = false; then
-  trap "cd ..; rm -rf $DIR" 0 1 2 3 14 15
+  trap "cd ../..; rm -rf $DIR" 0 1 2 3 14 15
 else
-  trap "cd ..; echo Keeping $DIR" 0 1 2 3 14 15
+  trap "cd ../..; echo Keeping $DIR" 0 1 2 3 14 15
 fi
 
 case "$srcdir" in
 	/*)
 		;;
 	*)
-		srcdir="../$srcdir"
+		srcdir="../../$srcdir"
                 ;;
 esac
 
@@ -123,13 +170,20 @@ case "$basedir" in
 	/*)
 		;;
 	*)
-		basedir="../$basedir"
+		basedir="../../$basedir"
                 ;;
 esac
 
 # Link all the files/directories in srcdir into our working directory,
 # so that the tests do not have to refer to srcdir to find test data.
 ln -s $srcdir/* .
+
+# Some tests refer to a ../testdata directory.
+if test -e $srcdir/../testdata; then
+  rm -f ../testdata
+  abssrcdir=`cd $srcdir && pwd`
+  ln -s $abssrcdir/../testdata ../testdata
+fi
 
 # Copy the .go files because io/utils_test.go expects a regular file.
 case "x$gofiles" in
@@ -147,10 +201,10 @@ x)
 			b=`basename $f`
 			rm -f $b
 			cp $basedir/$f $b
-		    elif test -f ../$f; then
+		    elif test -f ../../$f; then
 			b=`basename $f`
 			rm -f $b
-			cp ../$f $b
+			cp ../../$f $b
 		    else
 			echo "file $f not found" 1>&2
 			exit 1
@@ -182,10 +236,10 @@ x)
 			b=`basename $f`
 			rm -f $b
 			cp $basedir/$f $b
-		    elif test -f ../$f; then
+		    elif test -f ../../$f; then
 			b=`basename $f`
 			rm -f $b
-			cp ../$f $b
+			cp ../../$f $b
 		    else
 			echo "file $f not found" 1>&2
 			exit 1
@@ -204,7 +258,7 @@ mkdir _test
 
 case "x$gofiles" in
 x)
-	gofiles=$(echo -n $(ls *_test.go 2>/dev/null))
+	gofiles=`ls *_test.go 2>/dev/null`
 esac
 
 case "x$gofiles" in
@@ -223,7 +277,7 @@ GC="$holdGC"
 
 case "x$pkgfiles" in
 x)
-	pkgbasefiles=$(echo -n $(ls *.go | grep -v _test.go 2>/dev/null))
+	pkgbasefiles=`ls *.go | grep -v _test.go 2>/dev/null`
 	;;
 *)
 	for f in $pkgfiles; do
@@ -241,8 +295,18 @@ esac
 
 # Split $gofiles into external gofiles (those in *_test packages)
 # and internal ones (those in the main package).
-xgofiles=$(echo $(grep '^package[ 	]' $gofiles /dev/null | grep ':.*_test' | sed 's/:.*//'))
-gofiles=$(echo $(grep '^package[ 	]' $gofiles /dev/null | grep -v ':.*_test' | sed 's/:.*//'))
+for f in $gofiles; do
+    package=`grep '^package[ 	]' $f | sed 1q`
+    case "$package" in
+    *_test)
+	xgofiles="$xgofiles $f"
+	;;
+    *)
+	ngofiles="$ngofiles $f"
+	;;
+    esac
+done
+gofiles=$ngofiles
 
 # External $O file
 xofile=""
@@ -256,31 +320,64 @@ set -e
 
 package=`echo ${srcdir} | sed -e 's|^.*libgo/go/||'`
 
+pkgpatharg=
+xpkgpatharg=
 prefixarg=
-if test -n "$prefix"; then
+if test -n "$pkgpath"; then
+	pkgpatharg="-fgo-pkgpath=$pkgpath"
+	xpkgpatharg="-fgo-pkgpath=${pkgpath}_test"
+elif test -n "$prefix"; then
 	prefixarg="-fgo-prefix=$prefix"
 fi
 
-$GC -g $prefixarg -c -I . -o _gotest_.o $gofiles $pkgbasefiles
+if test "$trace" = "true"; then
+  echo $GC -g $pkgpatharg $prefixarg -c -I . -fno-toplevel-reorder -o _gotest_.o $gofiles $pkgbasefiles
+fi
+$GC -g $pkgpatharg $prefixarg -c -I . -fno-toplevel-reorder -o _gotest_.o $gofiles $pkgbasefiles
+
 if $havex; then
 	mkdir -p `dirname $package`
 	cp _gotest_.o `dirname $package`/lib`basename $package`.a
-	$GC -g -c -I . -o $xofile $xgofiles
+	if test "$trace" = "true"; then
+	    echo $GC -g $xpkgpatharg -c -I . -fno-toplevel-reorder -o $xofile $xgofiles
+	fi
+	$GC -g $xpkgpatharg -c -I . -fno-toplevel-reorder -o $xofile $xgofiles
 fi
 
 # They all compile; now generate the code to call them.
+
+localname() {
+	# The package main has been renamed to __main__ when imported.
+	# Adjust its uses.
+	echo $1 | sed 's/^main\./__main__./'
+}
+
 {
+	text="T"
+	case "$GOARCH" in
+	ppc64) text="D" ;;
+	esac
+
+	symtogo='sed -e s/_test/XXXtest/ -e s/.*_\([^_]*\.\)/\1/ -e s/XXXtest/_test/'
+
 	# test functions are named TestFoo
 	# the grep -v eliminates methods and other special names
 	# that have multiple dots.
 	pattern='Test([^a-z].*)?'
 	# The -p option tells GNU nm not to sort.
 	# The -v option tells Solaris nm to sort by value.
-	tests=$($NM -p -v _gotest_.o $xofile | egrep ' T .*\.'$pattern'$' | grep -v '\..*\..*\.' | sed 's/.* //' | sed 's/.*\.\(.*\.\)/\1/')
+	tests=$($NM -p -v _gotest_.o $xofile | egrep " $text .*\."$pattern'$' | grep -v '\..*\..*\.' | fgrep -v '$' | fgrep -v ' __go_' | sed 's/.* //' | $symtogo)
 	if [ "x$tests" = x ]; then
 		echo 'gotest: warning: no tests matching '$pattern in _gotest_.o $xofile 1>&2
 		exit 2
 	fi
+	# benchmarks are named BenchmarkFoo.
+	pattern='Benchmark([^a-z].*)?'
+	benchmarks=$($NM -p -v _gotest_.o $xofile | egrep " $test .*\."$pattern'$' | grep -v '\..*\..*\.' | fgrep -v '$' | fgrep -v ' __go_' | sed 's/.* //' | $symtogo)
+
+	# examples are named ExampleFoo
+	pattern='Example([^a-z].*)?'
+	examples=$($NM -p -v _gotest_.o $xofile | egrep " $text .*\."$pattern'$' | grep -v '\..*\..*\.' | fgrep -v '$' | fgrep -v ' __go_' | sed 's/.* //' | $symtogo)
 
 	# package spec
 	echo 'package main'
@@ -292,49 +389,112 @@ fi
 	if $havex; then
 		echo 'import "./_xtest_"'
 	fi
-	if [ $package != "testing" ]; then
-		echo 'import "testing"'
-		echo 'import __regexp__ "regexp"' # rename in case tested package is called regexp
-	fi
+	echo 'import "testing"'
+	echo 'import __regexp__ "regexp"' # rename in case tested package is called regexp
 	# test array
 	echo
 	echo 'var tests = []testing.InternalTest {'
 	for i in $tests
 	do
-		echo '	{ "'$i'", '$i' },'
+		j=$(localname $i)
+		echo '	{"'$i'", '$j'},'
 	done
 	echo '}'
-	# body
-	echo
-	echo 'func main() {'
-	echo '	testing.Main(__regexp__.MatchString, tests)'
+
+	# benchmark array
+	# The comment makes the multiline declaration
+	# gofmt-safe even when there are no benchmarks.
+	echo 'var benchmarks = []testing.InternalBenchmark{ //'
+	for i in $benchmarks
+	do
+		j=$(localname $i)
+		echo '	{"'$i'", '$j'},'
+	done
 	echo '}'
+
+	# examples array
+	echo 'var examples = []testing.InternalExample{ //'
+	# This doesn't work because we don't pick up the output.
+	#for i in $examples
+	#do
+	#	j=$(localname $i)
+	#	echo '	{"'$i'", '$j', ""},'
+	#done
+	echo '}'
+
+	# body
+	echo \
+'
+var matchPat string
+var matchRe *__regexp__.Regexp
+
+func matchString(pat, str string) (result bool, err error) {
+	if matchRe == nil || matchPat != pat {
+		matchPat = pat
+		matchRe, err = __regexp__.Compile(matchPat)
+		if err != nil {
+			return
+		}
+	}
+	return matchRe.MatchString(str), nil
+}
+
+func main() {
+	testing.Main(matchString, tests, benchmarks, examples)
+}'
 }>_testmain.go
 
 case "x$dejagnu" in
 xno)
+	if test "$trace" = "true"; then
+	    echo ${GC} -g -c _testmain.go
+	fi
 	${GC} -g -c _testmain.go
+
+	if test "$trace" = "true"; then
+	    echo ${GL} *.o ${GOLIBS}
+	fi
 	${GL} *.o ${GOLIBS}
-	./a.out "$@"
+
+	if test "$trace" = "true"; then
+	    echo ./a.out -test.short -test.timeout=${timeout}s "$@"
+	fi
+	./a.out -test.short -test.timeout=${timeout}s "$@" &
+	pid=$!
+	(sleep `expr $timeout + 10`
+	    echo > gotest-timeout
+	    echo "timed out in gotest" 1>&2
+	    kill -9 $pid) &
+	alarmpid=$!
+	wait $pid
+	status=$?
+	if ! test -f gotest-timeout; then
+	    kill $alarmpid
+	fi
+	exit $status
 	;;
 xyes)
-	rm -rf ../testsuite/*.o
+	rm -rf ../../testsuite/*.o
 	files=`echo *`
 	for f in $files; do
 		if test "$f" = "_obj" || test "$f" = "_test"; then
 			continue
 		fi
-		rm -rf ../testsuite/$f
+		rm -rf ../../testsuite/$f
 		if test -f $f; then
-			cp $f ../testsuite/
+			cp $f ../../testsuite/
 		else
-			ln -s ../$DIR/$f ../testsuite/
+			ln -s ../$DIR/test/$f ../../testsuite/
 		fi
 	done
-	cd ../testsuite
+	cd ../../testsuite
 	rm -rf _obj _test
 	mkdir _obj _test
-	$MAKE check RUNTESTFLAGS="$RUNTESTFLAGS GOTEST_TMPDIR=$DIR"
+	if test "$testname" != ""; then
+	    GOTESTNAME="$testname"
+	    export GOTESTNAME
+	fi
+	$MAKE check RUNTESTFLAGS="$RUNTESTFLAGS GOTEST_TMPDIR=$DIR/test"
 	# Useful when using make check-target-libgo
 	cat libgo.log >> libgo-all.log
 	cat libgo.sum >> libgo-all.sum

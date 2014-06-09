@@ -16,5 +16,5 @@ void test_vshll_nu16 (void)
   out_uint32x4_t = vshll_n_u16 (arg0_uint16x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vshll\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vshll\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

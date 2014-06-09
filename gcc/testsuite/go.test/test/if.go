@@ -45,18 +45,6 @@ func main() {
 	assertequal(count, 0, "if false one")
 
 	count = 0
-	if {
-		count = count + 1
-	}
-	assertequal(count, 1, "if empty")
-
-	count = 0
-	if one := 1; true {
-		count = count + one
-	}
-	assertequal(count, 1, "if empty one")
-
-	count = 0
 	if i5 < i7 {
 		count = count + 1
 	}
@@ -65,25 +53,28 @@ func main() {
 	count = 0
 	if true {
 		count = count + 1
-	} else
+	} else {
 		count = count - 1
+	}
 	assertequal(count, 1, "if else true")
 
 	count = 0
 	if false {
 		count = count + 1
-	} else
+	} else {
 		count = count - 1
+	}
 	assertequal(count, -1, "if else false")
 
 	count = 0
-	if t:=1; false {
+	if t := 1; false {
 		count = count + 1
 		_ = t
 		t := 7
 		_ = t
-	} else
+	} else {
 		count = count - t
+	}
 	assertequal(count, -1, "if else false var")
 
 	count = 0
@@ -92,8 +83,9 @@ func main() {
 		count = count + 1
 		t := 7
 		_ = t
-	} else
+	} else {
 		count = count - t
+	}
 	_ = t
 	assertequal(count, -1, "if else false var outside")
 }

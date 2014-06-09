@@ -127,9 +127,9 @@
   "A constant that cannot be loaded using @code{lui}, @code{addiu}
    or @code{ori}."
   (and (match_code "const_int")
-       (match_test "!SMALL_OPERAND (ival)")
-       (match_test "!SMALL_OPERAND_UNSIGNED (ival)")
-       (match_test "!LUI_OPERAND (ival)")))
+       (not (match_test "SMALL_OPERAND (ival)"))
+       (not (match_test "SMALL_OPERAND_UNSIGNED (ival)"))
+       (not (match_test "LUI_OPERAND (ival)"))))
 
 (define_constraint "N"
   "A constant in the range -65535 to -1 (inclusive)."
@@ -162,7 +162,7 @@
 (define_memory_constraint "R"
   "An address that can be used in a non-macro load or store."
   (and (match_code "mem")
-       (match_test "mips_address_insns (XEXP (op, 0), mode, false, false) == 1")))
+       (match_test "mips_address_insns (XEXP (op, 0), mode, false) == 1")))
 
 (define_constraint "S"
   "@internal
@@ -184,7 +184,7 @@
    using @code{la}."
   (and (match_operand 0 "move_operand")
        (match_test "CONSTANT_P (op)")
-       (match_test "!mips_dangerous_for_la25_p (op)")))
+       (not (match_test "mips_dangerous_for_la25_p (op)"))))
 
 (define_memory_constraint "W"
   "@internal
@@ -194,7 +194,7 @@
    constant-pool references."
   (and (match_code "mem")
        (match_operand 0 "memory_operand")
-       (ior (match_test "!TARGET_MIPS16")
+       (ior (not (match_test "TARGET_MIPS16"))
 	    (and (not (match_operand 0 "stack_operand"))
 		 (not (match_test "CONSTANT_P (XEXP (op, 0))"))))))
 
@@ -216,16 +216,6 @@
   (and (match_code "const_int")
        (match_test "IMM10_OPERAND (ival)")))
 
-(define_memory_constraint "YC"
-  "For MIPS, it is the same as the constraint R.  For microMIPS, it matches an address within a 12-bit offset that can be used in ll, sc, etc."
-  (and (match_code "mem")
-       (match_test "mips_address_insns (XEXP (op, 0), mode, false, true) == 1")))
-
-(define_address_constraint "YD"
-  "@internal
-   For MIPS, it is the same as the constraint p.  For microMIPS, it matches a 12-bit offset address."
-  (match_test "mips_address_insns (op, mode, false, true) == 1"))
-
 (define_constraint "Yb"
    "@internal"
    (match_operand 0 "qi_mask_operand"))
@@ -241,8 +231,3 @@
 (define_constraint "Yx"
    "@internal"
    (match_operand 0 "low_bitmask_operand"))
-
-(define_memory_constraint "YE"
-  "A single reg memory operand."
-  (and (match_code "mem")
-       (match_test "REG_P (XEXP (op, 0))")))

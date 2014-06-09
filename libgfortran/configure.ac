@@ -51,7 +51,10 @@ AC_SUBST(onestep)
 # Do not delete or change the following two lines.  For why, see
 # http://gcc.gnu.org/ml/libstdc++/2003-07/msg00451.html
 AC_CANONICAL_SYSTEM
+ACX_NONCANONICAL_TARGET
+
 target_alias=${target_alias-$host_alias}
+AC_SUBST(target_alias)
 
 # Sets up automake.  Must come after AC_CANONICAL_SYSTEM.  Each of the
 # following is magically included in AUTOMAKE_OPTIONS in each Makefile.am.
@@ -117,6 +120,7 @@ AC_SUBST(toolexeclibdir)
 # Create a spec file, so that compile/link tests don't fail
 test -f libgfortran.spec || touch libgfortran.spec
 
+AC_LANG_C
 # Check the compiler.
 # The same as in boehm-gc and libstdc++. Have to borrow it from there.
 # We must force CC to /not/ be precious variables; otherwise
@@ -127,6 +131,10 @@ m4_rename([_AC_ARG_VAR_PRECIOUS],[real_PRECIOUS])
 m4_define([_AC_ARG_VAR_PRECIOUS],[])
 AC_PROG_CC
 m4_rename_force([real_PRECIOUS],[_AC_ARG_VAR_PRECIOUS])
+
+AC_SUBST(CFLAGS)
+
+AM_PROG_CC_C_O
 
 # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
 if test "x$GCC" = "xyes"; then
@@ -149,7 +157,7 @@ AS_HELP_STRING([--disable-symvers],
   [disable symbol versioning for libgfortran]),
 gfortran_use_symver=$enableval,
 gfortran_use_symver=yes)
-if test "x$gfortran_use_symver" = xyes; then
+if test "x$gfortran_use_symver" != xno; then
   save_LDFLAGS="$LDFLAGS"
   LDFLAGS="$LDFLAGS -fPIC -shared -Wl,--version-script,./conftest.map"
   cat > conftest.map <<EOF
@@ -157,7 +165,7 @@ FOO_1.0 {
   global: *foo*; bar; local: *;
 };
 EOF
-  AC_TRY_LINK([int foo;],[],[gfortran_use_symver=gnu],[gfortran_use_symver=no])
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[int foo;]],[[]])],[gfortran_use_symver=gnu],[gfortran_use_symver=no])
   if test x$gfortran_use_symver = xno; then
     case "$target_os" in
       solaris2*)
@@ -169,7 +177,7 @@ FOO_1.0 {
   global: foo; local: *;
 };
 EOF
-        AC_TRY_LINK([int foo;],[],[gfortran_use_symver=sun],[gfortran_use_symver=no])
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[int foo;]],[[]])],[gfortran_use_symver=sun],[gfortran_use_symver=no])
         ;;
     esac
   fi
@@ -188,7 +196,7 @@ ac_save_CFLAGS="$CFLAGS"
 # Check for -ffunction-sections -fdata-sections
 AC_MSG_CHECKING([for gcc that supports -ffunction-sections -fdata-sections])
 CFLAGS='-Werror -ffunction-sections -fdata-sections'
-AC_TRY_COMPILE(, [int foo;], [ac_fdsections=yes], [ac_fdsections=no])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int foo;]])], [ac_fdsections=yes], [ac_fdsections=no])
 if test "$ac_test_CFLAGS" = set; then
   CFLAGS="$ac_save_CFLAGS"
 else
@@ -236,44 +244,29 @@ AC_SUBST(extra_ldflags_libgfortran)
 LIBGFOR_WORKING_GFORTRAN
 
 AC_SYS_LARGEFILE
-AC_TYPE_OFF_T
 
-# check header files
-AC_STDC_HEADERS
-AC_HEADER_TIME
-AC_HAVE_HEADERS(stdio.h stdlib.h string.h unistd.h signal.h stdarg.h)
-AC_CHECK_HEADERS(time.h sys/time.h sys/times.h sys/resource.h)
-AC_CHECK_HEADERS(sys/types.h sys/stat.h sys/wait.h floatingpoint.h ieeefp.h)
-AC_CHECK_HEADERS(fenv.h fptrap.h float.h execinfo.h pwd.h)
-AC_CHECK_HEADER([complex.h],[AC_DEFINE([HAVE_COMPLEX_H], [1], [complex.h exists])])
+# Types
+AC_TYPE_OFF_T
+AC_TYPE_INTPTR_T
+AC_TYPE_UINTPTR_T
+AC_CHECK_TYPES([ptrdiff_t])
+
+# check header files (we assume C89 is available, so don't check for that)
+AC_CHECK_HEADERS_ONCE(unistd.h sys/time.h sys/times.h sys/resource.h \
+sys/types.h sys/stat.h sys/wait.h floatingpoint.h ieeefp.h fenv.h fptrap.h \
+pwd.h complex.h) 
+
 GCC_HEADER_STDINT(gstdint.h)
 
-AC_CHECK_MEMBERS([struct stat.st_blksize])
-AC_CHECK_MEMBERS([struct stat.st_blocks])
-AC_CHECK_MEMBERS([struct stat.st_rdev])
+AC_CHECK_MEMBERS([struct stat.st_blksize, struct stat.st_blocks, struct stat.st_rdev])
 
 # Check for library functions.
-AC_CHECK_FUNCS(getrusage times mkstemp strtof strtold snprintf ftruncate chsize)
-AC_CHECK_FUNCS(chdir strerror getlogin gethostname kill link symlink perror)
-AC_CHECK_FUNCS(sleep time ttyname signal alarm clock access fork execl)
-AC_CHECK_FUNCS(wait setmode execvp pipe dup2 close fdopen strcasestr getrlimit)
-AC_CHECK_FUNCS(gettimeofday stat fstat lstat getpwuid vsnprintf dup getcwd)
-AC_CHECK_FUNCS(localtime_r gmtime_r strerror_r getpwuid_r ttyname_r)
-AC_CHECK_FUNCS(clock_gettime strftime)
-
-# Check for glibc backtrace functions
-AC_CHECK_FUNCS(backtrace backtrace_symbols)
-
-# Check for types
-AC_CHECK_TYPES([intptr_t])
-AC_CHECK_TYPES([uintptr_t])
-
-# Check libc for getgid, getpid, getuid
-AC_CHECK_LIB([c],[getgid],[AC_DEFINE([HAVE_GETGID],[1],[libc includes getgid])])
-AC_CHECK_LIB([c],[getpid],[AC_DEFINE([HAVE_GETPID],[1],[libc includes getpid])])
-AC_CHECK_LIB([c],[getppid],[AC_DEFINE([HAVE_GETPPID],[1],[libc includes getppid])])
-AC_CHECK_LIB([c],[getuid],[AC_DEFINE([HAVE_GETUID],[1],[libc includes getuid])])
-AC_CHECK_LIB([c],[geteuid],[AC_DEFINE([HAVE_GETEUID],[1],[libc includes geteuid])])
+AC_CHECK_FUNCS_ONCE(getrusage times mkstemp strtof strtold snprintf \
+ftruncate chsize chdir getlogin gethostname kill link symlink sleep ttyname \
+alarm access fork execl wait setmode execve pipe dup2 close \
+strcasestr getrlimit gettimeofday stat fstat lstat getpwuid vsnprintf dup \
+getcwd localtime_r gmtime_r strerror_r getpwuid_r ttyname_r clock_gettime \
+readlink getgid getpid getppid getuid geteuid umask)
 
 # Check for C99 (and other IEEE) math functions
 AC_CHECK_LIB([m],[acosf],[AC_DEFINE([HAVE_ACOSF],[1],[libm includes acosf])])
@@ -549,9 +542,6 @@ LIBGFOR_CHECK_ATTRIBUTE_ALIAS
 # Check out sync builtins support.
 LIBGFOR_CHECK_SYNC_FETCH_AND_ADD
 
-# Check out thread support.
-LIBGFOR_CHECK_GTHR_DEFAULT
-
 # Check out #pragma weak.
 LIBGFOR_GTHREAD_WEAK
 
@@ -560,6 +550,9 @@ LIBGFOR_CHECK_UNLINK_OPEN_FILE
 
 # Check whether line terminator is LF or CRLF
 LIBGFOR_CHECK_CRLF
+
+# Check whether we have _Unwind_GetIPInfo for backtrace
+GCC_CHECK_UNWIND_GETIPINFO
 
 AC_CACHE_SAVE
 

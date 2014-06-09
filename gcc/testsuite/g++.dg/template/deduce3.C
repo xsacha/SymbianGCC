@@ -1,11 +1,11 @@
 template <typename T>
-void f(int, T (*)() = 0);	// { dg-message "note" }
+void f(int, T (*)() = 0);	// { dg-message "note" "note" }
 
 void g() {
   typedef int A[2];
   f<A>(0); // { dg-error "" }
-  // { dg-message "candidate" "candidate note" { target *-*-* } 6 }
+  // { dg-error "returning an array" "returning an array" { target *-*-* } 2 }
   typedef void F();
   f<F>(0); // { dg-error "" }
-  // { dg-message "candidate" "candidate note" { target *-*-* } 9 }
+  // { dg-error "returning a function" "returning a function" { target *-*-* } 2 }
 }

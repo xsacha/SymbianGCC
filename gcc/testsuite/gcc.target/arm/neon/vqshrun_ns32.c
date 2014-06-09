@@ -16,5 +16,5 @@ void test_vqshrun_ns32 (void)
   out_uint16x4_t = vqshrun_n_s32 (arg0_int32x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vqshrun\.s32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqshrun\.s32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -20,4 +20,4 @@ decltype(T{create<Args>()...}, char()) f(int);
 template<class, class...>
 char (&f(...))[2];
 
-static_assert(sizeof(f<int, void>(0)) != 1, "Error"); // { dg-bogus "void value" "" { xfail *-*-* } }
+static_assert(sizeof(f<int, void>(0)) != 1, "Error"); // #

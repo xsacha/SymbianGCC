@@ -17,5 +17,5 @@ void test_vqshlQs32 (void)
   out_int32x4_t = vqshlq_s32 (arg0_int32x4_t, arg1_int32x4_t);
 }
 
-/* { dg-final { scan-assembler "vqshl\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqshl\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

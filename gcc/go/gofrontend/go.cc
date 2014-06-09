@@ -10,12 +10,8 @@
 
 #include "lex.h"
 #include "parse.h"
+#include "backend.h"
 #include "gogo.h"
-
-// The unique prefix to use for exported symbols.  This is set during
-// option processing.
-
-static std::string unique_prefix;
 
 // The data structures we build to represent the file.
 static Gogo* gogo;
@@ -24,32 +20,23 @@ static Gogo* gogo;
 
 GO_EXTERN_C
 void
-go_create_gogo(int int_type_size, int pointer_size)
+go_create_gogo(int int_type_size, int pointer_size, const char *pkgpath,
+	       const char *prefix, const char *relative_import_path)
 {
-  gcc_assert(::gogo == NULL);
-  ::gogo = new Gogo(int_type_size, pointer_size);
-  if (!unique_prefix.empty())
-    ::gogo->set_unique_prefix(unique_prefix);
-}
+  go_assert(::gogo == NULL);
+  Linemap* linemap = go_get_linemap();
+  ::gogo = new Gogo(go_get_backend(), linemap, int_type_size, pointer_size);
 
-// Set the unique prefix we use for exported symbols.
+  if (pkgpath != NULL)
+    ::gogo->set_pkgpath(pkgpath);
+  else if (prefix != NULL)
+    ::gogo->set_prefix(prefix);
 
-GO_EXTERN_C
-void
-go_set_prefix(const char* arg)
-{
-  unique_prefix = arg;
-  for (size_t i = 0; i < unique_prefix.length(); ++i)
-    {
-      char c = unique_prefix[i];
-      if ((c >= 'a' && c <= 'z')
-	  || (c >= 'A' && c <= 'Z')
-	  || (c >= '0' && c <= '9')
-	  || c == '_')
-	;
-      else
-	unique_prefix[i] = '_';
-    }
+  if (relative_import_path != NULL)
+    ::gogo->set_relative_import_path(relative_import_path);
+
+  // FIXME: This should be in the gcc dependent code.
+  ::gogo->define_builtin_function_trees();
 }
 
 // Parse the input files.
@@ -59,7 +46,8 @@ void
 go_parse_input_files(const char** filenames, unsigned int filename_count,
 		     bool only_check_syntax, bool require_return_statement)
 {
-  gcc_assert(filename_count > 0);
+  go_assert(filename_count > 0);
+
   for (unsigned int i = 0; i < filename_count; ++i)
     {
       if (i > 0)
@@ -76,7 +64,7 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
 	    fatal_error("cannot open %s: %m", filename);
 	}
 
-      Lex lexer(filename, file);
+      Lex lexer(filename, file, ::gogo->linemap());
 
       Parse parse(&lexer, ::gogo);
       parse.program();
@@ -84,6 +72,8 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
       if (strcmp(filename, "-") != 0)
 	fclose(file);
     }
+
+  ::gogo->linemap()->stop();
 
   ::gogo->clear_file_scope();
 
@@ -97,6 +87,9 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
   // Now that we have seen all the names, lower the parse tree into a
   // form which is easier to use.
   ::gogo->lower_parse_tree();
+
+  // Write out queued up functions for hash and comparison of types.
+  ::gogo->write_specific_type_functions();
 
   // Now that we have seen all the names, verify that types are
   // correct.
@@ -129,6 +122,9 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
 
   // Convert complicated go and defer statements into simpler ones.
   ::gogo->simplify_thunk_statements();
+  
+  // Dump ast, use filename[0] as the base name
+  ::gogo->dump_ast(filenames[0]);
 }
 
 // Write out globals.

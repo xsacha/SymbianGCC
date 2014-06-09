@@ -59,7 +59,7 @@ lang_identifier {
 /* The resulting tree type.  */
 
 union GTY((desc ("TREE_CODE (&%h.generic) == IDENTIFIER_NODE"),
-     chain_next ("(union lang_tree_node *)TREE_CHAIN (&%h.generic)")))
+     chain_next ("CODE_CONTAINS_STRUCT (TREE_CODE (&%h.generic), TS_COMMON) ? ((union lang_tree_node *) TREE_CHAIN (&%h.generic)) : NULL")))
 
 lang_tree_node {
   union tree_node GTY((tag ("0"),
@@ -91,7 +91,7 @@ static void gfc_finish (void);
 static void gfc_write_global_declarations (void);
 static void gfc_print_identifier (FILE *, tree, int);
 void do_function_end (void);
-int global_bindings_p (void);
+bool global_bindings_p (void);
 static void clear_binding_stack (void);
 static void gfc_be_parse_file (void);
 static alias_set_type gfc_get_alias_set (tree);
@@ -373,12 +373,12 @@ static GTY(()) struct binding_level *global_binding_level;
 static struct binding_level clear_binding_level = { NULL, NULL, NULL };
 
 
-/* Return nonzero if we are currently in the global binding level.  */
+/* Return true if we are in the global binding level.  */
 
-int
+bool
 global_bindings_p (void)
 {
-  return current_binding_level == global_binding_level ? -1 : 0;
+  return current_binding_level == global_binding_level;
 }
 
 tree
@@ -444,7 +444,7 @@ poplevel (int keep, int reverse, int functionbody)
 
   /* Record the BLOCK node just built as the subblock its enclosing scope.  */
   for (subblock_node = subblock_chain; subblock_node;
-       subblock_node = TREE_CHAIN (subblock_node))
+       subblock_node = BLOCK_CHAIN (subblock_node))
     BLOCK_SUPERCONTEXT (subblock_node) = block_node;
 
   /* Clear out the meanings of the local variables of this level.  */
@@ -475,7 +475,7 @@ poplevel (int keep, int reverse, int functionbody)
   else if (block_node)
     {
       current_binding_level->blocks
-	= chainon (current_binding_level->blocks, block_node);
+	= block_chainon (current_binding_level->blocks, block_node);
     }
 
   /* If we did not make a block for the level just exited, any blocks made for
@@ -484,7 +484,7 @@ poplevel (int keep, int reverse, int functionbody)
      else.  */
   else if (subblock_chain)
     current_binding_level->blocks
-      = chainon (current_binding_level->blocks, subblock_chain);
+      = block_chainon (current_binding_level->blocks, subblock_chain);
   if (block_node)
     TREE_USED (block_node) = 1;
 
@@ -588,17 +588,14 @@ gfc_init_decl_processing (void)
   /* Build common tree nodes. char_type_node is unsigned because we
      only use it for actual characters, not for INTEGER(1). Also, we
      want double_type_node to actually have double precision.  */
-  build_common_tree_nodes (false);
+  build_common_tree_nodes (false, false);
 
-  size_type_node = gfc_build_uint_type (POINTER_SIZE);
-  set_sizetype (size_type_node);
-
-  build_common_tree_nodes_2 (0);
   void_list_node = build_tree_list (NULL_TREE, void_type_node);
 
   /* Set up F95 type nodes.  */
   gfc_init_kinds ();
   gfc_init_types ();
+  gfc_init_c_interop_kinds ();
 }
 
 
@@ -642,7 +639,7 @@ gfc_builtin_function (tree decl)
 #define ATTR_CONST_NOTHROW_LIST		(ECF_NOTHROW | ECF_CONST)
 
 static void
-gfc_define_builtin (const char *name, tree type, int code,
+gfc_define_builtin (const char *name, tree type, enum built_in_function code,
 		    const char *library_name, int attr)
 {
   tree decl;
@@ -657,8 +654,7 @@ gfc_define_builtin (const char *name, tree type, int code,
     DECL_ATTRIBUTES (decl) = tree_cons (get_identifier ("leaf"),
 					NULL, DECL_ATTRIBUTES (decl));
 
-  built_in_decls[code] = decl;
-  implicit_built_in_decls[code] = decl;
+  set_builtin_decl (code, decl, true);
 }
 
 
@@ -1009,7 +1005,13 @@ gfc_init_builtin_functions (void)
                                     size_type_node, NULL_TREE);
   gfc_define_builtin ("__builtin_malloc", ftype, BUILT_IN_MALLOC,
 		      "malloc", ATTR_NOTHROW_LEAF_LIST);
-  DECL_IS_MALLOC (built_in_decls[BUILT_IN_MALLOC]) = 1;
+  DECL_IS_MALLOC (builtin_decl_explicit (BUILT_IN_MALLOC)) = 1;
+
+  ftype = build_function_type_list (pvoid_type_node, size_type_node,
+				    size_type_node, NULL_TREE);
+  gfc_define_builtin ("__builtin_calloc", ftype, BUILT_IN_CALLOC,
+		      "calloc", ATTR_NOTHROW_LEAF_LIST);
+  DECL_IS_MALLOC (builtin_decl_explicit (BUILT_IN_CALLOC)) = 1;
 
   ftype = build_function_type_list (pvoid_type_node,
                                     size_type_node, pvoid_type_node,
@@ -1125,7 +1127,7 @@ gfc_init_builtin_functions (void)
 
   gfc_define_builtin ("__builtin_trap", builtin_types[BT_FN_VOID],
 		      BUILT_IN_TRAP, NULL, ATTR_NOTHROW_LEAF_LIST);
-  TREE_THIS_VOLATILE (built_in_decls[BUILT_IN_TRAP]) = 1;
+  TREE_THIS_VOLATILE (builtin_decl_explicit (BUILT_IN_TRAP)) = 1;
 
   gfc_define_builtin ("__emutls_get_address",
 		      builtin_types[BT_FN_PTR_PTR],

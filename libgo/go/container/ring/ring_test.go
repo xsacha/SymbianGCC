@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-
 // For debugging - keep around.
 func dump(r *Ring) {
 	if r == nil {
@@ -24,7 +23,6 @@ func dump(r *Ring) {
 	fmt.Println()
 }
 
-
 func verify(t *testing.T, r *Ring, N int, sum int) {
 	// Len
 	n := r.Len()
@@ -35,12 +33,12 @@ func verify(t *testing.T, r *Ring, N int, sum int) {
 	// iteration
 	n = 0
 	s := 0
-	for p := range r.Iter() {
+	r.Do(func(p interface{}) {
 		n++
 		if p != nil {
 			s += p.(int)
 		}
-	}
+	})
 	if n != N {
 		t.Errorf("number of forward iterations == %d; expected %d", n, N)
 	}
@@ -96,7 +94,6 @@ func verify(t *testing.T, r *Ring, N int, sum int) {
 	}
 }
 
-
 func TestCornerCases(t *testing.T) {
 	var (
 		r0 *Ring
@@ -118,7 +115,6 @@ func TestCornerCases(t *testing.T) {
 	verify(t, &r1, 1, 0)
 }
 
-
 func makeN(n int) *Ring {
 	r := New(n)
 	for i := 1; i <= n; i++ {
@@ -128,18 +124,7 @@ func makeN(n int) *Ring {
 	return r
 }
 
-
-func sum(r *Ring) int {
-	s := 0
-	for p := range r.Iter() {
-		s += p.(int)
-	}
-	return s
-}
-
-
 func sumN(n int) int { return (n*n + n) / 2 }
-
 
 func TestNew(t *testing.T) {
 	for i := 0; i < 10; i++ {
@@ -151,7 +136,6 @@ func TestNew(t *testing.T) {
 		verify(t, r, i, sumN(i))
 	}
 }
-
 
 func TestLink1(t *testing.T) {
 	r1a := makeN(1)
@@ -173,7 +157,6 @@ func TestLink1(t *testing.T) {
 	verify(t, r2b, 1, 0)
 }
 
-
 func TestLink2(t *testing.T) {
 	var r0 *Ring
 	r1a := &Ring{Value: 42}
@@ -193,7 +176,6 @@ func TestLink2(t *testing.T) {
 	verify(t, r10, 12, sumN(10)+42+77)
 }
 
-
 func TestLink3(t *testing.T) {
 	var r Ring
 	n := 1
@@ -202,7 +184,6 @@ func TestLink3(t *testing.T) {
 		verify(t, r.Link(New(i)), n, -1)
 	}
 }
-
 
 func TestUnlink(t *testing.T) {
 	r10 := makeN(10)
@@ -224,7 +205,6 @@ func TestUnlink(t *testing.T) {
 	verify(t, r9, 9, sum10-2)
 	verify(t, r10, 9, sum10-2)
 }
-
 
 func TestLinkUnlink(t *testing.T) {
 	for i := 1; i < 4; i++ {

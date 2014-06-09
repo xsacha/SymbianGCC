@@ -30,7 +30,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 static void
 cshift0 (gfc_array_char * ret, const gfc_array_char * array,
-	 ssize_t shift, int which, index_type size)
+	 ptrdiff_t shift, int which, index_type size)
 {
   /* r.* indicates the return array.  */
   index_type rstride[GFC_MAX_DIMENSIONS];
@@ -79,10 +79,8 @@ cshift0 (gfc_array_char * ret, const gfc_array_char * array,
 	  GFC_DIMENSION_SET(ret->dim[i], 0, ub, str);
         }
 
-      if (arraysize > 0)
-	ret->data = internal_malloc_size (size * arraysize);
-      else
-	ret->data = internal_malloc_size (1);
+      /* internal_malloc_size allocates a single byte for zero size.  */
+      ret->data = internal_malloc_size (size * arraysize);
     }
   else if (unlikely (compile_options.bounds_check))
     {
@@ -328,7 +326,7 @@ cshift0 (gfc_array_char * ret, const gfc_array_char * array,
   rptr = ret->data;
   sptr = array->data;
 
-  shift = len == 0 ? 0 : shift % (ssize_t)len;
+  shift = len == 0 ? 0 : shift % (ptrdiff_t)len;
   if (shift < 0)
     shift += len;
 

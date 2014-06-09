@@ -25,14 +25,5 @@
 #include "unwind-cxx.h"
 
 /* The current installed user handler.  */
-#ifdef __symbian__
-/* SymbianOS does not allow initialized data, so use a constructor function.  */
-std::unexpected_handler __cxxabiv1::__unexpected_handler;
-
-void __cxxabiv1::__init_unexpected_handler (void)
-{
-  __cxxabiv1::__unexpected_handler = std::terminate;
-}
-#else /* !__symbian__ */
 std::unexpected_handler __cxxabiv1::__unexpected_handler = std::terminate;
-#endif
+

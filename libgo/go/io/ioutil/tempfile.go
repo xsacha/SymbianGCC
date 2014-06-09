@@ -6,7 +6,9 @@ package ioutil
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
+	"time"
 )
 
 // Random number state, accessed without lock; racy but harmless.
@@ -16,8 +18,7 @@ import (
 var rand uint32
 
 func reseed() uint32 {
-	sec, nsec, _ := os.Time()
-	return uint32(sec*1e9 + nsec + int64(os.Getpid()))
+	return uint32(time.Now().UnixNano() + int64(os.Getpid()))
 }
 
 func nextSuffix() string {
@@ -39,20 +40,50 @@ func nextSuffix() string {
 // will not choose the same file.  The caller can use f.Name()
 // to find the name of the file.  It is the caller's responsibility to
 // remove the file when no longer needed.
-func TempFile(dir, prefix string) (f *os.File, err os.Error) {
+func TempFile(dir, prefix string) (f *os.File, err error) {
 	if dir == "" {
 		dir = os.TempDir()
 	}
 
 	nconflict := 0
 	for i := 0; i < 10000; i++ {
-		name := dir + "/" + prefix + nextSuffix()
-		f, err = os.Open(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
-		if pe, ok := err.(*os.PathError); ok && pe.Error == os.EEXIST {
+		name := filepath.Join(dir, prefix+nextSuffix())
+		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+		if os.IsExist(err) {
 			if nconflict++; nconflict > 10 {
 				rand = reseed()
 			}
 			continue
+		}
+		break
+	}
+	return
+}
+
+// TempDir creates a new temporary directory in the directory dir
+// with a name beginning with prefix and returns the path of the
+// new directory.  If dir is the empty string, TempDir uses the
+// default directory for temporary files (see os.TempDir).
+// Multiple programs calling TempDir simultaneously
+// will not choose the same directory.  It is the caller's responsibility
+// to remove the directory when no longer needed.
+func TempDir(dir, prefix string) (name string, err error) {
+	if dir == "" {
+		dir = os.TempDir()
+	}
+
+	nconflict := 0
+	for i := 0; i < 10000; i++ {
+		try := filepath.Join(dir, prefix+nextSuffix())
+		err = os.Mkdir(try, 0700)
+		if os.IsExist(err) {
+			if nconflict++; nconflict > 10 {
+				rand = reseed()
+			}
+			continue
+		}
+		if err == nil {
+			name = try
 		}
 		break
 	}

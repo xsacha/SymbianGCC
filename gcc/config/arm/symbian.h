@@ -1,5 +1,5 @@
 /* Configuration file for Symbian OS on ARM processors.
-   Copyright (C) 2004, 2005, 2007, 2008
+   Copyright (C) 2004, 2005, 2007, 2008, 2011
    Free Software Foundation, Inc.
    Contributed by CodeSourcery, LLC   
 
@@ -98,3 +98,5 @@
 #define TARGET_ARM_DYNAMIC_VAGUE_LINKAGE_P false
 
 #define TARGET_DEFAULT_WORD_RELOCATIONS 1
+
+#define ARM_TARGET2_DWARF_FORMAT DW_EH_PE_absptr

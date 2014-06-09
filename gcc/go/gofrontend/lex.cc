@@ -132,9 +132,9 @@ Keywords::keyword_to_code(const char* keyword, size_t len) const
 const char*
 Keywords::keyword_to_string(Keyword code) const
 {
-  gcc_assert(code > KEYWORD_INVALID && code < this->count_);
+  go_assert(code > KEYWORD_INVALID && code < this->count_);
   const Mapping* map = &this->mapping_[code];
-  gcc_assert(map->keycode == code);
+  go_assert(map->keycode == code);
   return map->keystring;
 }
 
@@ -146,7 +146,7 @@ static Keywords keywords;
 
 // Make a general token.
 
-Token::Token(Classification classification, source_location location)
+Token::Token(Classification classification, Location location)
   : classification_(classification), location_(location)
 {
 }
@@ -163,7 +163,8 @@ Token::~Token()
 void
 Token::clear()
 {
-  if (this->classification_ == TOKEN_INTEGER)
+  if (this->classification_ == TOKEN_INTEGER
+      || this->classification_ == TOKEN_CHARACTER)
     mpz_clear(this->u_.integer_value);
   else if (this->classification_ == TOKEN_FLOAT
 	   || this->classification_ == TOKEN_IMAGINARY)
@@ -190,6 +191,7 @@ Token::Token(const Token& tok)
     case TOKEN_OPERATOR:
       this->u_.op = tok.u_.op;
       break;
+    case TOKEN_CHARACTER:
     case TOKEN_INTEGER:
       mpz_init_set(this->u_.integer_value, tok.u_.integer_value);
       break;
@@ -198,7 +200,7 @@ Token::Token(const Token& tok)
       mpfr_init_set(this->u_.float_value, tok.u_.float_value, GMP_RNDN);
       break;
     default:
-      gcc_unreachable();
+      go_unreachable();
     }
 }
 
@@ -229,6 +231,7 @@ Token::operator=(const Token& tok)
     case TOKEN_OPERATOR:
       this->u_.op = tok.u_.op;
       break;
+    case TOKEN_CHARACTER:
     case TOKEN_INTEGER:
       mpz_init_set(this->u_.integer_value, tok.u_.integer_value);
       break;
@@ -237,7 +240,7 @@ Token::operator=(const Token& tok)
       mpfr_init_set(this->u_.float_value, tok.u_.float_value, GMP_RNDN);
       break;
     default:
-      gcc_unreachable();
+      go_unreachable();
     }
   return *this;
 }
@@ -263,6 +266,10 @@ Token::print(FILE* file) const
       break;
     case TOKEN_STRING:
       fprintf(file, "quoted string \"%s\"", this->u_.string_value->c_str());
+      break;
+    case TOKEN_CHARACTER:
+      fprintf(file, "character ");
+      mpz_out_str(file, 10, this->u_.integer_value);
       break;
     case TOKEN_INTEGER:
       fprintf(file, "integer ");
@@ -422,29 +429,28 @@ Token::print(FILE* file) const
 	  fprintf(file, "]");
 	  break;
 	default:
-	  gcc_unreachable();
+	  go_unreachable();
 	}
       break;
     default:
-      gcc_unreachable();
+      go_unreachable();
     }
 }
 
 // Class Lex.
 
-Lex::Lex(const char* input_file_name, FILE* input_file)
+Lex::Lex(const char* input_file_name, FILE* input_file, Linemap* linemap)
   : input_file_name_(input_file_name), input_file_(input_file),
-    linebuf_(NULL), linebufsize_(120), linesize_(0), lineoff_(0),
-    lineno_(0), add_semi_at_eol_(false)
+    linemap_(linemap), linebuf_(NULL), linebufsize_(120), linesize_(0),
+    lineoff_(0), lineno_(0), add_semi_at_eol_(false), extern_()
 {
   this->linebuf_ = new char[this->linebufsize_];
-  linemap_add(line_table, LC_ENTER, 0, input_file_name, 1);
+  this->linemap_->start_file(input_file_name, 0);
 }
 
 Lex::~Lex()
 {
   delete[] this->linebuf_;
-  linemap_add(line_table, LC_LEAVE, 0, NULL, 0);
 }
 
 // Read a new line from the file.
@@ -508,30 +514,26 @@ Lex::require_line()
   this->linesize_= got;
   this->lineoff_ = 0;
 
-  linemap_line_start(line_table, this->lineno_, this->linesize_);
+  this->linemap_->start_line(this->lineno_, this->linesize_);
 
   return true;
 }
 
 // Get the current location.
 
-source_location
+Location
 Lex::location() const
 {
-  source_location location;
-  LINEMAP_POSITION_FOR_COLUMN(location, line_table, this->lineoff_ + 1);
-  return location;
+  return this->linemap_->get_location(this->lineoff_ + 1);
 }
 
 // Get a location slightly before the current one.  This is used for
 // slightly more efficient handling of operator tokens.
 
-source_location
+Location
 Lex::earlier_location(int chars) const
 {
-  source_location location;
-  LINEMAP_POSITION_FOR_COLUMN(location, line_table, this->lineoff_ + 1 - chars);
-  return location;
+  return this->linemap_->get_location(this->lineoff_ + 1 - chars);
 }
 
 // Get the next token.
@@ -539,6 +541,7 @@ Lex::earlier_location(int chars) const
 Token
 Lex::next_token()
 {
+  bool saw_cpp_comment = false;
   while (true)
     {
       if (!this->require_line())
@@ -549,6 +552,10 @@ Lex::next_token()
 	    return this->make_operator(OPERATOR_SEMICOLON, 1);
 	  return this->make_eof_token();
 	}
+
+      if (!saw_cpp_comment)
+	this->extern_.clear();
+      saw_cpp_comment = false;
 
       const char* p = this->linebuf_ + this->lineoff_;
       const char* pend = this->linebuf_ + this->linesize_;
@@ -586,11 +593,12 @@ Lex::next_token()
 		  p = pend;
 		  if (p[-1] == '\n' && this->add_semi_at_eol_)
 		    --p;
+		  saw_cpp_comment = true;
 		}
 	      else if (p[1] == '*')
 		{
 		  this->lineoff_ = p - this->linebuf_;
-		  source_location location = this->location();
+		  Location location = this->location();
 		  if (!this->skip_c_comment())
 		    return Token::make_invalid_token(location);
 		  p = this->linebuf_ + this->lineoff_;
@@ -714,7 +722,16 @@ Lex::next_token()
 		unsigned int ci;
 		bool issued_error;
 		this->lineoff_ = p - this->linebuf_;
-		this->advance_one_utf8_char(p, &ci, &issued_error);
+		const char *pnext = this->advance_one_utf8_char(p, &ci,
+								&issued_error);
+
+		// Ignore byte order mark at start of file.
+		if (ci == 0xfeff)
+		  {
+		    p = pnext;
+		    break;
+		  }
+
 		if (Lex::is_unicode_letter(ci))
 		  return this->gather_identifier();
 
@@ -823,6 +840,14 @@ Lex::advance_one_utf8_char(const char* p, unsigned int* value,
       *issued_error = true;
       return p + 1;
     }
+
+  // Warn about byte order mark, except at start of file.
+  if (*value == 0xfeff && (this->lineno_ != 1 || this->lineoff_ != 0))
+    {
+      error_at(this->location(), "Unicode (UTF-8) BOM in middle of file");
+      *issued_error = true;
+    }
+
   return p + adv;
 }
 
@@ -864,6 +889,7 @@ Lex::gather_identifier()
 	  this->lineoff_ = p - this->linebuf_;
 	  const char* pnext = this->advance_one_utf8_char(p, &ci,
 							  &issued_error);
+	  bool is_invalid = false;
 	  if (!Lex::is_unicode_letter(ci) && !Lex::is_unicode_digit(ci))
 	    {
 	      // There is no valid place for a non-ASCII character
@@ -874,6 +900,7 @@ Lex::gather_identifier()
 		error_at(this->location(),
 			 "invalid character 0x%x in identifier",
 			 ci);
+	      is_invalid = true;
 	    }
 	  if (is_first)
 	    {
@@ -885,6 +912,8 @@ Lex::gather_identifier()
 	      buf.assign(pstart, p - pstart);
 	      has_non_ascii_char = true;
 	    }
+	  if (is_invalid && !Lex::is_invalid_identifier(buf))
+	    buf.append("$INVALID$");
 	  p = pnext;
 	  char ubuf[50];
 	  // This assumes that all assemblers can handle an identifier
@@ -893,7 +922,7 @@ Lex::gather_identifier()
 	  buf.append(ubuf);
 	}
     }
-  source_location location = this->location();
+  Location location = this->location();
   this->add_semi_at_eol_ = true;
   this->lineoff_ = p - this->linebuf_;
   if (has_non_ascii_char)
@@ -960,7 +989,7 @@ Lex::gather_number()
   const char* p = pstart;
   const char* pend = this->linebuf_ + this->linesize_;
 
-  source_location location = this->location();
+  Location location = this->location();
 
   bool neg = false;
   if (*p == '+')
@@ -1000,12 +1029,14 @@ Lex::gather_number()
 	    }
 	}
 
-      if (*p != '.' && *p != 'i' && !Lex::could_be_exponent(p, pend))
+      // A partial token that looks like an octal literal might actually be the
+      // beginning of a floating-point or imaginary literal.
+      if (base == 16 || (*p != '.' && *p != 'i' && !Lex::could_be_exponent(p, pend)))
 	{
 	  std::string s(pnum, p - pnum);
 	  mpz_t val;
 	  int r = mpz_init_set_str(val, s.c_str(), base);
-	  gcc_assert(r == 0);
+	  go_assert(r == 0);
 
 	  if (neg)
 	    mpz_neg(val, val);
@@ -1029,7 +1060,7 @@ Lex::gather_number()
       std::string s(pnum, p - pnum);
       mpz_t val;
       int r = mpz_init_set_str(val, s.c_str(), 10);
-      gcc_assert(r == 0);
+      go_assert(r == 0);
 
       if (neg)
 	mpz_neg(val, val);
@@ -1076,7 +1107,7 @@ Lex::gather_number()
   std::string s(pnum, p - pnum);
   mpfr_t val;
   int r = mpfr_init_set_str(val, s.c_str(), 10, GMP_RNDN);
-  gcc_assert(r == 0);
+  go_assert(r == 0);
 
   if (neg)
     mpfr_neg(val, val, GMP_RNDN);
@@ -1257,7 +1288,7 @@ Lex::advance_one_char(const char* p, bool is_single_quote, unsigned int* value,
 
 void
 Lex::append_char(unsigned int v, bool is_character, std::string* str,
-		 source_location location)
+		 Location location)
 {
   char buf[4];
   size_t len;
@@ -1279,6 +1310,12 @@ Lex::append_char(unsigned int v, bool is_character, std::string* str,
 	  warning_at(location, 0,
 		     "unicode code point 0x%x out of range in string", v);
 	  // Turn it into the "replacement character".
+	  v = 0xfffd;
+	}
+      if (v >= 0xd800 && v < 0xe000)
+	{
+	  warning_at(location, 0,
+		     "unicode code point 0x%x is invalid surrogate pair", v);
 	  v = 0xfffd;
 	}
       if (v <= 0xffff)
@@ -1323,9 +1360,9 @@ Lex::gather_character()
   mpz_t val;
   mpz_init_set_ui(val, value);
 
-  source_location location = this->location();
+  Location location = this->location();
   this->lineoff_ = p + 1 - this->linebuf_;
-  Token ret = Token::make_integer_token(val, location);
+  Token ret = Token::make_character_token(val, location);
   mpz_clear(val);
   return ret;
 }
@@ -1342,7 +1379,7 @@ Lex::gather_string()
   std::string value;
   while (*p != '"')
     {
-      source_location loc = this->location();
+      Location loc = this->location();
       unsigned int c;
       bool is_character;
       this->lineoff_ = p - this->linebuf_;
@@ -1356,7 +1393,7 @@ Lex::gather_string()
       Lex::append_char(c, is_character, &value, loc);
     }
 
-  source_location location = this->location();
+  Location location = this->location();
   this->lineoff_ = p + 1 - this->linebuf_;
   return Token::make_string_token(value, location);
 }
@@ -1368,7 +1405,7 @@ Lex::gather_raw_string()
 {
   const char* p = this->linebuf_ + this->lineoff_ + 1;
   const char* pend = this->linebuf_ + this->linesize_;
-  source_location location = this->location();
+  Location location = this->location();
 
   std::string value;
   while (true)
@@ -1380,7 +1417,7 @@ Lex::gather_raw_string()
 	      this->lineoff_ = p + 1 - this->linebuf_;
 	      return Token::make_string_token(value, location);
 	    }
-	  source_location loc = this->location();
+	  Location loc = this->location();
 	  unsigned int c;
 	  bool issued_error;
 	  this->lineoff_ = p - this->linebuf_;
@@ -1600,6 +1637,10 @@ Lex::skip_c_comment()
 void
 Lex::skip_cpp_comment()
 {
+  // Ensure that if EXTERN_ is set, it means that we just saw a
+  // //extern comment.
+  this->extern_.clear();
+
   const char* p = this->linebuf_ + this->lineoff_;
   const char* pend = this->linebuf_ + this->linesize_;
 
@@ -1634,13 +1675,33 @@ Lex::skip_cpp_comment()
 	      memcpy(file, p, filelen);
 	      file[filelen] = '\0';
 
-	      linemap_add(line_table, LC_LEAVE, 0, NULL, 0);
-	      linemap_add(line_table, LC_ENTER, 0, file, lineno);
+              this->linemap_->start_file(file, lineno);
 	      this->lineno_ = lineno - 1;
 
 	      p = plend;
 	    }
 	}
+    }
+
+  // As a special gccgo extension, a C++ comment at the start of the
+  // line of the form
+  //   //extern NAME
+  // which immediately precedes a function declaration means that the
+  // external name of the function declaration is NAME.  This is
+  // normally used to permit Go code to call a C function.
+  if (this->lineoff_ == 2
+      && pend - p > 7
+      && memcmp(p, "extern ", 7) == 0)
+    {
+      p += 7;
+      while (p < pend && (*p == ' ' || *p == '\t'))
+	++p;
+      const char* plend = pend;
+      while (plend > p
+	     && (plend[-1] == ' ' || plend[-1] == '\t' || plend[-1] == '\n'))
+	--plend;
+      if (plend > p)
+	this->extern_ = std::string(p, plend - p);
     }
 
   while (p < pend)
@@ -1649,6 +1710,8 @@ Lex::skip_cpp_comment()
       unsigned int c;
       bool issued_error;
       p = this->advance_one_utf8_char(p, &c, &issued_error);
+      if (issued_error)
+	this->extern_.clear();
     }
 }
 
@@ -1663,6 +1726,27 @@ struct Unicode_range
   // The stride.  This entries represents low, low + stride, low + 2 *
   // stride, etc., up to high.
   unsigned int stride;
+};
+
+// A table of whitespace characters--Unicode code points classified as
+// "Space", "C" locale whitespace characters, the "next line" control
+// character (0085), the line separator (2028), the paragraph
+// separator (2029), and the "zero-width non-break space" (feff).
+
+static const Unicode_range unicode_space[] =
+{
+  { 0x0009, 0x000d, 1 },
+  { 0x0020, 0x0020, 1 },
+  { 0x0085, 0x0085, 1 },
+  { 0x00a0, 0x00a0, 1 },
+  { 0x1680, 0x1680, 1 },
+  { 0x180e, 0x180e, 1 },
+  { 0x2000, 0x200a, 1 },
+  { 0x2028, 0x2029, 1 },
+  { 0x202f, 0x202f, 1 },
+  { 0x205f, 0x205f, 1 },
+  { 0x3000, 0x3000, 1 },
+  { 0xfeff, 0xfeff, 1 },
 };
 
 // A table of Unicode digits--Unicode code points classified as
@@ -2254,6 +2338,15 @@ Lex::is_in_unicode_range(unsigned int c, const Unicode_range* ranges,
     }
 }
 
+// Return whether C is a space character.
+
+bool
+Lex::is_unicode_space(unsigned int c)
+{
+  return Lex::is_in_unicode_range(c, unicode_space,
+				  ARRAY_SIZE(unicode_space));
+}
+
 // Return whether C is a Unicode digit--a Unicode code point
 // classified as "Digit".
 
@@ -2310,4 +2403,14 @@ Lex::is_exported_name(const std::string& name)
 	}
       return Lex::is_unicode_uppercase(ci);
     }
+}
+
+// Return whether the identifier NAME contains an invalid character.
+// This is based on how we handle invalid characters in
+// gather_identifier.
+
+bool
+Lex::is_invalid_identifier(const std::string& name)
+{
+  return name.find("$INVALID$") != std::string::npos;
 }

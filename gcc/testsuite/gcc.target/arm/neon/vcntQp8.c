@@ -16,5 +16,5 @@ void test_vcntQp8 (void)
   out_poly8x16_t = vcntq_p8 (arg0_poly8x16_t);
 }
 
-/* { dg-final { scan-assembler "vcnt\.8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcnt\.8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

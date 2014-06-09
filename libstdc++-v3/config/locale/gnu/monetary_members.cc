@@ -1,6 +1,6 @@
 // std::moneypunct implementation details, GNU version -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -339,6 +339,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      delete [] __group;
 	      delete [] __ps;
 	      delete [] __ns;
+	      __throw_exception_again;
 	    }
 
 	  char __pprecedes = *(__nl_langinfo_l(__INT_P_CS_PRECEDES, __cloc));
@@ -489,6 +490,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      delete [] __group;
 	      delete [] __ps;
 	      delete [] __ns;
+	      __throw_exception_again;
 	    }
 
 	  char __pprecedes = *(__nl_langinfo_l(__P_CS_PRECEDES, __cloc));
@@ -933,18 +935,3 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace
-
-/* Because of a bad cross-compilation fallback in a configure test,
-   Sourcery G++ toolchains for GNU/Linux targets formerly used the
-   "generic" locale model in libstdc++.  Improve compatibility with
-   those toolchains by exporting symbol aliases under the "generic"
-   names for the "gnu" functions.  */
-#define _GLIBCXX_LOCALE_COMPAT(generic, gnu) \
-  extern "C" void generic (void) __attribute__ ((alias (#gnu), weak))
-
-_GLIBCXX_LOCALE_COMPAT (_ZNSt10moneypunctIcLb0EE24_M_initialize_moneypunctEPiPKc, _ZNSt10moneypunctIcLb0EE24_M_initialize_moneypunctEP15__locale_structPKc);
-_GLIBCXX_LOCALE_COMPAT (_ZNSt10moneypunctIcLb1EE24_M_initialize_moneypunctEPiPKc, _ZNSt10moneypunctIcLb1EE24_M_initialize_moneypunctEP15__locale_structPKc);
-#ifdef _GLIBCXX_USE_WCHAR_T
-_GLIBCXX_LOCALE_COMPAT (_ZNSt10moneypunctIwLb0EE24_M_initialize_moneypunctEPiPKc, _ZNSt10moneypunctIwLb0EE24_M_initialize_moneypunctEP15__locale_structPKc);
-_GLIBCXX_LOCALE_COMPAT (_ZNSt10moneypunctIwLb1EE24_M_initialize_moneypunctEPiPKc, _ZNSt10moneypunctIwLb1EE24_M_initialize_moneypunctEP15__locale_structPKc);
-#endif

@@ -17,5 +17,5 @@ void test_vsubls32 (void)
   out_int64x2_t = vsubl_s32 (arg0_int32x2_t, arg1_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vsubl\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsubl\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

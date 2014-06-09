@@ -50,10 +50,6 @@
 #undef ARM_DEFAULT_ABI
 #define ARM_DEFAULT_ABI ARM_ABI_AAPCS_LINUX
 
-#undef LINK_GCC_C_SEQUENCE_SPEC
-#define LINK_GCC_C_SEQUENCE_SPEC \
-  "--start-group %G %L --end-group"
-
 /* Clear the instruction cache from `beg' to `end'.  This makes an
    inline system call to SYS_cacheflush.  */
 #undef CLEAR_INSN_CACHE
@@ -68,3 +64,4 @@
 		    : "0" (_beg), "r" (_end), "r" (_flg), "r" (_scno));	\
 }
 
+#define ARM_TARGET2_DWARF_FORMAT DW_EH_PE_absptr

@@ -16,5 +16,5 @@ void test_vrev64s32 (void)
   out_int32x2_t = vrev64_s32 (arg0_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vrev64\.32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrev64\.32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

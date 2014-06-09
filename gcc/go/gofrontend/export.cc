@@ -5,20 +5,10 @@
 // license that can be found in the LICENSE file.
 
 #include "go-system.h"
+
 #include "sha1.h"
 
-#ifndef ENABLE_BUILD_WITH_CXX
-extern "C"
-{
-#endif
-
-#include "machmode.h"
-#include "output.h"
-#include "target.h"
-
-#ifndef ENABLE_BUILD_WITH_CXX
-}
-#endif
+#include "go-c.h"
 
 #include "gogo.h"
 #include "types.h"
@@ -43,7 +33,7 @@ const int Export::v1_checksum_len;
 // Constructor.
 
 Export::Export(Stream* stream)
-  : stream_(stream), type_refs_(), type_index_(1)
+  : stream_(stream), type_refs_(), type_index_(1), packages_()
 {
 }
 
@@ -101,8 +91,9 @@ should_export(Named_object* no)
 
 void
 Export::export_globals(const std::string& package_name,
-		       const std::string& unique_prefix,
+		       const std::string& pkgpath,
 		       int package_priority,
+		       const std::map<std::string, Package*>& imports,
 		       const std::string& import_init_fn,
 		       const std::set<Import_init>& imported_init_fns,
 		       const Bindings* bindings)
@@ -149,15 +140,17 @@ Export::export_globals(const std::string& package_name,
   this->write_string(package_name);
   this->write_c_string(";\n");
 
-  // The unique prefix.  This prefix is used for all global symbols.
-  this->write_c_string("prefix ");
-  this->write_string(unique_prefix);
+  // The package path, used for all global symbols.
+  this->write_c_string("pkgpath ");
+  this->write_string(pkgpath);
   this->write_c_string(";\n");
 
   // The package priority.
   char buf[100];
   snprintf(buf, sizeof buf, "priority %d;\n", package_priority);
   this->write_c_string(buf);
+
+  this->write_imports(imports);
 
   this->write_imported_init_fns(package_name, package_priority, import_init_fn,
 				imported_init_fns);
@@ -187,7 +180,48 @@ Export::export_globals(const std::string& package_name,
   this->stream_->write_checksum(s);
 }
 
-// Write out the import control variables for this package.
+// Sort imported packages.
+
+static bool
+import_compare(const std::pair<std::string, Package*>& a,
+	       const std::pair<std::string, Package*>& b)
+{
+  return a.first < b.first;
+}
+
+// Write out the imported packages.
+
+void
+Export::write_imports(const std::map<std::string, Package*>& imports)
+{
+  // Sort the imports for more consistent output.
+  std::vector<std::pair<std::string, Package*> > imp;
+  for (std::map<std::string, Package*>::const_iterator p = imports.begin();
+       p != imports.end();
+       ++p)
+    imp.push_back(std::make_pair(p->first, p->second));
+
+  std::sort(imp.begin(), imp.end(), import_compare);
+
+  for (std::vector<std::pair<std::string, Package*> >::const_iterator p =
+	 imp.begin();
+       p != imp.end();
+       ++p)
+    {
+      this->write_c_string("import ");
+      this->write_string(p->second->package_name());
+      this->write_c_string(" ");
+      this->write_string(p->second->pkgpath());
+      this->write_c_string(" \"");
+      this->write_string(p->first);
+      this->write_c_string("\";\n");
+
+      this->packages_.insert(p->second);
+    }
+}
+
+// Write out the initialization functions which need to run for this
+// package.
 
 void
 Export::write_imported_init_fns(
@@ -199,7 +233,7 @@ Export::write_imported_init_fns(
   if (import_init_fn.empty() && imported_init_fns.empty())
     return;
 
-  this->write_c_string("import");
+  this->write_c_string("init");
 
   if (!import_init_fn.empty())
     {
@@ -239,6 +273,17 @@ Export::write_imported_init_fns(
   this->write_c_string(";\n");
 }
 
+// Write a name to the export stream.
+
+void
+Export::write_name(const std::string& name)
+{
+  if (name.empty())
+    this->write_c_string("?");
+  else
+    this->write_string(Gogo::message_name(name));
+}
+
 // Export a type.  We have to ensure that on import we create a single
 // Named_type node for each named type.  We do this by keeping a hash
 // table mapping named types to reference numbers.  The first time we
@@ -266,7 +311,7 @@ Export::write_type(const Type* type)
     {
       // This type was already in the table.
       int index = p->second;
-      gcc_assert(index != 0);
+      go_assert(index != 0);
       char buf[30];
       snprintf(buf, sizeof buf, "<type %d>", index);
       this->write_c_string(buf);
@@ -289,8 +334,8 @@ Export::write_type(const Type* type)
       if (named_type != NULL)
 	{
 	  // The builtin types should have been predefined.
-	  gcc_assert(named_type->location() != BUILTINS_LOCATION
-		     || (named_type->named_object()->package()->name()
+	  go_assert(!Linemap::is_predeclared_location(named_type->location())
+		     || (named_type->named_object()->package()->package_name()
 			 == "unsafe"));
 	  named_object = named_type->named_object();
 	}
@@ -302,14 +347,25 @@ Export::write_type(const Type* type)
       std::string s = "\"";
       if (package != NULL && !Gogo::is_hidden_name(named_object->name()))
 	{
-	  s += package->unique_prefix();
-	  s += '.';
-	  s += package->name();
+	  s += package->pkgpath();
 	  s += '.';
 	}
       s += named_object->name();
       s += "\" ";
       this->write_string(s);
+
+      // It is possible that this type was imported indirectly, and is
+      // not in a package in the import list.  If we have not
+      // mentioned this package before, write out the package name
+      // here so that any package importing this one will know it.
+      if (package != NULL
+	  && this->packages_.find(package) == this->packages_.end())
+	{
+	  this->write_c_string("\"");
+	  this->write_string(package->package_name());
+	  this->packages_.insert(package);
+	  this->write_c_string("\" ");
+	}
 
       // We must add a named type to the table now, since the
       // definition of the type may refer to the named type via a
@@ -347,6 +403,9 @@ Export::register_builtin_types(Gogo* gogo)
   this->register_builtin_type(gogo, "uintptr", BUILTIN_UINTPTR);
   this->register_builtin_type(gogo, "bool", BUILTIN_BOOL);
   this->register_builtin_type(gogo, "string", BUILTIN_STRING);
+  this->register_builtin_type(gogo, "error", BUILTIN_ERROR);
+  this->register_builtin_type(gogo, "byte", BUILTIN_BYTE);
+  this->register_builtin_type(gogo, "rune", BUILTIN_RUNE);
 }
 
 // Register one builtin type in the export table.
@@ -355,16 +414,20 @@ void
 Export::register_builtin_type(Gogo* gogo, const char* name, Builtin_code code)
 {
   Named_object* named_object = gogo->lookup_global(name);
-  gcc_assert(named_object != NULL && named_object->is_type());
+  go_assert(named_object != NULL && named_object->is_type());
   std::pair<Type_refs::iterator, bool> ins =
     this->type_refs_.insert(std::make_pair(named_object->type_value(), code));
-  gcc_assert(ins.second);
+  go_assert(ins.second);
 
   // We also insert the underlying type.  We can see the underlying
-  // type at least for string and bool.
-  Type* real_type = named_object->type_value()->real_type();
-  ins = this->type_refs_.insert(std::make_pair(real_type, code));
-  gcc_assert(ins.second);
+  // type at least for string and bool.  We skip the type aliases byte
+  // and rune here.
+  if (code != BUILTIN_BYTE && code != BUILTIN_RUNE)
+    {
+      Type* real_type = named_object->type_value()->real_type();
+      ins = this->type_refs_.insert(std::make_pair(real_type, code));
+      go_assert(ins.second);
+    }
 }
 
 // Class Export::Stream.
@@ -416,7 +479,6 @@ Export::Stream::write_checksum(const std::string& s)
 // Class Stream_to_section.
 
 Stream_to_section::Stream_to_section()
-  : section_(NULL)
 {
 }
 
@@ -425,15 +487,5 @@ Stream_to_section::Stream_to_section()
 void
 Stream_to_section::do_write(const char* bytes, size_t length)
 {
-  section* sec = (section*) this->section_;
-  if (sec == NULL)
-    {
-      gcc_assert(targetm.have_named_sections);
-
-      sec = get_section(".go_export", SECTION_DEBUG, NULL);
-      this->section_ = (void*) sec;
-    }
-
-  switch_to_section(sec);
-  assemble_string(bytes, length);
+  go_write_export_data (bytes, length);
 }

@@ -1,4 +1,4 @@
-/* Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+/* Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
@@ -116,8 +116,8 @@ reset_fnode_counters (st_parameter_dt *dtp)
 
 /* A simple hashing function to generate an index into the hash table.  */
 
-static inline
-uint32_t format_hash (st_parameter_dt *dtp)
+static uint32_t
+format_hash (st_parameter_dt *dtp)
 {
   char *key;
   gfc_charlen_type key_len;
@@ -149,8 +149,7 @@ save_parsed_format (st_parameter_dt *dtp)
     free_format_data (u->format_hash_table[hash].hashed_fmt);
   u->format_hash_table[hash].hashed_fmt = NULL;
 
-  if (u->format_hash_table[hash].key != NULL)
-    free (u->format_hash_table[hash].key);
+  free (u->format_hash_table[hash].key);
   u->format_hash_table[hash].key = dtp->format;
 
   u->format_hash_table[hash].key_len = dtp->format_len;
@@ -1121,16 +1120,17 @@ void
 format_error (st_parameter_dt *dtp, const fnode *f, const char *message)
 {
   int width, i, j, offset;
-  char *p, buffer[300];
+#define BUFLEN 300
+  char *p, buffer[BUFLEN];
   format_data *fmt = dtp->u.p.fmt;
 
   if (f != NULL)
     fmt->format_string = f->source;
 
   if (message == unexpected_element)
-    sprintf (buffer, message, fmt->error_element);
+    snprintf (buffer, BUFLEN, message, fmt->error_element);
   else
-    sprintf (buffer, "%s\n", message);
+    snprintf (buffer, BUFLEN, "%s\n", message);
 
   j = fmt->format_string - dtp->format;
 

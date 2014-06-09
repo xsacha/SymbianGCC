@@ -138,17 +138,6 @@ lrealpath (const char *filename)
   {
     char buf[MAX_PATH];
     char* basename;
-
-    if (_access (filename, F_OK) != 0)
-      {
-	char cygbuf[MAX_PATH + 1];
-	/* The file does not exist.  It's fine to call lrealpath
-	   on a non-existing path... but if this would be an existing
-	   path after cygpath conversion, use that instead.  */
-	if (cygpath (filename, cygbuf) && _access (cygbuf, F_OK) == 0)
-	  filename = cygbuf;
-      }
-
     DWORD len = GetFullPathName (filename, MAX_PATH, buf, &basename);
     if (len == 0 || len > MAX_PATH - 1)
       return strdup (filename);

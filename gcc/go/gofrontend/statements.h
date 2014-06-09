@@ -11,6 +11,7 @@
 
 class Gogo;
 class Traverse;
+class Statement_inserter;
 class Block;
 class Function;
 class Unnamed_label;
@@ -23,6 +24,7 @@ class For_statement;
 class For_range_statement;
 class Switch_statement;
 class Type_switch_statement;
+class Send_statement;
 class Select_statement;
 class Variable;
 class Named_object;
@@ -38,6 +40,10 @@ class Case_clauses;
 class Type_case_clauses;
 class Select_clauses;
 class Typed_identifier_list;
+class Bexpression;
+class Bstatement;
+class Bvariable;
+class Ast_dump_context;
 
 // This class is used to traverse assignments made by a statement
 // which makes assignments.
@@ -99,6 +105,7 @@ class Statement
     STATEMENT_UNNAMED_LABEL,
     STATEMENT_IF,
     STATEMENT_CONSTANT_SWITCH,
+    STATEMENT_SEND,
     STATEMENT_SELECT,
 
     // These statements types are created by the parser, but they
@@ -116,7 +123,7 @@ class Statement
     STATEMENT_TYPE_SWITCH
   };
 
-  Statement(Statement_classification, source_location);
+  Statement(Statement_classification, Location);
 
   virtual ~Statement();
 
@@ -132,51 +139,53 @@ class Statement
   // Either the type or the initialization expression may be NULL, but
   // not both.
   static Temporary_statement*
-  make_temporary(Type*, Expression*, source_location);
+  make_temporary(Type*, Expression*, Location);
 
   // Make an assignment statement.
   static Statement*
-  make_assignment(Expression*, Expression*, source_location);
+  make_assignment(Expression*, Expression*, Location);
 
   // Make an assignment operation (+=, etc.).
   static Statement*
   make_assignment_operation(Operator, Expression*, Expression*,
-			    source_location);
+			    Location);
 
   // Make a tuple assignment statement.
   static Statement*
-  make_tuple_assignment(Expression_list*, Expression_list*, source_location);
+  make_tuple_assignment(Expression_list*, Expression_list*, Location);
 
   // Make an assignment from a map index to a pair of variables.
   static Statement*
   make_tuple_map_assignment(Expression* val, Expression* present,
-			    Expression*, source_location);
+			    Expression*, Location);
 
   // Make a statement which assigns a pair of values to a map.
   static Statement*
   make_map_assignment(Expression*, Expression* val,
-		      Expression* should_set, source_location);
+		      Expression* should_set, Location);
 
   // Make an assignment from a nonblocking receive to a pair of
   // variables.
   static Statement*
-  make_tuple_receive_assignment(Expression* val, Expression* success,
-				Expression* channel, source_location);
+  make_tuple_receive_assignment(Expression* val, Expression* closed,
+				Expression* channel, Location);
 
   // Make an assignment from a type guard to a pair of variables.
   static Statement*
   make_tuple_type_guard_assignment(Expression* val, Expression* ok,
 				   Expression* expr, Type* type,
-				   source_location);
+				   Location);
 
-  // Make an expression statement from an Expression.
+  // Make an expression statement from an Expression.  IS_IGNORED is
+  // true if the value is being explicitly ignored, as in an
+  // assignment to _.
   static Statement*
-  make_statement(Expression*);
+  make_statement(Expression*, bool is_ignored);
 
   // Make a block statement from a Block.  This is an embedded list of
   // statements which may also include variable definitions.
   static Statement*
-  make_block_statement(Block*, source_location);
+  make_block_statement(Block*, Location);
 
   // Make an increment statement.
   static Statement*
@@ -188,36 +197,35 @@ class Statement
 
   // Make a go statement.
   static Statement*
-  make_go_statement(Call_expression* call, source_location);
+  make_go_statement(Call_expression* call, Location);
 
   // Make a defer statement.
   static Statement*
-  make_defer_statement(Call_expression* call, source_location);
+  make_defer_statement(Call_expression* call, Location);
 
   // Make a return statement.
-  static Statement*
-  make_return_statement(const Typed_identifier_list*, Expression_list*,
-			source_location);
+  static Return_statement*
+  make_return_statement(Expression_list*, Location);
 
   // Make a break statement.
   static Statement*
-  make_break_statement(Unnamed_label* label, source_location);
+  make_break_statement(Unnamed_label* label, Location);
 
   // Make a continue statement.
   static Statement*
-  make_continue_statement(Unnamed_label* label, source_location);
+  make_continue_statement(Unnamed_label* label, Location);
 
   // Make a goto statement.
   static Statement*
-  make_goto_statement(Label* label, source_location);
+  make_goto_statement(Label* label, Location);
 
   // Make a goto statement to an unnamed label.
   static Statement*
-  make_goto_unnamed_statement(Unnamed_label* label, source_location);
+  make_goto_unnamed_statement(Unnamed_label* label, Location);
 
   // Make a label statement--where the label is defined.
   static Statement*
-  make_label_statement(Label* label, source_location);
+  make_label_statement(Label* label, Location);
 
   // Make an unnamed label statement--where the label is defined.
   static Statement*
@@ -226,29 +234,33 @@ class Statement
   // Make an if statement.
   static Statement*
   make_if_statement(Expression* cond, Block* then_block, Block* else_block,
-		    source_location);
+		    Location);
 
   // Make a switch statement.
   static Switch_statement*
-  make_switch_statement(Expression* switch_val, source_location);
+  make_switch_statement(Expression* switch_val, Location);
 
   // Make a type switch statement.
   static Type_switch_statement*
-  make_type_switch_statement(Named_object* var, Expression*, source_location);
+  make_type_switch_statement(Named_object* var, Expression*, Location);
+
+  // Make a send statement.
+  static Send_statement*
+  make_send_statement(Expression* channel, Expression* val, Location);
 
   // Make a select statement.
   static Select_statement*
-  make_select_statement(source_location);
+  make_select_statement(Location);
 
   // Make a for statement.
   static For_statement*
   make_for_statement(Block* init, Expression* cond, Block* post,
-		     source_location location);
+		     Location location);
 
   // Make a for statement with a range clause.
   static For_range_statement*
   make_for_range_statement(Expression* index_var, Expression* value_var,
-			   Expression* range, source_location);
+			   Expression* range, Location);
 
   // Return the statement classification.
   Statement_classification
@@ -256,7 +268,7 @@ class Statement
   { return this->classification_; }
 
   // Get the statement location.
-  source_location
+  Location
   location() const
   { return this->location_; }
 
@@ -278,11 +290,13 @@ class Statement
 
   // Lower a statement.  This is called immediately after parsing to
   // simplify statements for further processing.  It returns the same
-  // Statement or a new one.  BLOCK is the block containing this
-  // statement.
+  // Statement or a new one.  FUNCTION is the function containing this
+  // statement.  BLOCK is the block containing this statement.
+  // INSERTER can be used to insert new statements before this one.
   Statement*
-  lower(Gogo* gogo, Block* block)
-  { return this->do_lower(gogo, block); }
+  lower(Gogo* gogo, Named_object* function, Block* block,
+	Statement_inserter* inserter)
+  { return this->do_lower(gogo, function, block, inserter); }
 
   // Set type information for unnamed constants.
   void
@@ -357,9 +371,13 @@ class Statement
   may_fall_through() const
   { return this->do_may_fall_through(); }
 
-  // Return the tree for a statement.  BLOCK is the enclosing block.
-  tree
-  get_tree(Translate_context*);
+  // Convert the statement to the backend representation.
+  Bstatement*
+  get_backend(Translate_context*);
+
+  // Dump AST representation of a statement to a dump context.
+  void
+  dump_statement(Ast_dump_context*) const;
 
  protected:
   // Implemented by child class: traverse the tree.
@@ -375,7 +393,7 @@ class Statement
   // Implemented by the child class: lower this statement to a simpler
   // one.
   virtual Statement*
-  do_lower(Gogo*, Block*)
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*)
   { return this; }
 
   // Implemented by child class: set type information for unnamed
@@ -397,9 +415,13 @@ class Statement
   do_may_fall_through() const
   { return true; }
 
-  // Implemented by child class: return a tree.
-  virtual tree
-  do_get_tree(Translate_context*) = 0;
+  // Implemented by child class: convert to backend representation.
+  virtual Bstatement*
+  do_get_backend(Translate_context*) = 0;
+
+  // Implemented by child class: dump ast representation.
+  virtual void
+  do_dump_statement(Ast_dump_context*) const = 0;
 
   // Traverse an expression in a statement.
   int
@@ -414,12 +436,6 @@ class Statement
   int
   traverse_type(Traverse*, Type*);
 
-  // Build a tree node with one operand, setting the location.  The
-  // first operand really has type "enum tree_code", but that enum is
-  // not defined here.
-  tree
-  build_stmt_1(int tree_code_value, tree);
-
   // For children to call when they detect that they are in error.
   void
   set_is_error();
@@ -430,7 +446,7 @@ class Statement
 
   // For children to return an error statement from lower().
   static Statement*
-  make_error_statement(source_location);
+  make_error_statement(Location);
 
  private:
   // Convert to the desired statement classification, or return NULL.
@@ -456,7 +472,7 @@ class Statement
   // The statement classification.
   Statement_classification classification_;
   // The location in the input file of the start of this statement.
-  source_location location_;
+  Location location_;
 };
 
 // A statement which creates and initializes a temporary variable.
@@ -464,19 +480,20 @@ class Statement
 class Temporary_statement : public Statement
 {
  public:
-  Temporary_statement(Type* type, Expression* init, source_location location)
+  Temporary_statement(Type* type, Expression* init, Location location)
     : Statement(STATEMENT_TEMPORARY, location),
-      type_(type), init_(init), decl_(NULL), is_address_taken_(false)
+      type_(type), init_(init), bvariable_(NULL), are_hidden_fields_ok_(false),
+      is_address_taken_(false)
   { }
 
   // Return the type of the temporary variable.
   Type*
   type() const;
 
-  // Return the initialization expression.
-  Expression*
-  init() const
-  { return this->init_; }
+  // Note that it is OK for this statement to set hidden fields.
+  void
+  set_hidden_fields_are_ok()
+  { this->are_hidden_fields_ok_ = true; }
 
   // Record that something takes the address of this temporary
   // variable.
@@ -484,10 +501,10 @@ class Temporary_statement : public Statement
   set_is_address_taken()
   { this->is_address_taken_ = true; }
 
-  // Return the tree for the temporary variable itself.  This should
-  // not be called until after the statement itself has been expanded.
-  tree
-  get_decl() const;
+  // Return the temporary variable.  This should not be called until
+  // after the statement itself has been converted.
+  Bvariable*
+  get_backend_variable(Translate_context*) const;
 
  protected:
   int
@@ -502,16 +519,22 @@ class Temporary_statement : public Statement
   void
   do_check_types(Gogo*);
 
-  tree
-  do_get_tree(Translate_context*);
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   // The type of the temporary variable.
   Type* type_;
   // The initial value of the temporary variable.  This may be NULL.
   Expression* init_;
-  // The DECL for the temporary variable.
-  tree decl_;
+  // The backend representation of the temporary variable.
+  Bvariable* bvariable_;
+  // True if this statement may set hidden fields when assigning the
+  // value to the temporary.  This is used for generated method stubs.
+  bool are_hidden_fields_ok_;
   // True if something takes the address of this temporary variable.
   bool is_address_taken_;
 };
@@ -536,8 +559,14 @@ class Variable_declaration_statement : public Statement
   bool
   do_traverse_assignments(Traverse_assignments*);
 
-  tree
-  do_get_tree(Translate_context*);
+  Statement*
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
+
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   Named_object* var_;
@@ -548,16 +577,21 @@ class Variable_declaration_statement : public Statement
 class Return_statement : public Statement
 {
  public:
-  Return_statement(const Typed_identifier_list* results, Expression_list* vals,
-		   source_location location)
+  Return_statement(Expression_list* vals, Location location)
     : Statement(STATEMENT_RETURN, location),
-      results_(results), vals_(vals)
+      vals_(vals), are_hidden_fields_ok_(false), is_lowered_(false)
   { }
 
   // The list of values being returned.  This may be NULL.
   const Expression_list*
   vals() const
   { return this->vals_; }
+
+  // Note that it is OK for this return statement to set hidden
+  // fields.
+  void
+  set_hidden_fields_are_ok()
+  { this->are_hidden_fields_ok_ = true; }
 
  protected:
   int
@@ -568,7 +602,42 @@ class Return_statement : public Statement
   do_traverse_assignments(Traverse_assignments*);
 
   Statement*
-  do_lower(Gogo*, Block*);
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
+
+  bool
+  do_may_fall_through() const
+  { return false; }
+
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
+
+ private:
+  // Return values.  This may be NULL.
+  Expression_list* vals_;
+  // True if this statement may pass hidden fields in the return
+  // value.  This is used for generated method stubs.
+  bool are_hidden_fields_ok_;
+  // True if this statement has been lowered.
+  bool is_lowered_;
+};
+
+// A send statement.
+
+class Send_statement : public Statement
+{
+ public:
+  Send_statement(Expression* channel, Expression* val,
+		 Location location)
+    : Statement(STATEMENT_SEND, location),
+      channel_(channel), val_(val)
+  { }
+
+ protected:
+  int
+  do_traverse(Traverse* traverse);
 
   void
   do_determine_types();
@@ -576,20 +645,17 @@ class Return_statement : public Statement
   void
   do_check_types(Gogo*);
 
-  bool
-  do_may_fall_through() const
-  { return false; }
+  Bstatement*
+  do_get_backend(Translate_context*);
 
-  tree
-  do_get_tree(Translate_context*);
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
-  // The result types of the function we are returning from.  This is
-  // here because in some of the traversals it is inconvenient to get
-  // it.
-  const Typed_identifier_list* results_;
-  // Return values.  This may be NULL.
-  Expression_list* vals_;
+  // The channel on which to send the value.
+  Expression* channel_;
+  // The value to send.
+  Expression* val_;
 };
 
 // Select_clauses holds the clauses of a select statement.  This is
@@ -605,18 +671,28 @@ class Select_clauses
   // Add a new clause.  IS_SEND is true if this is a send clause,
   // false for a receive clause.  For a send clause CHANNEL is the
   // channel and VAL is the value to send.  For a receive clause
-  // CHANNEL is the channel and VAL is either NULL or a Var_expression
-  // for the variable to set; if VAL is NULL, VAR may be a variable
-  // which is initialized with the received value.  IS_DEFAULT is true
-  // if this is the default clause.  STATEMENTS is the list of
-  // statements to execute.
+  // CHANNEL is the channel, VAL is either NULL or a Var_expression
+  // for the variable to set, and CLOSED is either NULL or a
+  // Var_expression to set to whether the channel is closed.  If VAL
+  // is NULL, VAR may be a variable to be initialized with the
+  // received value, and CLOSEDVAR ma be a variable to be initialized
+  // with whether the channel is closed.  IS_DEFAULT is true if this
+  // is the default clause.  STATEMENTS is the list of statements to
+  // execute.
   void
-  add(bool is_send, Expression* channel, Expression* val, Named_object* var,
-      bool is_default, Block* statements, source_location location)
+  add(bool is_send, Expression* channel, Expression* val, Expression* closed,
+      Named_object* var, Named_object* closedvar, bool is_default,
+      Block* statements, Location location)
   {
-    this->clauses_.push_back(Select_clause(is_send, channel, val, var,
-					   is_default, statements, location));
+    int index = static_cast<int>(this->clauses_.size());
+    this->clauses_.push_back(Select_clause(index, is_send, channel, val,
+					   closed, var, closedvar, is_default,
+					   statements, location));
   }
+
+  size_t
+  size() const
+  { return this->clauses_.size(); }
 
   // Traverse the select clauses.
   int
@@ -624,20 +700,29 @@ class Select_clauses
 
   // Lower statements.
   void
-  lower(Block*);
+  lower(Gogo*, Named_object*, Block*, Temporary_statement*);
 
   // Determine types.
   void
   determine_types();
+
+  // Check types.
+  void
+  check_types();
 
   // Whether the select clauses may fall through to the statement
   // which follows the overall select statement.
   bool
   may_fall_through() const;
 
-  // Return a tree implementing the select statement.
-  tree
-  get_tree(Translate_context*, Unnamed_label* break_label, source_location);
+  // Convert to the backend representation.
+  Bstatement*
+  get_backend(Translate_context*, Temporary_statement* sel,
+	      Unnamed_label* break_label, Location);
+
+  // Dump AST representation.
+  void
+  dump_clauses(Ast_dump_context*) const;
 
  private:
   // A single clause.
@@ -645,17 +730,25 @@ class Select_clauses
   {
    public:
     Select_clause()
-      : channel_(NULL), val_(NULL), var_(NULL), statements_(NULL),
-	is_send_(false), is_default_(false)
+      : channel_(NULL), val_(NULL), closed_(NULL), var_(NULL),
+	closedvar_(NULL), statements_(NULL), is_send_(false),
+	is_default_(false)
     { }
 
-    Select_clause(bool is_send, Expression* channel, Expression* val,
-		  Named_object* var, bool is_default, Block* statements,
-		  source_location location)
-      : channel_(channel), val_(val), var_(var), statements_(statements),
+    Select_clause(int index, bool is_send, Expression* channel,
+		  Expression* val, Expression* closed, Named_object* var,
+		  Named_object* closedvar, bool is_default, Block* statements,
+		  Location location)
+      : index_(index), channel_(channel), val_(val), closed_(closed),
+	var_(var), closedvar_(closedvar), statements_(statements),
 	location_(location), is_send_(is_send), is_default_(is_default),
 	is_lowered_(false)
-    { gcc_assert(is_default ? channel == NULL : channel != NULL); }
+    { go_assert(is_default ? channel == NULL : channel != NULL); }
+
+    // Return the index of this clause.
+    int
+    index() const
+    { return this->index_; }
 
     // Traverse the select clause.
     int
@@ -663,11 +756,15 @@ class Select_clauses
 
     // Lower statements.
     void
-    lower(Block*);
+    lower(Gogo*, Named_object*, Block*, Temporary_statement*);
 
     // Determine types.
     void
     determine_types();
+
+    // Check types.
+    void
+    check_types();
 
     // Return true if this is the default clause.
     bool
@@ -680,25 +777,11 @@ class Select_clauses
     channel() const
     { return this->channel_; }
 
-    // Return the value.  This will return NULL for the default
-    // clause, or for a receive clause for which no value was given.
-    Expression*
-    val() const
-    { return this->val_; }
-
-    // Return the variable to set when a receive clause is also a
-    // variable definition (v := <- ch).  This will return NULL for
-    // the default case, or for a send clause, or for a receive clause
-    // which does not define a variable.
-    Named_object*
-    var() const
-    { return this->var_; }
-
     // Return true for a send, false for a receive.
     bool
     is_send() const
     {
-      gcc_assert(!this->is_default_);
+      go_assert(!this->is_default_);
       return this->is_send_;
     }
 
@@ -708,7 +791,7 @@ class Select_clauses
     { return this->statements_; }
 
     // Return the location.
-    source_location
+    Location
     location() const
     { return this->location_; }
 
@@ -717,21 +800,43 @@ class Select_clauses
     bool
     may_fall_through() const;
 
-    // Return a tree for the statements to execute.
-    tree
-    get_statements_tree(Translate_context*);
+    // Convert the statements to the backend representation.
+    Bstatement*
+    get_statements_backend(Translate_context*);
+
+    // Dump AST representation.
+    void
+    dump_clause(Ast_dump_context*) const;
 
    private:
+    void
+    lower_default(Block*, Expression*, Expression*);
+
+    void
+    lower_send(Block*, Expression*, Expression*, Expression*);
+
+    void
+    lower_recv(Gogo*, Named_object*, Block*, Expression*, Expression*,
+	       Expression*);
+
+    // The index of this case in the generated switch statement.
+    int index_;
     // The channel.
     Expression* channel_;
-    // The value to send or the variable to set.
+    // The value to send or the lvalue to receive into.
     Expression* val_;
-    // The variable to initialize, for "case a := <- ch".
+    // The lvalue to set to whether the channel is closed on a
+    // receive.
+    Expression* closed_;
+    // The variable to initialize, for "case a := <-ch".
     Named_object* var_;
+    // The variable to initialize to whether the channel is closed,
+    // for "case a, c := <-ch".
+    Named_object* closedvar_;
     // The statements to execute.
     Block* statements_;
     // The location of this clause.
-    source_location location_;
+    Location location_;
     // Whether this is a send or a receive.
     bool is_send_;
     // Whether this is the default.
@@ -739,10 +844,6 @@ class Select_clauses
     // Whether this has been lowered.
     bool is_lowered_;
   };
-
-  void
-  add_clause_tree(Translate_context*, int, Select_clause*, Unnamed_label*,
-		  tree*);
 
   typedef std::vector<Select_clause> Clauses;
 
@@ -754,16 +855,16 @@ class Select_clauses
 class Select_statement : public Statement
 {
  public:
-  Select_statement(source_location location)
+  Select_statement(Location location)
     : Statement(STATEMENT_SELECT, location),
-      clauses_(NULL), break_label_(NULL), is_lowered_(false)
+      clauses_(NULL), sel_(NULL), break_label_(NULL), is_lowered_(false)
   { }
 
   // Add the clauses.
   void
   add_clauses(Select_clauses* clauses)
   {
-    gcc_assert(this->clauses_ == NULL);
+    go_assert(this->clauses_ == NULL);
     this->clauses_ = clauses;
   }
 
@@ -777,22 +878,31 @@ class Select_statement : public Statement
   { return this->clauses_->traverse(traverse); }
 
   Statement*
-  do_lower(Gogo*, Block*);
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
 
   void
   do_determine_types()
   { this->clauses_->determine_types(); }
 
+  void
+  do_check_types(Gogo*)
+  { this->clauses_->check_types(); }
+
   bool
   do_may_fall_through() const
   { return this->clauses_->may_fall_through(); }
 
-  tree
-  do_get_tree(Translate_context*);
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   // The select clauses.
   Select_clauses* clauses_;
+  // A temporary which holds the select structure we build up at runtime.
+  Temporary_statement* sel_;
   // The break label.
   Unnamed_label* break_label_;
   // Whether this statement has been lowered.
@@ -805,17 +915,17 @@ class Thunk_statement : public Statement
 {
  public:
   Thunk_statement(Statement_classification, Call_expression*,
-		  source_location);
+		  Location);
 
   // Return the call expression.
   Expression*
-  call()
+  call() const
   { return this->call_; }
 
   // Simplify a go or defer statement so that it only uses a single
   // parameter.
   bool
-  simplify_statement(Gogo*, Block*);
+  simplify_statement(Gogo*, Named_object*, Block*);
 
  protected:
   int
@@ -830,14 +940,18 @@ class Thunk_statement : public Statement
   void
   do_check_types(Gogo*);
 
-  // Return the function and argument trees for the call.
-  void
-  get_fn_and_arg(Translate_context*, tree* pfn, tree* parg);
+  // Return the function and argument for the call.
+  bool
+  get_fn_and_arg(Expression** pfn, Expression** parg);
 
  private:
   // Return whether this is a simple go statement.
   bool
   is_simple(Function_type*) const;
+
+  // Return whether the thunk function is a constant.
+  bool
+  is_constant_function() const;
 
   // Build the struct to use for a complex case.
   Struct_type*
@@ -845,15 +959,7 @@ class Thunk_statement : public Statement
 
   // Build the thunk.
   void
-  build_thunk(Gogo*, const std::string&, Function_type* fntype);
-
-  // The field name used in the thunk structure for the function
-  // pointer.
-  static const char* const thunk_field_fn;
-
-  // The field name used in the thunk structure for the receiver, if
-  // there is one.
-  static const char* const thunk_field_receiver;
+  build_thunk(Gogo*, const std::string&);
 
   // Set the name to use for thunk field N.
   void
@@ -872,13 +978,16 @@ class Thunk_statement : public Statement
 class Go_statement : public Thunk_statement
 {
  public:
-  Go_statement(Call_expression* call, source_location location)
+  Go_statement(Call_expression* call, Location location)
     : Thunk_statement(STATEMENT_GO, call, location)
   { }
 
  protected:
-  tree
-  do_get_tree(Translate_context*);
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 };
 
 // A defer statement.
@@ -886,13 +995,16 @@ class Go_statement : public Thunk_statement
 class Defer_statement : public Thunk_statement
 {
  public:
-  Defer_statement(Call_expression* call, source_location location)
+  Defer_statement(Call_expression* call, Location location)
     : Thunk_statement(STATEMENT_DEFER, call, location)
   { }
 
  protected:
-  tree
-  do_get_tree(Translate_context*);
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 };
 
 // A label statement.
@@ -900,7 +1012,7 @@ class Defer_statement : public Thunk_statement
 class Label_statement : public Statement
 {
  public:
-  Label_statement(Label* label, source_location location)
+  Label_statement(Label* label, Location location)
     : Statement(STATEMENT_LABEL, location),
       label_(label)
   { }
@@ -914,8 +1026,11 @@ class Label_statement : public Statement
   int
   do_traverse(Traverse*);
 
-  tree
-  do_get_tree(Translate_context*);
+  Bstatement*
+  do_get_backend(Translate_context*);
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   // The label.
@@ -928,7 +1043,7 @@ class For_statement : public Statement
 {
  public:
   For_statement(Block* init, Expression* cond, Block* post,
-		source_location location)
+		Location location)
     : Statement(STATEMENT_FOR, location),
       init_(init), cond_(cond), post_(post), statements_(NULL),
       break_label_(NULL), continue_label_(NULL)
@@ -938,7 +1053,7 @@ class For_statement : public Statement
   void
   add_statements(Block* statements)
   {
-    gcc_assert(this->statements_ == NULL);
+    go_assert(this->statements_ == NULL);
     this->statements_ = statements;
   }
 
@@ -961,14 +1076,17 @@ class For_statement : public Statement
 
   bool
   do_traverse_assignments(Traverse_assignments*)
-  { gcc_unreachable(); }
+  { go_unreachable(); }
 
   Statement*
-  do_lower(Gogo*, Block*);
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
 
-  tree
-  do_get_tree(Translate_context*)
-  { gcc_unreachable(); }
+  Bstatement*
+  do_get_backend(Translate_context*)
+  { go_unreachable(); }
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   // The initialization statements.  This may be NULL.
@@ -991,7 +1109,7 @@ class For_range_statement : public Statement
 {
  public:
   For_range_statement(Expression* index_var, Expression* value_var,
-		      Expression* range, source_location location)
+		      Expression* range, Location location)
     : Statement(STATEMENT_FOR_RANGE, location),
       index_var_(index_var), value_var_(value_var), range_(range),
       statements_(NULL), break_label_(NULL), continue_label_(NULL)
@@ -1001,7 +1119,7 @@ class For_range_statement : public Statement
   void
   add_statements(Block* statements)
   {
-    gcc_assert(this->statements_ == NULL);
+    go_assert(this->statements_ == NULL);
     this->statements_ = statements;
   }
 
@@ -1019,24 +1137,32 @@ class For_range_statement : public Statement
 
   bool
   do_traverse_assignments(Traverse_assignments*)
-  { gcc_unreachable(); }
+  { go_unreachable(); }
 
   Statement*
-  do_lower(Gogo*, Block*);
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
 
-  tree
-  do_get_tree(Translate_context*)
-  { gcc_unreachable(); }
+  Bstatement*
+  do_get_backend(Translate_context*)
+  { go_unreachable(); }
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   Expression*
-  make_range_ref(Named_object*, Temporary_statement*, source_location);
+  make_range_ref(Named_object*, Temporary_statement*, Location);
 
   Expression*
-  call_builtin(Gogo*, const char* funcname, Expression* arg, source_location);
+  call_builtin(Gogo*, const char* funcname, Expression* arg, Location);
 
   void
   lower_range_array(Gogo*, Block*, Block*, Named_object*, Temporary_statement*,
+		    Temporary_statement*, Temporary_statement*,
+		    Block**, Expression**, Block**, Block**);
+
+  void
+  lower_range_slice(Gogo*, Block*, Block*, Named_object*, Temporary_statement*,
 		    Temporary_statement*, Temporary_statement*,
 		    Block**, Expression**, Block**, Block**);
 
@@ -1088,7 +1214,7 @@ class Case_clauses
   // next clause.
   void
   add(Expression_list* cases, bool is_default, Block* statements,
-      bool is_fallthrough, source_location location)
+      bool is_fallthrough, Location location)
   {
     this->clauses_.push_back(Case_clause(cases, is_default, statements,
 					 is_fallthrough, location));
@@ -1127,13 +1253,22 @@ class Case_clauses
 
   // Return the body of a SWITCH_EXPR when all the clauses are
   // constants.
-  tree
-  get_constant_tree(Translate_context*, Unnamed_label* break_label) const;
+  void
+  get_backend(Translate_context*, Unnamed_label* break_label,
+	      std::vector<std::vector<Bexpression*> >* all_cases,
+	      std::vector<Bstatement*>* all_statements) const;
 
+  // Dump the AST representation to a dump context.
+  void
+  dump_clauses(Ast_dump_context*) const;
+  
  private:
-  // For a constant tree we need to keep a record of constants we have
-  // already seen.  Note that INTEGER_CST trees are interned.
-  typedef Unordered_set(tree) Case_constants;
+  // For a constant switch we need to keep a record of constants we
+  // have already seen.
+  class Hash_integer_value;
+  class Eq_integer_value;
+  typedef Unordered_set_hash(Expression*, Hash_integer_value,
+			     Eq_integer_value) Case_constants;
 
   // One case clause.
   class Case_clause
@@ -1145,7 +1280,7 @@ class Case_clauses
     { }
 
     Case_clause(Expression_list* cases, bool is_default, Block* statements,
-		bool is_fallthrough, source_location location)
+		bool is_fallthrough, Location location)
       : cases_(cases), statements_(statements), is_default_(is_default),
 	is_fallthrough_(is_fallthrough), location_(location)
     { }
@@ -1161,7 +1296,7 @@ class Case_clauses
     { return this->is_default_; }
 
     // The location of this clause.
-    source_location
+    Location
     location() const
     { return this->location_; }
 
@@ -1191,12 +1326,16 @@ class Case_clauses
     bool
     may_fall_through() const;
 
-    // Build up the body of a SWITCH_EXPR when the case expressions
-    // are constant.
-    void
-    get_constant_tree(Translate_context*, Unnamed_label* break_label,
-		      Case_constants* case_constants, tree* stmt_list) const;
+    // Convert the case values and statements to the backend
+    // representation.
+    Bstatement*
+    get_backend(Translate_context*, Unnamed_label* break_label,
+		Case_constants*, std::vector<Bexpression*>* cases) const;
 
+    // Dump the AST representation to a dump context.
+    void
+    dump_clause(Ast_dump_context*) const;
+  
    private:
     // The list of case expressions.
     Expression_list* cases_;
@@ -1207,7 +1346,7 @@ class Case_clauses
     // Whether this falls through after the statements.
     bool is_fallthrough_;
     // The location of this case clause.
-    source_location location_;
+    Location location_;
   };
 
   friend class Case_clause;
@@ -1224,7 +1363,7 @@ class Case_clauses
 class Switch_statement : public Statement
 {
  public:
-  Switch_statement(Expression* val, source_location location)
+  Switch_statement(Expression* val, Location location)
     : Statement(STATEMENT_SWITCH, location),
       val_(val), clauses_(NULL), break_label_(NULL)
   { }
@@ -1233,7 +1372,7 @@ class Switch_statement : public Statement
   void
   add_clauses(Case_clauses* clauses)
   {
-    gcc_assert(this->clauses_ == NULL);
+    go_assert(this->clauses_ == NULL);
     this->clauses_ = clauses;
   }
 
@@ -1246,11 +1385,14 @@ class Switch_statement : public Statement
   do_traverse(Traverse*);
 
   Statement*
-  do_lower(Gogo*, Block*);
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
 
-  tree
-  do_get_tree(Translate_context*)
-  { gcc_unreachable(); }
+  Bstatement*
+  do_get_backend(Translate_context*)
+  { go_unreachable(); }
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
   // The value to switch on.  This may be NULL.
@@ -1278,7 +1420,7 @@ class Type_case_clauses
   // statements; it may be NULL.
   void
   add(Type* type, bool is_fallthrough, bool is_default, Block* statements,
-      source_location location)
+      Location location)
   {
     this->clauses_.push_back(Type_case_clause(type, is_fallthrough, is_default,
 					      statements, location));
@@ -1299,8 +1441,12 @@ class Type_case_clauses
 
   // Lower to if and goto statements.
   void
-  lower(Block*, Temporary_statement* descriptor_temp,
+  lower(Type*, Block*, Temporary_statement* descriptor_temp,
 	Unnamed_label* break_label) const;
+
+  // Dump the AST representation to a dump context.
+  void
+  dump_clauses(Ast_dump_context*) const;
 
  private:
   // One type case clause.
@@ -1313,7 +1459,7 @@ class Type_case_clauses
     { }
 
     Type_case_clause(Type* type, bool is_fallthrough, bool is_default,
-		     Block* statements, source_location location)
+		     Block* statements, Location location)
       : type_(type), statements_(statements), is_fallthrough_(is_fallthrough),
 	is_default_(is_default), location_(location)
     { }
@@ -1329,7 +1475,7 @@ class Type_case_clauses
     { return this->is_default_; }
 
     // The location of this type clause.
-    source_location
+    Location
     location() const
     { return this->location_; }
 
@@ -1339,8 +1485,12 @@ class Type_case_clauses
 
     // Lower to if and goto statements.
     void
-    lower(Block*, Temporary_statement* descriptor_temp,
+    lower(Type*, Block*, Temporary_statement* descriptor_temp,
 	  Unnamed_label* break_label, Unnamed_label** stmts_label) const;
+
+    // Dump the AST representation to a dump context.
+    void
+    dump_clause(Ast_dump_context*) const;
 
    private:
     // The type for this type clause.
@@ -1352,7 +1502,7 @@ class Type_case_clauses
     // Whether this is the default case.
     bool is_default_;
     // The location of this type case clause.
-    source_location location_;
+    Location location_;
   };
 
   friend class Type_case_clause;
@@ -1370,16 +1520,16 @@ class Type_switch_statement : public Statement
 {
  public:
   Type_switch_statement(Named_object* var, Expression* expr,
-			source_location location)
+			Location location)
     : Statement(STATEMENT_TYPE_SWITCH, location),
       var_(var), expr_(expr), clauses_(NULL), break_label_(NULL)
-  { gcc_assert(var == NULL || expr == NULL); }
+  { go_assert(var == NULL || expr == NULL); }
 
   // Add the clauses.
   void
   add_clauses(Type_case_clauses* clauses)
   {
-    gcc_assert(this->clauses_ == NULL);
+    go_assert(this->clauses_ == NULL);
     this->clauses_ = clauses;
   }
 
@@ -1392,17 +1542,16 @@ class Type_switch_statement : public Statement
   do_traverse(Traverse*);
 
   Statement*
-  do_lower(Gogo*, Block*);
+  do_lower(Gogo*, Named_object*, Block*, Statement_inserter*);
 
-  tree
-  do_get_tree(Translate_context*)
-  { gcc_unreachable(); }
+  Bstatement*
+  do_get_backend(Translate_context*)
+  { go_unreachable(); }
+
+  void
+  do_dump_statement(Ast_dump_context*) const;
 
  private:
-  // Get the type descriptor.
-  tree
-  get_type_descriptor(Translate_context*, Type*, tree);
-
   // The variable holding the value we are switching on.
   Named_object* var_;
   // The expression we are switching on if there is no variable.

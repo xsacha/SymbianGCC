@@ -1,6 +1,4 @@
-/* Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
-   2011
-   Free Software Foundation, Inc.
+/* Copyright (C) 2002-2013 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -41,6 +39,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include <errno.h>
 
 
+/* min macro that evaluates its arguments only once.  */
+#define min(a,b)		\
+  ({ typeof (a) _a = (a);	\
+    typeof (b) _b = (b);	\
+    _a < _b ? _a : _b; })
+
+
 /* For mingw, we don't identify files by their inode number, but by a
    64-bit identifier created from a BY_HANDLE_FILE_INFORMATION. */
 #ifdef __MINGW32__
@@ -48,10 +53,14 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#if !defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64
+#undef lseek
 #define lseek _lseeki64
+#undef fstat
 #define fstat _fstati64
+#undef stat
 #define stat _stati64
-typedef struct _stati64 gfstat_t;
+#endif
 
 #ifndef HAVE_WORKING_STAT
 static uint64_t
@@ -96,9 +105,6 @@ id_from_fd (const int fd)
 }
 
 #endif
-
-#else
-typedef struct stat gfstat_t;
 #endif
 
 #ifndef PATH_MAX
@@ -156,7 +162,7 @@ fallback_access (const char *path, int mode)
 
   if (mode == F_OK)
     {
-      gfstat_t st;
+      struct stat st;
       return stat (path, &st);
     }
 
@@ -179,7 +185,7 @@ typedef struct
   gfc_offset buffer_offset;	/* File offset of the start of the buffer */
   gfc_offset physical_offset;	/* Current physical file offset */
   gfc_offset logical_offset;	/* Current logical file offset */
-  gfc_offset file_length;	/* Length of the file, -1 if not seekable. */
+  gfc_offset file_length;	/* Length of the file. */
 
   char *buffer;                 /* Pointer to the buffer.  */
   int fd;                       /* The POSIX file descriptor.  */
@@ -187,8 +193,6 @@ typedef struct
   int active;			/* Length of valid bytes in the buffer */
 
   int ndirty;			/* Dirty bytes starting at buffer_offset */
-
-  int special_file;             /* =1 if the fd refers to a special file */
 
   /* Cached stat(2) values.  */
   dev_t st_dev;
@@ -326,6 +330,19 @@ raw_tell (unix_stream * s)
   return lseek (s->fd, 0, SEEK_CUR);
 }
 
+static gfc_offset
+raw_size (unix_stream * s)
+{
+  struct stat statbuf;
+  int ret = fstat (s->fd, &statbuf);
+  if (ret == -1)
+    return ret;
+  if (S_ISREG (statbuf.st_mode))
+    return statbuf.st_size;
+  else
+    return 0;
+}
+
 static int
 raw_truncate (unix_stream * s, gfc_offset length)
 {
@@ -392,6 +409,7 @@ raw_init (unix_stream * s)
   s->st.write = (void *) raw_write;
   s->st.seek = (void *) raw_seek;
   s->st.tell = (void *) raw_tell;
+  s->st.size = (void *) raw_size;
   s->st.trunc = (void *) raw_truncate;
   s->st.close = (void *) raw_close;
   s->st.flush = (void *) raw_flush;
@@ -405,7 +423,7 @@ raw_init (unix_stream * s)
 Buffered I/O functions. These functions have the same semantics as the
 raw I/O functions above, except that they are buffered in order to
 improve performance. The buffer must be flushed when switching from
-reading to writing and vice versa.
+reading to writing and vice versa. Only supported for regular files.
 *********************************************************************/
 
 static int
@@ -419,7 +437,7 @@ buf_flush (unix_stream * s)
   if (s->ndirty == 0)
     return 0;
   
-  if (s->file_length != -1 && s->physical_offset != s->buffer_offset
+  if (s->physical_offset != s->buffer_offset
       && lseek (s->fd, s->buffer_offset, SEEK_SET) < 0)
     return -1;
 
@@ -427,8 +445,7 @@ buf_flush (unix_stream * s)
 
   s->physical_offset = s->buffer_offset + writelen;
 
-  /* Don't increment file_length if the file is non-seekable.  */
-  if (s->file_length != -1 && s->physical_offset > s->file_length)
+  if (s->physical_offset > s->file_length)
       s->file_length = s->physical_offset;
 
   s->ndirty -= writelen;
@@ -469,7 +486,7 @@ buf_read (unix_stream * s, void * buf, ssize_t nbyte)
       /* At this point we consider all bytes in the buffer discarded.  */
       to_read = nbyte - nread;
       new_logical = s->logical_offset + nread;
-      if (s->file_length != -1 && s->physical_offset != new_logical
+      if (s->physical_offset != new_logical
           && lseek (s->fd, new_logical, SEEK_SET) < 0)
         return -1;
       s->buffer_offset = s->physical_offset = new_logical;
@@ -527,7 +544,7 @@ buf_write (unix_stream * s, const void * buf, ssize_t nbyte)
         }
       else
 	{
-	  if (s->file_length != -1 && s->physical_offset != s->logical_offset)
+	  if (s->physical_offset != s->logical_offset)
 	    {
 	      if (lseek (s->fd, s->logical_offset, SEEK_SET) < 0)
 		return -1;
@@ -539,8 +556,7 @@ buf_write (unix_stream * s, const void * buf, ssize_t nbyte)
 	}
     }
   s->logical_offset += nbyte;
-  /* Don't increment file_length if the file is non-seekable.  */
-  if (s->file_length != -1 && s->logical_offset > s->file_length)
+  if (s->logical_offset > s->file_length)
     s->file_length = s->logical_offset;
   return nbyte;
 }
@@ -573,7 +589,13 @@ buf_seek (unix_stream * s, gfc_offset offset, int whence)
 static gfc_offset
 buf_tell (unix_stream * s)
 {
-  return s->logical_offset;
+  return buf_seek (s, 0, SEEK_CUR);
+}
+
+static gfc_offset
+buf_size (unix_stream * s)
+{
+  return s->file_length;
 }
 
 static int
@@ -605,6 +627,7 @@ buf_init (unix_stream * s)
   s->st.write = (void *) buf_write;
   s->st.seek = (void *) buf_seek;
   s->st.tell = (void *) buf_tell;
+  s->st.size = (void *) buf_size;
   s->st.trunc = (void *) buf_truncate;
   s->st.close = (void *) buf_close;
   s->st.flush = (void *) buf_flush;
@@ -845,8 +868,7 @@ mem_flush (unix_stream * s __attribute__ ((unused)))
 static int
 mem_close (unix_stream * s)
 {
-  if (s != NULL)
-    free (s);
+  free (s);
 
   return 0;
 }
@@ -877,6 +899,9 @@ open_internal (char *base, int length, gfc_offset offset)
   s->st.close = (void *) mem_close;
   s->st.seek = (void *) mem_seek;
   s->st.tell = (void *) mem_tell;
+  /* buf_size is not a typo, we just reuse an identical
+     implementation.  */
+  s->st.size = (void *) buf_size;
   s->st.trunc = (void *) mem_truncate;
   s->st.read = (void *) mem_read;
   s->st.write = (void *) mem_write;
@@ -905,6 +930,9 @@ open_internal4 (char *base, int length, gfc_offset offset)
   s->st.close = (void *) mem_close;
   s->st.seek = (void *) mem_seek;
   s->st.tell = (void *) mem_tell;
+  /* buf_size is not a typo, we just reuse an identical
+     implementation.  */
+  s->st.size = (void *) buf_size;
   s->st.trunc = (void *) mem_truncate;
   s->st.read = (void *) mem_read4;
   s->st.write = (void *) mem_write4;
@@ -920,7 +948,7 @@ open_internal4 (char *base, int length, gfc_offset offset)
 static stream *
 fd_to_stream (int fd)
 {
-  gfstat_t statbuf;
+  struct stat statbuf;
   unix_stream *s;
 
   s = get_mem (sizeof (unix_stream));
@@ -937,30 +965,18 @@ fd_to_stream (int fd)
 
   s->st_dev = statbuf.st_dev;
   s->st_ino = statbuf.st_ino;
-  s->special_file = !S_ISREG (statbuf.st_mode);
+  s->file_length = statbuf.st_size;
 
-  if (S_ISREG (statbuf.st_mode))
-    s->file_length = statbuf.st_size;
-  else if (S_ISBLK (statbuf.st_mode))
-    {
-      /* Hopefully more portable than ioctl(fd, BLKGETSIZE64, &size)?  */
-      gfc_offset cur = lseek (fd, 0, SEEK_CUR);
-      s->file_length = lseek (fd, 0, SEEK_END);
-      lseek (fd, cur, SEEK_SET);
-    }
-  else
-    s->file_length = -1;
-
-  if (!(S_ISREG (statbuf.st_mode) || S_ISBLK (statbuf.st_mode))
-      || options.all_unbuffered
-      ||(options.unbuffered_preconnected && 
-         (s->fd == STDIN_FILENO 
-          || s->fd == STDOUT_FILENO 
-          || s->fd == STDERR_FILENO))
-      || isatty (s->fd))
-    raw_init (s);
-  else
+  /* Only use buffered IO for regular files.  */
+  if (S_ISREG (statbuf.st_mode)
+      && !options.all_unbuffered
+      && !(options.unbuffered_preconnected && 
+	   (s->fd == STDIN_FILENO 
+	    || s->fd == STDOUT_FILENO 
+	    || s->fd == STDERR_FILENO)))
     buf_init (s);
+  else
+    raw_init (s);
 
   return (stream *) s;
 }
@@ -992,10 +1008,10 @@ int
 unpack_filename (char *cstring, const char *fstring, int len)
 {
   if (fstring == NULL)
-    return 1;
+    return EFAULT;
   len = fstrlen (fstring, len);
   if (len >= PATH_MAX)
-    return 1;
+    return ENAMETOOLONG;
 
   memmove (cstring, fstring, len);
   cstring[len] = '\0';
@@ -1018,6 +1034,12 @@ tempfile (st_parameter_open *opp)
   char *template;
   const char *slash = "/";
   int fd;
+  size_t tempdirlen;
+
+#ifndef HAVE_MKSTEMP
+  int count;
+  size_t slashlen;
+#endif
 
   tempdir = getenv ("GFORTRAN_TMPDIR");
 #ifdef __MINGW32__
@@ -1042,34 +1064,58 @@ tempfile (st_parameter_open *opp)
   if (tempdir == NULL)
     tempdir = DEFAULT_TEMPDIR;
 #endif
+
   /* Check for special case that tempdir contains slash
      or backslash at end.  */
-  if (*tempdir == 0 || tempdir[strlen (tempdir) - 1] == '/'
+  tempdirlen = strlen (tempdir);
+  if (*tempdir == 0 || tempdir[tempdirlen - 1] == '/'
 #ifdef __MINGW32__
-      || tempdir[strlen (tempdir) - 1] == '\\'
+      || tempdir[tempdirlen - 1] == '\\'
 #endif
      )
     slash = "";
 
-  template = get_mem (strlen (tempdir) + 20);
+  // Take care that the template is longer in the mktemp() branch.
+  template = get_mem (tempdirlen + 23);
 
 #ifdef HAVE_MKSTEMP
-  sprintf (template, "%s%sgfortrantmpXXXXXX", tempdir, slash);
+  snprintf (template, tempdirlen + 23, "%s%sgfortrantmpXXXXXX", 
+	    tempdir, slash);
 
   fd = mkstemp (template);
 
 #else /* HAVE_MKSTEMP */
   fd = -1;
+  count = 0;
+  slashlen = strlen (slash);
   do
     {
-      sprintf (template, "%s%sgfortrantmpXXXXXX", tempdir, slash);
+      snprintf (template, tempdirlen + 23, "%s%sgfortrantmpaaaXXXXXX", 
+		tempdir, slash);
+      if (count > 0)
+	{
+	  int c = count;
+	  template[tempdirlen + slashlen + 13] = 'a' + (c% 26);
+	  c /= 26;
+	  template[tempdirlen + slashlen + 12] = 'a' + (c % 26);
+	  c /= 26;
+	  template[tempdirlen + slashlen + 11] = 'a' + (c % 26);
+	  if (c >= 26)
+	    break;
+	}
+
       if (!mktemp (template))
-	break;
+      {
+	errno = EEXIST;
+	count++;
+	continue;
+      }
+
 #if defined(HAVE_CRLF) && defined(O_BINARY)
       fd = open (template, O_RDWR | O_CREAT | O_EXCL | O_BINARY,
-		 S_IREAD | S_IWRITE);
+		 S_IRUSR | S_IWUSR);
 #else
-      fd = open (template, O_RDWR | O_CREAT | O_EXCL, S_IREAD | S_IWRITE);
+      fd = open (template, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 #endif
     }
   while (fd == -1 && errno == EEXIST);
@@ -1090,15 +1136,17 @@ tempfile (st_parameter_open *opp)
 static int
 regular_file (st_parameter_open *opp, unit_flags *flags)
 {
-  char path[PATH_MAX + 1];
+  char path[min(PATH_MAX, opp->file_len + 1)];
   int mode;
   int rwflag;
   int crflag;
   int fd;
+  int err;
 
-  if (unpack_filename (path, opp->file, opp->file_len))
+  err = unpack_filename (path, opp->file, opp->file_len);
+  if (err)
     {
-      errno = ENOENT;		/* Fake an OS error */
+      errno = err;		/* Fake an OS error */
       return -1;
     }
 
@@ -1310,61 +1358,6 @@ error_stream (void)
 }
 
 
-/* st_vprintf()-- vprintf function for error output.  To avoid buffer
-   overruns, we limit the length of the buffer to ST_VPRINTF_SIZE.  2k
-   is big enough to completely fill a 80x25 terminal, so it shuld be
-   OK.  We use a direct write() because it is simpler and least likely
-   to be clobbered by memory corruption.  Writing an error message
-   longer than that is an error.  */
-
-#define ST_VPRINTF_SIZE 2048
-
-int
-st_vprintf (const char *format, va_list ap)
-{
-  static char buffer[ST_VPRINTF_SIZE];
-  int written;
-  int fd;
-
-  fd = options.use_stderr ? STDERR_FILENO : STDOUT_FILENO;
-#ifdef HAVE_VSNPRINTF
-  written = vsnprintf(buffer, ST_VPRINTF_SIZE, format, ap);
-#else
-  written = vsprintf(buffer, format, ap);
-
-  if (written >= ST_VPRINTF_SIZE-1)
-    {
-      /* The error message was longer than our buffer.  Ouch.  Because
-	 we may have messed up things badly, report the error and
-	 quit.  */
-#define ERROR_MESSAGE "Internal error: buffer overrun in st_vprintf()\n"
-      write (fd, buffer, ST_VPRINTF_SIZE-1);
-      write (fd, ERROR_MESSAGE, strlen(ERROR_MESSAGE));
-      sys_exit(2);
-#undef ERROR_MESSAGE
-
-    }
-#endif
-
-  written = write (fd, buffer, written);
-  return written;
-}
-
-/* st_printf()-- printf() function for error output.  This just calls
-   st_vprintf() to do the actual work.  */
-
-int
-st_printf (const char *format, ...)
-{
-  int written;
-  va_list ap;
-  va_start (ap, format);
-  written = st_vprintf(format, ap);
-  va_end (ap);
-  return written;
-}
-
-
 /* compare_file_filename()-- Given an open stream and a fortran string
  * that is a filename, figure out if the file is the same as the
  * filename. */
@@ -1372,8 +1365,8 @@ st_printf (const char *format, ...)
 int
 compare_file_filename (gfc_unit *u, const char *name, int len)
 {
-  char path[PATH_MAX + 1];
-  gfstat_t st;
+  char path[min(PATH_MAX, len + 1)];
+  struct stat st;
 #ifdef HAVE_WORKING_STAT
   unix_stream *s;
 #else
@@ -1414,7 +1407,7 @@ compare_file_filename (gfc_unit *u, const char *name, int len)
 
 
 #ifdef HAVE_WORKING_STAT
-# define FIND_FILE0_DECL gfstat_t *st
+# define FIND_FILE0_DECL struct stat *st
 # define FIND_FILE0_ARGS st
 #else
 # define FIND_FILE0_DECL uint64_t id, const char *file, gfc_charlen_type file_len
@@ -1472,8 +1465,8 @@ find_file0 (gfc_unit *u, FIND_FILE0_DECL)
 gfc_unit *
 find_file (const char *file, gfc_charlen_type file_len)
 {
-  char path[PATH_MAX + 1];
-  gfstat_t st[1];
+  char path[min(PATH_MAX, file_len + 1)];
+  struct stat st[1];
   gfc_unit *u;
 #if defined(__MINGW32__) && !HAVE_WORKING_STAT
   uint64_t id = 0ULL;
@@ -1522,23 +1515,6 @@ retry:
   return u;
 }
 
-
-/* Flush dirty data, making sure that OS metadata is updated as
-   well. Note that this is VERY slow on mingw due to committing data
-   to stable storage.  */
-int
-flush_sync (stream * s)
-{
-  if (sflush (s) == -1)
-    return -1;
-#ifdef __MINGW32__
-  if (_commit (((unix_stream *)s)->fd) == -1)
-    return -1;
-#endif
-  return 0;
-}
-
-
 static gfc_unit *
 flush_all_units_1 (gfc_unit *u, int min_unit)
 {
@@ -1555,7 +1531,7 @@ flush_all_units_1 (gfc_unit *u, int min_unit)
 	  if (__gthread_mutex_trylock (&u->lock))
 	    return u;
 	  if (u->s)
-	    flush_sync (u->s);
+	    sflush (u->s);
 	  __gthread_mutex_unlock (&u->lock);
 	}
       u = u->right;
@@ -1585,7 +1561,7 @@ flush_all_units (void)
 
       if (u->closed == 0)
 	{
-	  flush_sync (u->s);
+	  sflush (u->s);
 	  __gthread_mutex_lock (&unit_lock);
 	  __gthread_mutex_unlock (&u->lock);
 	  (void) predec_waiting_locked (u);
@@ -1608,11 +1584,12 @@ flush_all_units (void)
 int
 delete_file (gfc_unit * u)
 {
-  char path[PATH_MAX + 1];
+  char path[min(PATH_MAX, u->file_len + 1)];
+  int err = unpack_filename (path, u->file, u->file_len);
 
-  if (unpack_filename (path, u->file, u->file_len))
+  if (err)
     {				/* Shouldn't be possible */
-      errno = ENOENT;
+      errno = err;
       return 1;
     }
 
@@ -1626,7 +1603,7 @@ delete_file (gfc_unit * u)
 int
 file_exists (const char *file, gfc_charlen_type file_len)
 {
-  char path[PATH_MAX + 1];
+  char path[min(PATH_MAX, file_len + 1)];
 
   if (unpack_filename (path, file, file_len))
     return 0;
@@ -1640,8 +1617,8 @@ file_exists (const char *file, gfc_charlen_type file_len)
 GFC_IO_INT
 file_size (const char *file, gfc_charlen_type file_len)
 {
-  char path[PATH_MAX + 1];
-  gfstat_t statbuf;
+  char path[min(PATH_MAX, file_len + 1)];
+  struct stat statbuf;
 
   if (unpack_filename (path, file, file_len))
     return -1;
@@ -1661,8 +1638,8 @@ static const char yes[] = "YES", no[] = "NO", unknown[] = "UNKNOWN";
 const char *
 inquire_sequential (const char *string, int len)
 {
-  char path[PATH_MAX + 1];
-  gfstat_t statbuf;
+  char path[min(PATH_MAX, len + 1)];
+  struct stat statbuf;
 
   if (string == NULL ||
       unpack_filename (path, string, len) || stat (path, &statbuf) < 0)
@@ -1685,8 +1662,8 @@ inquire_sequential (const char *string, int len)
 const char *
 inquire_direct (const char *string, int len)
 {
-  char path[PATH_MAX + 1];
-  gfstat_t statbuf;
+  char path[min(PATH_MAX, len + 1)];
+  struct stat statbuf;
 
   if (string == NULL ||
       unpack_filename (path, string, len) || stat (path, &statbuf) < 0)
@@ -1709,8 +1686,8 @@ inquire_direct (const char *string, int len)
 const char *
 inquire_formatted (const char *string, int len)
 {
-  char path[PATH_MAX + 1];
-  gfstat_t statbuf;
+  char path[min(PATH_MAX, len + 1)];
+  struct stat statbuf;
 
   if (string == NULL ||
       unpack_filename (path, string, len) || stat (path, &statbuf) < 0)
@@ -1744,7 +1721,7 @@ inquire_unformatted (const char *string, int len)
 static const char *
 inquire_access (const char *string, int len, int mode)
 {
-  char path[PATH_MAX + 1];
+  char path[min(PATH_MAX, len + 1)];
 
   if (string == NULL || unpack_filename (path, string, len) ||
       access (path, mode) < 0)
@@ -1781,44 +1758,6 @@ const char *
 inquire_readwrite (const char *string, int len)
 {
   return inquire_access (string, len, R_OK | W_OK);
-}
-
-
-/* file_length()-- Return the file length in bytes, -1 if unknown */
-
-gfc_offset
-file_length (stream * s)
-{
-  gfc_offset curr, end;
-  if (!is_seekable (s))
-    return -1;
-  curr = stell (s);
-  if (curr == -1)
-    return curr;
-  end = sseek (s, 0, SEEK_END);
-  sseek (s, curr, SEEK_SET);
-  return end;
-}
-
-
-/* is_seekable()-- Return nonzero if the stream is seekable, zero if
- * it is not */
-
-int
-is_seekable (stream *s)
-{
-  /* By convention, if file_length == -1, the file is not
-     seekable.  */
-  return ((unix_stream *) s)->file_length!=-1;
-}
-
-
-/* is_special()-- Return nonzero if the stream is not a regular file.  */
-
-int
-is_special (stream *s)
-{
-  return ((unix_stream *) s)->special_file;
 }
 
 

@@ -17,5 +17,5 @@ void test_vqdmull_lanes32 (void)
   out_int64x2_t = vqdmull_lane_s32 (arg0_int32x2_t, arg1_int32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vqdmull\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqdmull\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

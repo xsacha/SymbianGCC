@@ -1,5 +1,6 @@
-/* { dg-do compile { target *-*-linux* } } */
+/* { dg-do compile } */
 /* { dg-options "-fPIE" } */
+/* { dg-require-effective-target pie } */
 
 char *strcpy (char *dest, const char *src);
 

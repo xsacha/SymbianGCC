@@ -33,6 +33,15 @@
 ;; A list of integer modes that are up to one word long
 (define_mode_iterator QHSI [QI HI SI])
 
+;; A list of integer modes that are less than a word
+(define_mode_iterator NARROW [QI HI])
+
+;; A list of all the integer modes upto 64bit
+(define_mode_iterator QHSD [QI HI SI DI])
+
+;; A list of the 32bit and 64bit integer modes
+(define_mode_iterator SIDI [SI DI])
+
 ;; Integer element sizes implemented by IWMMXT.
 (define_mode_iterator VMMX [V2SI V4HI V8QI])
 
@@ -188,6 +197,10 @@
 (define_mode_attr V_CVTTO [(V2SI "V2SF") (V2SF "V2SI")
                (V4SI "V4SF") (V4SF "V4SI")])
 
+;; As above but in lower case.
+(define_mode_attr V_cvtto [(V2SI "v2sf") (V2SF "v2si")
+                           (V4SI "v4sf") (V4SF "v4si")])
+
 ;; Define element mode for each vector mode.
 (define_mode_attr V_elem [(V8QI "QI") (V16QI "QI")
               (V4HI "HI") (V8HI "HI")
@@ -205,24 +218,22 @@
 
 ;; Mode of pair of elements for each vector mode, to define transfer
 ;; size for structure lane/dup loads and stores.
-(define_mode_attr V_two_elem [(V8QI "HI") (V16QI "HI")
-                  (V4HI "SI") (V8HI "SI")
+(define_mode_attr V_two_elem [(V8QI "HI")   (V16QI "HI")
+                              (V4HI "SI")   (V8HI "SI")
                               (V2SI "V2SI") (V4SI "V2SI")
                               (V2SF "V2SF") (V4SF "V2SF")
                               (DI "V2DI")   (V2DI "V2DI")])
 
 ;; Similar, for three elements.
-;; ??? Should we define extra modes so that sizes of all three-element
-;; accesses can be accurately represented?
-(define_mode_attr V_three_elem [(V8QI "SI")   (V16QI "SI")
-                    (V4HI "V4HI") (V8HI "V4HI")
-                                (V2SI "V4SI") (V4SI "V4SI")
-                                (V2SF "V4SF") (V4SF "V4SF")
-                                (DI "EI")     (V2DI "EI")])
+(define_mode_attr V_three_elem [(V8QI "BLK") (V16QI "BLK")
+                                (V4HI "BLK") (V8HI "BLK")
+                                (V2SI "BLK") (V4SI "BLK")
+                                (V2SF "BLK") (V4SF "BLK")
+                                (DI "EI")    (V2DI "EI")])
 
 ;; Similar, for four elements.
 (define_mode_attr V_four_elem [(V8QI "SI")   (V16QI "SI")
-                   (V4HI "V4HI") (V8HI "V4HI")
+                               (V4HI "V4HI") (V8HI "V4HI")
                                (V2SI "V4SI") (V4SI "V4SI")
                                (V2SF "V4SF") (V4SF "V4SF")
                                (DI "OI")     (V2DI "OI")])
@@ -407,6 +418,9 @@
 			       (V4QQ "8") (V2HQ "16") (QQ "8") (HQ "16")
 			       (V2HA "16") (HA "16") (SQ "") (SA "")])
 
+;; Mode attribute for vshll.
+(define_mode_attr V_innermode [(V8QI "QI") (V4HI "HI") (V2SI "SI")])
+
 ;;----------------------------------------------------------------------------
 ;; Code attributes
 ;;----------------------------------------------------------------------------
@@ -424,11 +438,3 @@
 
 ;; Assembler mnemonics for signedness of widening operations.
 (define_code_attr US [(sign_extend "s") (zero_extend "u")])
-
-;; Both kinds of return insn.
-(define_code_iterator returns [return simple_return])
-(define_code_attr return_str [(return "") (simple_return "simple_")])
-(define_code_attr return_simple_p [(return "false") (simple_return "true")])
-(define_code_attr return_cond [(return " && USE_RETURN_INSN (FALSE)")
-			       (simple_return " && use_simple_return_p ()")])
-

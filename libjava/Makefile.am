@@ -221,14 +221,9 @@ endif
 
 dbexec_LTLIBRARIES = libjvm.la
 
-# Install the pkgconfig file in a target-specific directory, since the
-# libraries it indicates
+pkgconfigdir = $(libdir)/pkgconfig
 
-pkgconfigdir = $(toolexeclibdir)/pkgconfig
-
-# We install the JAR in a target-specific directory so that toolchains
-# build from different sources can be installed in the same directory.
-jardir = $(prefix)/$(target_noncanonical)/share/java
+jardir = $(datadir)/java
 jar_DATA = libgcj-$(gcc_version).jar libgcj-tools-$(gcc_version).jar
 if INSTALL_ECJ_JAR
 jar_DATA += $(ECJ_BUILD_JAR)
@@ -347,7 +342,7 @@ LIBLINK = $(LIBTOOL) --tag=CXX $(LIBTOOLFLAGS) --mode=link $(CXX) -L$(here) \
 CXXLINK = $(LIBTOOL) --tag=CXX $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	  $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LTLDFLAGS) -o $@
 
-GCC_UNWIND_INCLUDE = @GCC_UNWIND_INCLUDE@
+LIBGCC_UNWIND_INCLUDE = @LIBGCC_UNWIND_INCLUDE@
 
 WARNINGS = -Wextra -Wall
 ## Some systems don't allow `$' in identifiers by default, so we force
@@ -415,7 +410,7 @@ AM_CPPFLAGS = -I$(top_srcdir) \
 	-Iclasspath/include \
 	-I$(top_srcdir)/classpath/native/fdlibm \
 	$(GCINCS) $(THREADINCS) $(INCLTDL) \
-	$(GCC_UNWIND_INCLUDE) $(ZINCS) $(LIBFFIINCS)
+	$(LIBGCC_UNWIND_INCLUDE) $(ZINCS) $(LIBFFIINCS)
 
 BOOTCLASSPATH = $(srcdir)/classpath/lib
 
@@ -497,7 +492,7 @@ xlib_nat_files = $(xlib_nat_source_files:.cc=.lo)
 libgcj_la_LDFLAGS = -rpath $(toolexeclibdir) $(THREADLDFLAGS) $(extra_ldflags) $(THREADLIBS) \
 	$(LIBLTDL) $(SYS_ZLIBS) $(LIBJAVA_LDFLAGS_NOUNDEF) \
 	-version-info `grep -v '^\#' $(srcdir)/libtool-version` \
-	$(LIBGCJ_LD_SYMBOLIC_FUNCTIONS)
+	$(LIBGCJ_LD_SYMBOLIC_FUNCTIONS) $(LIBGCJ_LD_EXPORT_ALL)
 libgcj_la_LIBADD = \
 	classpath/native/fdlibm/libfdlibm.la \
 	java/lang/Object.lo \

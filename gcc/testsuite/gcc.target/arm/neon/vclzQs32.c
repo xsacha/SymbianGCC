@@ -16,5 +16,5 @@ void test_vclzQs32 (void)
   out_int32x4_t = vclzq_s32 (arg0_int32x4_t);
 }
 
-/* { dg-final { scan-assembler "vclz\.i32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vclz\.i32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

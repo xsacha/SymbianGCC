@@ -5,15 +5,18 @@
 package tls
 
 import (
+	"bytes"
+	"crypto"
 	"crypto/rsa"
 	"crypto/subtle"
 	"crypto/x509"
+	"errors"
 	"io"
-	"os"
+	"strconv"
 )
 
-func (c *Conn) clientHandshake() os.Error {
-	finishedHash := newFinishedHash()
+func (c *Conn) clientHandshake() error {
+	finishedHash := newFinishedHash(versionTLS10)
 
 	if c.config == nil {
 		c.config = defaultConfig()
@@ -28,9 +31,10 @@ func (c *Conn) clientHandshake() os.Error {
 		serverName:         c.config.ServerName,
 		supportedCurves:    []uint16{curveP256, curveP384, curveP521},
 		supportedPoints:    []uint8{pointFormatUncompressed},
+		nextProtoNeg:       len(c.config.NextProtos) > 0,
 	}
 
-	t := uint32(c.config.time())
+	t := uint32(c.config.time().Unix())
 	hello.random[0] = byte(t >> 24)
 	hello.random[1] = byte(t >> 16)
 	hello.random[2] = byte(t >> 8)
@@ -38,7 +42,7 @@ func (c *Conn) clientHandshake() os.Error {
 	_, err := io.ReadFull(c.config.rand(), hello.random[4:])
 	if err != nil {
 		c.sendAlert(alertInternalError)
-		return os.ErrorString("short read from Rand")
+		return errors.New("short read from Rand")
 	}
 
 	finishedHash.Write(hello.marshal())
@@ -55,8 +59,9 @@ func (c *Conn) clientHandshake() os.Error {
 	finishedHash.Write(serverHello.marshal())
 
 	vers, ok := mutualVersion(serverHello.vers)
-	if !ok {
-		c.sendAlert(alertProtocolVersion)
+	if !ok || vers < versionTLS10 {
+		// TLS 1.0 is the minimum version supported as a client.
+		return c.sendAlert(alertProtocolVersion)
 	}
 	c.vers = vers
 	c.haveVers = true
@@ -65,7 +70,12 @@ func (c *Conn) clientHandshake() os.Error {
 		return c.sendAlert(alertUnexpectedMessage)
 	}
 
-	suite, suiteId := mutualCipherSuite(c.config.cipherSuites(), serverHello.cipherSuite)
+	if !hello.nextProtoNeg && serverHello.nextProtoNeg {
+		c.sendAlert(alertHandshakeFailure)
+		return errors.New("server advertised unrequested NPN")
+	}
+
+	suite := mutualCipherSuite(c.config.cipherSuites(), serverHello.cipherSuite)
 	if suite == nil {
 		return c.sendAlert(alertHandshakeFailure)
 	}
@@ -81,55 +91,34 @@ func (c *Conn) clientHandshake() os.Error {
 	finishedHash.Write(certMsg.marshal())
 
 	certs := make([]*x509.Certificate, len(certMsg.certificates))
-	chain := NewCASet()
 	for i, asn1Data := range certMsg.certificates {
 		cert, err := x509.ParseCertificate(asn1Data)
 		if err != nil {
 			c.sendAlert(alertBadCertificate)
-			return os.ErrorString("failed to parse certificate from server: " + err.String())
+			return errors.New("failed to parse certificate from server: " + err.Error())
 		}
 		certs[i] = cert
-		chain.AddCert(cert)
 	}
 
-	// If we don't have a root CA set configured then anything is accepted.
-	// TODO(rsc): Find certificates for OS X 10.6.
-	for cur := certs[0]; c.config.RootCAs != nil; {
-		parent := c.config.RootCAs.FindVerifiedParent(cur)
-		if parent != nil {
-			break
+	if !c.config.InsecureSkipVerify {
+		opts := x509.VerifyOptions{
+			Roots:         c.config.RootCAs,
+			CurrentTime:   c.config.time(),
+			DNSName:       c.config.ServerName,
+			Intermediates: x509.NewCertPool(),
 		}
 
-		parent = chain.FindVerifiedParent(cur)
-		if parent == nil {
+		for i, cert := range certs {
+			if i == 0 {
+				continue
+			}
+			opts.Intermediates.AddCert(cert)
+		}
+		c.verifiedChains, err = certs[0].Verify(opts)
+		if err != nil {
 			c.sendAlert(alertBadCertificate)
-			return os.ErrorString("could not find root certificate for chain")
+			return err
 		}
-
-		if !parent.BasicConstraintsValid || !parent.IsCA {
-			c.sendAlert(alertBadCertificate)
-			return os.ErrorString("intermediate certificate does not have CA bit set")
-		}
-		// KeyUsage status flags are ignored. From Engineering
-		// Security, Peter Gutmann: A European government CA marked its
-		// signing certificates as being valid for encryption only, but
-		// no-one noticed. Another European CA marked its signature
-		// keys as not being valid for signatures. A different CA
-		// marked its own trusted root certificate as being invalid for
-		// certificate signing.  Another national CA distributed a
-		// certificate to be used to encrypt data for the country’s tax
-		// authority that was marked as only being usable for digital
-		// signatures but not for encryption. Yet another CA reversed
-		// the order of the bit flags in the keyUsage due to confusion
-		// over encoding endianness, essentially setting a random
-		// keyUsage in certificates that it issued. Another CA created
-		// a self-invalidating certificate by adding a certificate
-		// policy statement stipulating that the certificate had to be
-		// used strictly as specified in the keyUsage, and a keyUsage
-		// containing a flag indicating that the RSA encryption key
-		// could only be used for Diffie-Hellman key agreement.
-
-		cur = parent
 	}
 
 	if _, ok := certs[0].PublicKey.(*rsa.PublicKey); !ok {
@@ -138,7 +127,7 @@ func (c *Conn) clientHandshake() os.Error {
 
 	c.peerCertificates = certs
 
-	if serverHello.certStatus {
+	if serverHello.ocspStapling {
 		msg, err = c.readHandshake()
 		if err != nil {
 			return err
@@ -176,10 +165,26 @@ func (c *Conn) clientHandshake() os.Error {
 		}
 	}
 
-	transmitCert := false
+	var certToSend *Certificate
+	var certRequested bool
 	certReq, ok := msg.(*certificateRequestMsg)
 	if ok {
-		// We only accept certificates with RSA keys.
+		certRequested = true
+
+		// RFC 4346 on the certificateAuthorities field:
+		// A list of the distinguished names of acceptable certificate
+		// authorities. These distinguished names may specify a desired
+		// distinguished name for a root CA or for a subordinate CA;
+		// thus, this message can be used to describe both known roots
+		// and a desired authorization space. If the
+		// certificate_authorities list is empty then the client MAY
+		// send any certificate of the appropriate
+		// ClientCertificateType, unless there is some external
+		// arrangement to the contrary.
+
+		finishedHash.Write(certReq.marshal())
+
+		// For now, we only know how to sign challenges with RSA
 		rsaAvail := false
 		for _, certType := range certReq.certificateTypes {
 			if certType == certTypeRSASign {
@@ -188,23 +193,41 @@ func (c *Conn) clientHandshake() os.Error {
 			}
 		}
 
-		// For now, only send a certificate back if the server gives us an
-		// empty list of certificateAuthorities.
-		//
-		// RFC 4346 on the certificateAuthorities field:
-		// A list of the distinguished names of acceptable certificate
-		// authorities.  These distinguished names may specify a desired
-		// distinguished name for a root CA or for a subordinate CA; thus,
-		// this message can be used to describe both known roots and a
-		// desired authorization space.  If the certificate_authorities
-		// list is empty then the client MAY send any certificate of the
-		// appropriate ClientCertificateType, unless there is some
-		// external arrangement to the contrary.
-		if rsaAvail && len(certReq.certificateAuthorities) == 0 {
-			transmitCert = true
-		}
+		// We need to search our list of client certs for one
+		// where SignatureAlgorithm is RSA and the Issuer is in
+		// certReq.certificateAuthorities
+	findCert:
+		for i, cert := range c.config.Certificates {
+			if !rsaAvail {
+				continue
+			}
 
-		finishedHash.Write(certReq.marshal())
+			leaf := cert.Leaf
+			if leaf == nil {
+				if leaf, err = x509.ParseCertificate(cert.Certificate[0]); err != nil {
+					c.sendAlert(alertInternalError)
+					return errors.New("tls: failed to parse client certificate #" + strconv.Itoa(i) + ": " + err.Error())
+				}
+			}
+
+			if leaf.PublicKeyAlgorithm != x509.RSA {
+				continue
+			}
+
+			if len(certReq.certificateAuthorities) == 0 {
+				// they gave us an empty list, so just take the
+				// first RSA cert from c.config.Certificates
+				certToSend = &cert
+				break
+			}
+
+			for _, ca := range certReq.certificateAuthorities {
+				if bytes.Equal(leaf.RawIssuer, ca) {
+					certToSend = &cert
+					break findCert
+				}
+			}
+		}
 
 		msg, err = c.readHandshake()
 		if err != nil {
@@ -218,16 +241,13 @@ func (c *Conn) clientHandshake() os.Error {
 	}
 	finishedHash.Write(shd.marshal())
 
-	var cert *x509.Certificate
-	if transmitCert {
+	// If the server requested a certificate then we have to send a
+	// Certificate message, even if it's empty because we don't have a
+	// certificate to send.
+	if certRequested {
 		certMsg = new(certificateMsg)
-		if len(c.config.Certificates) > 0 {
-			cert, err = x509.ParseCertificate(c.config.Certificates[0].Certificate[0])
-			if err == nil && cert.PublicKeyAlgorithm == x509.RSA {
-				certMsg.certificates = c.config.Certificates[0].Certificate
-			} else {
-				cert = nil
-			}
+		if certToSend != nil {
+			certMsg.certificates = certToSend.Certificate
 		}
 		finishedHash.Write(certMsg.marshal())
 		c.writeRecord(recordTypeHandshake, certMsg.marshal())
@@ -243,12 +263,12 @@ func (c *Conn) clientHandshake() os.Error {
 		c.writeRecord(recordTypeHandshake, ckx.marshal())
 	}
 
-	if cert != nil {
+	if certToSend != nil {
 		certVerify := new(certificateVerifyMsg)
-		var digest [36]byte
-		copy(digest[0:16], finishedHash.serverMD5.Sum())
-		copy(digest[16:36], finishedHash.serverSHA1.Sum())
-		signed, err := rsa.SignPKCS1v15(c.config.rand(), c.config.Certificates[0].PrivateKey, rsa.HashMD5SHA1, digest[0:])
+		digest := make([]byte, 0, 36)
+		digest = finishedHash.serverMD5.Sum(digest)
+		digest = finishedHash.serverSHA1.Sum(digest)
+		signed, err := rsa.SignPKCS1v15(c.config.rand(), c.config.Certificates[0].PrivateKey.(*rsa.PrivateKey), crypto.MD5SHA1, digest)
 		if err != nil {
 			return c.sendAlert(alertInternalError)
 		}
@@ -259,21 +279,32 @@ func (c *Conn) clientHandshake() os.Error {
 	}
 
 	masterSecret, clientMAC, serverMAC, clientKey, serverKey, clientIV, serverIV :=
-		keysFromPreMasterSecret10(preMasterSecret, hello.random, serverHello.random, suite.macLen, suite.keyLen, suite.ivLen)
+		keysFromPreMasterSecret(c.vers, preMasterSecret, hello.random, serverHello.random, suite.macLen, suite.keyLen, suite.ivLen)
 
-	clientCipher := suite.cipher(clientKey, clientIV, false /* not for reading */ )
-	clientHash := suite.mac(clientMAC)
-	c.out.prepareCipherSpec(clientCipher, clientHash)
+	clientCipher := suite.cipher(clientKey, clientIV, false /* not for reading */)
+	clientHash := suite.mac(c.vers, clientMAC)
+	c.out.prepareCipherSpec(c.vers, clientCipher, clientHash)
 	c.writeRecord(recordTypeChangeCipherSpec, []byte{1})
+
+	if serverHello.nextProtoNeg {
+		nextProto := new(nextProtoMsg)
+		proto, fallback := mutualProtocol(c.config.NextProtos, serverHello.nextProtos)
+		nextProto.proto = proto
+		c.clientProtocol = proto
+		c.clientProtocolFallback = fallback
+
+		finishedHash.Write(nextProto.marshal())
+		c.writeRecord(recordTypeHandshake, nextProto.marshal())
+	}
 
 	finished := new(finishedMsg)
 	finished.verifyData = finishedHash.clientSum(masterSecret)
 	finishedHash.Write(finished.marshal())
 	c.writeRecord(recordTypeHandshake, finished.marshal())
 
-	serverCipher := suite.cipher(serverKey, serverIV, true /* for reading */ )
-	serverHash := suite.mac(serverMAC)
-	c.in.prepareCipherSpec(serverCipher, serverHash)
+	serverCipher := suite.cipher(serverKey, serverIV, true /* for reading */)
+	serverHash := suite.mac(c.vers, serverMAC)
+	c.in.prepareCipherSpec(c.vers, serverCipher, serverHash)
 	c.readRecord(recordTypeChangeCipherSpec)
 	if c.err != nil {
 		return c.err
@@ -295,6 +326,22 @@ func (c *Conn) clientHandshake() os.Error {
 	}
 
 	c.handshakeComplete = true
-	c.cipherSuite = suiteId
+	c.cipherSuite = suite.id
 	return nil
+}
+
+// mutualProtocol finds the mutual Next Protocol Negotiation protocol given the
+// set of client and server supported protocols. The set of client supported
+// protocols must not be empty. It returns the resulting protocol and flag
+// indicating if the fallback case was reached.
+func mutualProtocol(clientProtos, serverProtos []string) (string, bool) {
+	for _, s := range serverProtos {
+		for _, c := range clientProtos {
+			if s == c {
+				return s, false
+			}
+		}
+	}
+
+	return clientProtos[0], true
 }

@@ -26,6 +26,7 @@
 // TODO(rsc): Compute max waste for any given size.
 
 #include "runtime.h"
+#include "arch.h"
 #include "malloc.h"
 
 int32 runtime_class_to_size[NumSizeClasses];
@@ -57,7 +58,7 @@ runtime_SizeToClass(int32 size)
 void
 runtime_InitSizes(void)
 {
-	int32 align, sizeclass, size, osize, nextsize, n;
+	int32 align, sizeclass, size, nextsize, n;
 	uint32 i;
 	uintptr allocsize, npages;
 
@@ -81,8 +82,7 @@ runtime_InitSizes(void)
 		// the leftover is less than 1/8 of the total,
 		// so wasted space is at most 12.5%.
 		allocsize = PageSize;
-		osize = size + RefcountOverhead;
-		while(allocsize%osize > (allocsize/8))
+		while(allocsize%size > allocsize/8)
 			allocsize += PageSize;
 		npages = allocsize >> PageShift;
 
@@ -93,7 +93,7 @@ runtime_InitSizes(void)
 		// different sizes.
 		if(sizeclass > 1
 		&& (int32)npages == runtime_class_to_allocnpages[sizeclass-1]
-		&& allocsize/osize == allocsize/(runtime_class_to_size[sizeclass-1]+RefcountOverhead)) {
+		&& allocsize/size == allocsize/runtime_class_to_size[sizeclass-1]) {
 			runtime_class_to_size[sizeclass-1] = size;
 			continue;
 		}
@@ -103,7 +103,7 @@ runtime_InitSizes(void)
 		sizeclass++;
 	}
 	if(sizeclass != NumSizeClasses) {
-		// runtime_printf("sizeclass=%d NumSizeClasses=%d\n", sizeclass, NumSizeClasses);
+		runtime_printf("sizeclass=%d NumSizeClasses=%d\n", sizeclass, NumSizeClasses);
 		runtime_throw("InitSizes - bad NumSizeClasses");
 	}
 
@@ -122,13 +122,13 @@ runtime_InitSizes(void)
 		for(n=0; n < MaxSmallSize; n++) {
 			sizeclass = runtime_SizeToClass(n);
 			if(sizeclass < 1 || sizeclass >= NumSizeClasses || runtime_class_to_size[sizeclass] < n) {
-				// runtime_printf("size=%d sizeclass=%d runtime_class_to_size=%d\n", n, sizeclass, runtime_class_to_size[sizeclass]);
-				// runtime_printf("incorrect SizeToClass");
+				runtime_printf("size=%d sizeclass=%d runtime_class_to_size=%d\n", n, sizeclass, runtime_class_to_size[sizeclass]);
+				runtime_printf("incorrect SizeToClass");
 				goto dump;
 			}
 			if(sizeclass > 1 && runtime_class_to_size[sizeclass-1] >= n) {
-				// runtime_printf("size=%d sizeclass=%d runtime_class_to_size=%d\n", n, sizeclass, runtime_class_to_size[sizeclass]);
-				// runtime_printf("SizeToClass too big");
+				runtime_printf("size=%d sizeclass=%d runtime_class_to_size=%d\n", n, sizeclass, runtime_class_to_size[sizeclass]);
+				runtime_printf("SizeToClass too big");
 				goto dump;
 			}
 		}

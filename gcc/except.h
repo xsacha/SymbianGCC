@@ -68,15 +68,6 @@ enum eh_region_type
   ERT_MUST_NOT_THROW
 };
 
-/* Region header types in the compact EH scheme.  */
-enum eh_compact_header_type
-{
-  ECHT_NOT_INITIALIZED,
-  ECHT_CLEANUP,
-  ECHT_CATCH,
-  ECHT_CONTINUE_UNWINDING,
-  ECHT_SPEC
-};
 
 /* A landing pad for a given exception region.  Any transfer of control
    from the EH runtime to the function happens at a landing pad.  */
@@ -121,12 +112,6 @@ struct GTY(()) eh_catch_d
      having been mapped by assign_filter_values.  These integers are to be
      compared against the __builtin_eh_filter value.  */
   tree filter_list;
-
-  /* For the compact exception handling encoding:  A TREE_LIST
-     of INTEGER_CSTs that correspond to the type_list entries,
-     having been mapped by compact_assign_filter_values.  These integers
-     are to be compared against the __builtin_eh_filter value.  */
-  tree compact_filter_list;
 
   /* The code that should be executed if this catch handler matches the
      thrown exception.  This label is only maintained until
@@ -268,6 +253,7 @@ extern rtx expand_builtin_dwarf_sp_column (void);
 extern void expand_builtin_eh_return (tree, tree);
 extern void expand_eh_return (void);
 extern rtx expand_builtin_extend_pointer (tree);
+extern void expand_dw2_landing_pad_for_region (eh_region);
 
 typedef tree (*duplicate_eh_regions_map) (tree, void *);
 extern struct pointer_map_t *duplicate_eh_regions

@@ -17,5 +17,5 @@ void test_vorns16 (void)
   out_int16x4_t = vorn_s16 (arg0_int16x4_t, arg1_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vorn\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vorn\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -129,19 +129,19 @@ AC_MSG_RESULT($acx_cv_header_stdint $acx_cv_header_stdint_kind)
 
 # Lacking an uintptr_t?  Test size of void *
 case "$acx_cv_header_stdint:$ac_cv_type_uintptr_t" in
-  stddef.h:* | *:no) AC_CHECK_SIZEOF(void *,,/* no standard headers */) ;;
+  stddef.h:* | *:no) AC_CHECK_SIZEOF(void *) ;;
 esac
 
 # Lacking an uint64_t?  Test size of long
 case "$acx_cv_header_stdint:$ac_cv_type_uint64_t:$ac_cv_type_u_int64_t" in
-  stddef.h:*:* | *:no:no) AC_CHECK_SIZEOF(long,,/* no standard headers */) ;;
+  stddef.h:*:* | *:no:no) AC_CHECK_SIZEOF(long) ;;
 esac
 
 if test $acx_cv_header_stdint = stddef.h; then
   # Lacking a good header?  Test size of everything and deduce all types.
-  AC_CHECK_SIZEOF(int,,/* no standard headers */)
-  AC_CHECK_SIZEOF(short,,/* no standard headers */)
-  AC_CHECK_SIZEOF(char,,/* no standard headers */)
+  AC_CHECK_SIZEOF(int)
+  AC_CHECK_SIZEOF(short)
+  AC_CHECK_SIZEOF(char)
 
   AC_MSG_CHECKING(for type equivalent to int8_t)
   case "$ac_cv_sizeof_char" in

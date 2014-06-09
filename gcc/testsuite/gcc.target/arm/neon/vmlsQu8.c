@@ -18,5 +18,5 @@ void test_vmlsQu8 (void)
   out_uint8x16_t = vmlsq_u8 (arg0_uint8x16_t, arg1_uint8x16_t, arg2_uint8x16_t);
 }
 
-/* { dg-final { scan-assembler "vmls\.i8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmls\.i8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

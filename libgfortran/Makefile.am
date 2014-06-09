@@ -36,7 +36,9 @@ LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS)) \
 toolexeclib_LTLIBRARIES = libgfortran.la
 toolexeclib_DATA = libgfortran.spec
 libgfortran_la_LINK = $(LINK) $(libgfortran_la_LDFLAGS)
-libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` $(LTLDFLAGS) $(LIBQUADLIB) -lm $(extra_ldflags_libgfortran) $(version_arg)
+libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
+	$(LTLDFLAGS) $(LIBQUADLIB) -lm $(extra_ldflags_libgfortran) \
+	$(version_arg) -Wc,-shared-libgcc
 libgfortran_la_DEPENDENCIES = $(version_dep) libgfortran.spec $(LIBQUADLIB_DEP)
 
 myexeclib_LTLIBRARIES = libgfortranbegin.la
@@ -45,11 +47,20 @@ libgfortranbegin_la_SOURCES = fmain.c
 libgfortranbegin_la_LDFLAGS = -static
 libgfortranbegin_la_LINK = $(LINK) $(libgfortranbegin_la_LDFLAGS)
 
+cafexeclib_LTLIBRARIES = libcaf_single.la
+cafexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)
+libcaf_single_la_SOURCES = caf/single.c
+libcaf_single_la_LDFLAGS = -static
+libcaf_single_la_DEPENDENCIES = caf/libcaf.h
+libcaf_single_la_LINK = $(LINK) $(libcaf_single_la_LDFLAGS)
+
 ## io.h conflicts with a system header on some platforms, so
 ## use -iquote
 AM_CPPFLAGS = -iquote$(srcdir)/io -I$(srcdir)/$(MULTISRCTOP)../gcc \
 	      -I$(srcdir)/$(MULTISRCTOP)../gcc/config $(LIBQUADINCLUDE) \
-	      -I$(MULTIBUILDTOP)../../$(host_subdir)/gcc -D_GNU_SOURCE
+	      -I$(MULTIBUILDTOP)../../$(host_subdir)/gcc \
+	      -I$(srcdir)/$(MULTISRCTOP)../libgcc \
+	      -I$(MULTIBUILDTOP)../libgcc
 
 # Fortran rules for complex multiplication and division
 AM_CFLAGS += -fcx-fortran-rules

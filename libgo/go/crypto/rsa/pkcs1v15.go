@@ -5,10 +5,11 @@
 package rsa
 
 import (
-	"big"
+	"crypto"
 	"crypto/subtle"
+	"errors"
 	"io"
-	"os"
+	"math/big"
 )
 
 // This file implements encryption and decryption using PKCS#1 v1.5 padding.
@@ -17,17 +18,17 @@ import (
 // The message must be no longer than the length of the public modulus minus 11 bytes.
 // WARNING: use of this function to encrypt plaintexts other than session keys
 // is dangerous. Use RSA OAEP in new protocols.
-func EncryptPKCS1v15(rand io.Reader, pub *PublicKey, msg []byte) (out []byte, err os.Error) {
+func EncryptPKCS1v15(rand io.Reader, pub *PublicKey, msg []byte) (out []byte, err error) {
 	k := (pub.N.BitLen() + 7) / 8
 	if len(msg) > k-11 {
-		err = MessageTooLongError{}
+		err = ErrMessageTooLong
 		return
 	}
 
-	// EM = 0x02 || PS || 0x00 || M
-	em := make([]byte, k-1)
-	em[0] = 2
-	ps, mm := em[1:len(em)-len(msg)-1], em[len(em)-len(msg):]
+	// EM = 0x00 || 0x02 || PS || 0x00 || M
+	em := make([]byte, k)
+	em[1] = 2
+	ps, mm := em[2:len(em)-len(msg)-1], em[len(em)-len(msg):]
 	err = nonZeroRandomBytes(ps, rand)
 	if err != nil {
 		return
@@ -37,16 +38,18 @@ func EncryptPKCS1v15(rand io.Reader, pub *PublicKey, msg []byte) (out []byte, er
 
 	m := new(big.Int).SetBytes(em)
 	c := encrypt(new(big.Int), pub, m)
-	out = c.Bytes()
+
+	copyWithLeftPad(em, c.Bytes())
+	out = em
 	return
 }
 
 // DecryptPKCS1v15 decrypts a plaintext using RSA and the padding scheme from PKCS#1 v1.5.
 // If rand != nil, it uses RSA blinding to avoid timing side-channel attacks.
-func DecryptPKCS1v15(rand io.Reader, priv *PrivateKey, ciphertext []byte) (out []byte, err os.Error) {
+func DecryptPKCS1v15(rand io.Reader, priv *PrivateKey, ciphertext []byte) (out []byte, err error) {
 	valid, out, err := decryptPKCS1v15(rand, priv, ciphertext)
 	if err == nil && valid == 0 {
-		err = DecryptionError{}
+		err = ErrDecryption
 	}
 
 	return
@@ -64,11 +67,11 @@ func DecryptPKCS1v15(rand io.Reader, priv *PrivateKey, ciphertext []byte) (out [
 // about the plaintext.
 // See ``Chosen Ciphertext Attacks Against Protocols Based on the RSA
 // Encryption Standard PKCS #1'', Daniel Bleichenbacher, Advances in Cryptology
-// (Crypto '98),
-func DecryptPKCS1v15SessionKey(rand io.Reader, priv *PrivateKey, ciphertext []byte, key []byte) (err os.Error) {
+// (Crypto '98).
+func DecryptPKCS1v15SessionKey(rand io.Reader, priv *PrivateKey, ciphertext []byte, key []byte) (err error) {
 	k := (priv.N.BitLen() + 7) / 8
 	if k-(len(key)+3+8) < 0 {
-		err = DecryptionError{}
+		err = ErrDecryption
 		return
 	}
 
@@ -82,10 +85,10 @@ func DecryptPKCS1v15SessionKey(rand io.Reader, priv *PrivateKey, ciphertext []by
 	return
 }
 
-func decryptPKCS1v15(rand io.Reader, priv *PrivateKey, ciphertext []byte) (valid int, msg []byte, err os.Error) {
+func decryptPKCS1v15(rand io.Reader, priv *PrivateKey, ciphertext []byte) (valid int, msg []byte, err error) {
 	k := (priv.N.BitLen() + 7) / 8
 	if k < 11 {
-		err = DecryptionError{}
+		err = ErrDecryption
 		return
 	}
 
@@ -118,7 +121,7 @@ func decryptPKCS1v15(rand io.Reader, priv *PrivateKey, ciphertext []byte) (valid
 }
 
 // nonZeroRandomBytes fills the given slice with non-zero random octets.
-func nonZeroRandomBytes(s []byte, rand io.Reader) (err os.Error) {
+func nonZeroRandomBytes(s []byte, rand io.Reader) (err error) {
 	_, err = io.ReadFull(rand, s)
 	if err != nil {
 		return
@@ -126,7 +129,7 @@ func nonZeroRandomBytes(s []byte, rand io.Reader) (err os.Error) {
 
 	for i := 0; i < len(s); i++ {
 		for s[i] == 0 {
-			_, err = rand.Read(s[i : i+1])
+			_, err = io.ReadFull(rand, s[i:i+1])
 			if err != nil {
 				return
 			}
@@ -139,19 +142,6 @@ func nonZeroRandomBytes(s []byte, rand io.Reader) (err os.Error) {
 	return
 }
 
-// Due to the design of PKCS#1 v1.5, we need to know the exact hash function in
-// use. A generic hash.Hash will not do.
-type PKCS1v15Hash int
-
-const (
-	HashMD5 PKCS1v15Hash = iota
-	HashSHA1
-	HashSHA256
-	HashSHA384
-	HashSHA512
-	HashMD5SHA1 // combined MD5 and SHA1 hash used for RSA signing in TLS.
-)
-
 // These are ASN1 DER structures:
 //   DigestInfo ::= SEQUENCE {
 //     digestAlgorithm AlgorithmIdentifier,
@@ -160,25 +150,21 @@ const (
 // For performance, we don't use the generic ASN1 encoder. Rather, we
 // precompute a prefix of the digest value that makes a valid ASN1 DER string
 // with the correct contents.
-var hashPrefixes = [][]byte{
-	// HashMD5
-	{0x30, 0x20, 0x30, 0x0c, 0x06, 0x08, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x02, 0x05, 0x05, 0x00, 0x04, 0x10},
-	// HashSHA1
-	{0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14},
-	// HashSHA256
-	{0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20},
-	// HashSHA384
-	{0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30},
-	// HashSHA512
-	{0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40},
-	// HashMD5SHA1
-	{}, // A special TLS case which doesn't use an ASN1 prefix.
+var hashPrefixes = map[crypto.Hash][]byte{
+	crypto.MD5:       {0x30, 0x20, 0x30, 0x0c, 0x06, 0x08, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x02, 0x05, 0x05, 0x00, 0x04, 0x10},
+	crypto.SHA1:      {0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14},
+	crypto.SHA224:    {0x30, 0x2d, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04, 0x05, 0x00, 0x04, 0x1c},
+	crypto.SHA256:    {0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20},
+	crypto.SHA384:    {0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00, 0x04, 0x30},
+	crypto.SHA512:    {0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40},
+	crypto.MD5SHA1:   {}, // A special TLS case which doesn't use an ASN1 prefix.
+	crypto.RIPEMD160: {0x30, 0x20, 0x30, 0x08, 0x06, 0x06, 0x28, 0xcf, 0x06, 0x03, 0x00, 0x31, 0x04, 0x14},
 }
 
-// SignPKCS1v15 calcuates the signature of hashed using RSASSA-PSS-SIGN from RSA PKCS#1 v1.5.
+// SignPKCS1v15 calculates the signature of hashed using RSASSA-PKCS1-V1_5-SIGN from RSA PKCS#1 v1.5.
 // Note that hashed must be the result of hashing the input message using the
 // given hash function.
-func SignPKCS1v15(rand io.Reader, priv *PrivateKey, hash PKCS1v15Hash, hashed []byte) (s []byte, err os.Error) {
+func SignPKCS1v15(rand io.Reader, priv *PrivateKey, hash crypto.Hash, hashed []byte) (s []byte, err error) {
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
 	if err != nil {
 		return
@@ -187,7 +173,7 @@ func SignPKCS1v15(rand io.Reader, priv *PrivateKey, hash PKCS1v15Hash, hashed []
 	tLen := len(prefix) + hashLen
 	k := (priv.N.BitLen() + 7) / 8
 	if k < tLen+11 {
-		return nil, MessageTooLongError{}
+		return nil, ErrMessageTooLong
 	}
 
 	// EM = 0x00 || 0x01 || PS || 0x00 || T
@@ -201,9 +187,12 @@ func SignPKCS1v15(rand io.Reader, priv *PrivateKey, hash PKCS1v15Hash, hashed []
 
 	m := new(big.Int).SetBytes(em)
 	c, err := decrypt(rand, priv, m)
-	if err == nil {
-		s = c.Bytes()
+	if err != nil {
+		return
 	}
+
+	copyWithLeftPad(em, c.Bytes())
+	s = em
 	return
 }
 
@@ -211,7 +200,7 @@ func SignPKCS1v15(rand io.Reader, priv *PrivateKey, hash PKCS1v15Hash, hashed []
 // hashed is the result of hashing the input message using the given hash
 // function and sig is the signature. A valid signature is indicated by
 // returning a nil error.
-func VerifyPKCS1v15(pub *PublicKey, hash PKCS1v15Hash, hashed []byte, sig []byte) (err os.Error) {
+func VerifyPKCS1v15(pub *PublicKey, hash crypto.Hash, hashed []byte, sig []byte) (err error) {
 	hashLen, prefix, err := pkcs1v15HashInfo(hash, len(hashed))
 	if err != nil {
 		return
@@ -220,7 +209,7 @@ func VerifyPKCS1v15(pub *PublicKey, hash PKCS1v15Hash, hashed []byte, sig []byte
 	tLen := len(prefix) + hashLen
 	k := (pub.N.BitLen() + 7) / 8
 	if k < tLen+11 {
-		err = VerificationError{}
+		err = ErrVerification
 		return
 	}
 
@@ -240,34 +229,30 @@ func VerifyPKCS1v15(pub *PublicKey, hash PKCS1v15Hash, hashed []byte, sig []byte
 	}
 
 	if ok != 1 {
-		return VerificationError{}
+		return ErrVerification
 	}
 
 	return nil
 }
 
-func pkcs1v15HashInfo(hash PKCS1v15Hash, inLen int) (hashLen int, prefix []byte, err os.Error) {
-	switch hash {
-	case HashMD5:
-		hashLen = 16
-	case HashSHA1:
-		hashLen = 20
-	case HashSHA256:
-		hashLen = 32
-	case HashSHA384:
-		hashLen = 48
-	case HashSHA512:
-		hashLen = 64
-	case HashMD5SHA1:
-		hashLen = 36
-	default:
-		return 0, nil, os.ErrorString("unknown hash function")
-	}
-
+func pkcs1v15HashInfo(hash crypto.Hash, inLen int) (hashLen int, prefix []byte, err error) {
+	hashLen = hash.Size()
 	if inLen != hashLen {
-		return 0, nil, os.ErrorString("input must be hashed message")
+		return 0, nil, errors.New("input must be hashed message")
 	}
-
-	prefix = hashPrefixes[int(hash)]
+	prefix, ok := hashPrefixes[hash]
+	if !ok {
+		return 0, nil, errors.New("unsupported hash function")
+	}
 	return
+}
+
+// copyWithLeftPad copies src to the end of dest, padding with zero bytes as
+// needed.
+func copyWithLeftPad(dest, src []byte) {
+	numPaddingBytes := len(dest) - len(src)
+	for i := 0; i < numPaddingBytes; i++ {
+		dest[i] = 0
+	}
+	copy(dest[numPaddingBytes:], src)
 }

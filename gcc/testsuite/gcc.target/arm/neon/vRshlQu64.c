@@ -17,5 +17,5 @@ void test_vRshlQu64 (void)
   out_uint64x2_t = vrshlq_u64 (arg0_uint64x2_t, arg1_int64x2_t);
 }
 
-/* { dg-final { scan-assembler "vrshl\.u64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrshl\.u64\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -38,7 +38,7 @@ node_free (splay_tree_value value)
   mpz_clear (c->offset);
   mpz_clear (c->repeat);
 
-  gfc_free (c);
+  free (c);
 }
 
 

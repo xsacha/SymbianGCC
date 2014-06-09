@@ -6,9 +6,28 @@
 
 package main
 
-type T struct {a int}
+type T struct {
+	a int
+}
 type P *T
 type P1 *T
 
-func (p P) val() int { return 1 }  // ERROR "receiver"
-func (p *P1) val() int { return 1 }  // ERROR "receiver"
+func (p P) val() int   { return 1 } // ERROR "receiver.* pointer|invalid pointer or interface receiver"
+func (p *P1) val() int { return 1 } // ERROR "receiver.* pointer|invalid pointer or interface receiver"
+
+type I interface{}
+type I1 interface{}
+
+func (p I) val() int { return 1 } // ERROR "receiver.*interface|invalid pointer or interface receiver"
+func (p *I1) val() int { return 1 } // ERROR "receiver.*interface|invalid pointer or interface receiver"
+
+type Val interface {
+	val() int
+}
+
+var _ = (*Val).val // ERROR "method"
+
+var v Val
+var pv = &v
+
+var _ = pv.val()	// ERROR "method"

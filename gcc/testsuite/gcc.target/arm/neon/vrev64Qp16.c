@@ -16,5 +16,5 @@ void test_vrev64Qp16 (void)
   out_poly16x8_t = vrev64q_p16 (arg0_poly16x8_t);
 }
 
-/* { dg-final { scan-assembler "vrev64\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrev64\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

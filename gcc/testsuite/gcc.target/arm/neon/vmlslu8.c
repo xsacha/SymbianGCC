@@ -18,5 +18,5 @@ void test_vmlslu8 (void)
   out_uint16x8_t = vmlsl_u8 (arg0_uint16x8_t, arg1_uint8x8_t, arg2_uint8x8_t);
 }
 
-/* { dg-final { scan-assembler "vmlsl\.u8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmlsl\.u8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

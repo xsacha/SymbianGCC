@@ -1,6 +1,6 @@
 /* Routines for manipulation of expression nodes.
    Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
-   2009, 2010, 2011
+   2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
@@ -413,7 +413,7 @@ gfc_free_shape (mpz_t **shape, int rank)
     return;
 
   gfc_clear_shape (*shape, rank);
-  gfc_free (*shape);
+  free (*shape);
   *shape = NULL;
 }
 
@@ -441,7 +441,7 @@ free_expr0 (gfc_expr *e)
 	  break;
 
 	case BT_CHARACTER:
-	  gfc_free (e->value.character.string);
+	  free (e->value.character.string);
 	  break;
 
 	case BT_COMPLEX:
@@ -453,8 +453,7 @@ free_expr0 (gfc_expr *e)
 	}
 
       /* Free the representation.  */
-      if (e->representation.string)
-	gfc_free (e->representation.string);
+      free (e->representation.string);
 
       break;
 
@@ -483,7 +482,7 @@ free_expr0 (gfc_expr *e)
       break;
 
     case EXPR_SUBSTRING:
-      gfc_free (e->value.character.string);
+      free (e->value.character.string);
       break;
 
     case EXPR_NULL:
@@ -510,7 +509,7 @@ gfc_free_expr (gfc_expr *e)
   if (e == NULL)
     return;
   free_expr0 (e);
-  gfc_free (e);
+  free (e);
 }
 
 
@@ -525,7 +524,7 @@ gfc_free_actual_arglist (gfc_actual_arglist *a1)
     {
       a2 = a1->next;
       gfc_free_expr (a1->expr);
-      gfc_free (a1);
+      free (a1);
       a1 = a2;
     }
 }
@@ -593,7 +592,7 @@ gfc_free_ref_list (gfc_ref *p)
 	  break;
 	}
 
-      gfc_free (p);
+      free (p);
     }
 }
 
@@ -605,7 +604,7 @@ gfc_replace_expr (gfc_expr *dest, gfc_expr *src)
 {
   free_expr0 (dest);
   *dest = *src;
-  gfc_free (src);
+  free (src);
 }
 
 
@@ -654,7 +653,7 @@ gfc_copy_ref (gfc_ref *src)
     case REF_ARRAY:
       ar = gfc_copy_array_ref (&src->u.ar);
       dest->u.ar = *ar;
-      gfc_free (ar);
+      free (ar);
       break;
 
     case REF_COMPONENT:
@@ -1584,7 +1583,7 @@ find_substring_ref (gfc_expr *p, gfc_expr **newp)
     return FAILURE;
 
   *newp = gfc_copy_expr (p);
-  gfc_free ((*newp)->value.character.string);
+  free ((*newp)->value.character.string);
 
   end = (int) mpz_get_ui (p->ref->u.ss.end->value.integer);
   start = (int) mpz_get_ui (p->ref->u.ss.start->value.integer);
@@ -1854,14 +1853,14 @@ gfc_simplify_expr (gfc_expr *p, int type)
 	  if (p->ref && p->ref->u.ss.end)
 	    gfc_extract_int (p->ref->u.ss.end, &end);
 
-	  if (end < 0)
-	    end = 0;
+	  if (end < start)
+	    end = start;
 
 	  s = gfc_get_wide_string (end - start + 2);
 	  memcpy (s, p->value.character.string + start,
 		  (end - start) * sizeof (gfc_char_t));
 	  s[end - start + 1] = '\0';  /* TODO: C-style string.  */
-	  gfc_free (p->value.character.string);
+	  free (p->value.character.string);
 	  p->value.character.string = s;
 	  p->value.character.length = end - start;
 	  p->ts.u.cl = gfc_new_charlen (gfc_current_ns, NULL);
@@ -3208,6 +3207,53 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
 	}
     }
 
+  /*  Warn about type-changing conversions for REAL or COMPLEX constants.
+      If lvalue and rvalue are mixed REAL and complex, gfc_compare_types
+      will warn anyway, so there is no need to to so here.  */
+
+  if (rvalue->expr_type == EXPR_CONSTANT && lvalue->ts.type == rvalue->ts.type
+      && (lvalue->ts.type == BT_REAL || lvalue->ts.type == BT_COMPLEX))
+    {
+      if (lvalue->ts.kind < rvalue->ts.kind && gfc_option.gfc_warn_conversion)
+	{
+	  /* As a special bonus, don't warn about REAL rvalues which are not
+	     changed by the conversion if -Wconversion is specified.  */
+	  if (rvalue->ts.type == BT_REAL && mpfr_number_p (rvalue->value.real))
+	    {
+	      /* Calculate the difference between the constant and the rounded
+		 value and check it against zero.  */
+	      mpfr_t rv, diff;
+	      gfc_set_model_kind (lvalue->ts.kind);
+	      mpfr_init (rv);
+	      gfc_set_model_kind (rvalue->ts.kind);
+	      mpfr_init (diff);
+	      
+	      mpfr_set (rv, rvalue->value.real, GFC_RND_MODE);
+	      mpfr_sub (diff, rv, rvalue->value.real, GFC_RND_MODE);
+	  
+	      if (!mpfr_zero_p (diff))
+		gfc_warning ("Change of value in conversion from "
+			     " %s to %s at %L", gfc_typename (&rvalue->ts),
+			     gfc_typename (&lvalue->ts), &rvalue->where);
+	      
+	      mpfr_clear (rv);
+	      mpfr_clear (diff);
+	    }
+	  else
+	    gfc_warning ("Possible change of value in conversion from %s "
+			 "to %s at %L",gfc_typename (&rvalue->ts),
+			 gfc_typename (&lvalue->ts), &rvalue->where);
+
+	}
+      else if (gfc_option.warn_conversion_extra
+	       && lvalue->ts.kind > rvalue->ts.kind)
+	{
+	  gfc_warning ("Conversion from %s to %s at %L",
+		       gfc_typename (&rvalue->ts),
+		       gfc_typename (&lvalue->ts), &rvalue->where);
+	}
+    }
+
   if (gfc_compare_types (&lvalue->ts, &rvalue->ts))
     return SUCCESS;
 
@@ -3307,7 +3353,8 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	     upper bounds are present, we may do rank remapping.  */
 	  for (dim = 0; dim < ref->u.ar.dimen; ++dim)
 	    {
-	      if (!ref->u.ar.start[dim])
+	      if (!ref->u.ar.start[dim]
+		  || ref->u.ar.dimen_type[dim] != DIMEN_RANGE)
 		{
 		  gfc_error ("Lower bound has to be present at %L",
 			     &lvalue->where);
@@ -3385,7 +3432,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 		     rvalue->symtree->name, &rvalue->where);
 	  return FAILURE;
 	}
-      /* Check for C727.  */
+      /* Check for F08:C729.  */
       if (attr.flavor == FL_PROCEDURE)
 	{
 	  if (attr.proc == PROC_ST_FUNCTION)
@@ -3400,6 +3447,14 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 			      "invalid in procedure pointer assignment at %L",
 			      rvalue->symtree->name, &rvalue->where) == FAILURE)
 	    return FAILURE;
+	}
+      /* Check for F08:C730.  */
+      if (attr.elemental && !attr.intrinsic)
+	{
+	  gfc_error ("Nonintrinsic elemental procedure '%s' is invalid "
+		     "in procedure pointer assigment at %L",
+		     rvalue->symtree->name, &rvalue->where);
+	  return FAILURE;
 	}
 
       /* Ensure that the calling convention is the same. As other attributes
@@ -3607,7 +3662,7 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_expr *rvalue)
   lvalue.ts = sym->ts;
   if (sym->as)
     lvalue.rank = sym->as->rank;
-  lvalue.symtree = (gfc_symtree *) gfc_getmem (sizeof (gfc_symtree));
+  lvalue.symtree = XCNEW (gfc_symtree);
   lvalue.symtree->n.sym = sym;
   lvalue.where = sym->declared_at;
 
@@ -3618,7 +3673,7 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_expr *rvalue)
   else
     r = gfc_check_assign (&lvalue, rvalue, 1);
 
-  gfc_free (lvalue.symtree);
+  free (lvalue.symtree);
 
   if (r == FAILURE)
     return r;
@@ -3720,7 +3775,13 @@ gfc_default_initializer (gfc_typespec *ts)
       gfc_constructor *ctor = gfc_constructor_get();
 
       if (comp->initializer)
-	ctor->expr = gfc_copy_expr (comp->initializer);
+	{
+	  ctor->expr = gfc_copy_expr (comp->initializer);
+	  if ((comp->ts.type != comp->initializer->ts.type
+	       || comp->ts.kind != comp->initializer->ts.kind)
+	      && !comp->attr.pointer && !comp->attr.proc_pointer)
+	    gfc_convert_type_warn (ctor->expr, &comp->ts, 2, false);
+	}
 
       if (comp->attr.allocatable
 	  || (comp->ts.type == BT_CLASS && CLASS_DATA (comp)->attr.allocatable))
@@ -3751,9 +3812,12 @@ gfc_get_variable_expr (gfc_symtree *var)
   e->symtree = var;
   e->ts = var->n.sym->ts;
 
-  if (var->n.sym->as != NULL)
+  if ((var->n.sym->as != NULL && var->n.sym->ts.type != BT_CLASS)
+      || (var->n.sym->ts.type == BT_CLASS && CLASS_DATA (var->n.sym)
+	  && CLASS_DATA (var->n.sym)->as))
     {
-      e->rank = var->n.sym->as->rank;
+      e->rank = var->n.sym->ts.type == BT_CLASS
+		? CLASS_DATA (var->n.sym)->as->rank : var->n.sym->as->rank;
       e->ref = gfc_get_ref ();
       e->ref->type = REF_ARRAY;
       e->ref->u.ar.type = AR_FULL;
@@ -3782,7 +3846,8 @@ gfc_lval_expr_from_sym (gfc_symbol *sym)
       lval->ref->u.ar.type = AR_FULL;
       lval->ref->u.ar.dimen = lval->rank;
       lval->ref->u.ar.where = sym->declared_at;
-      lval->ref->u.ar.as = sym->as;
+      lval->ref->u.ar.as = sym->ts.type == BT_CLASS
+			   ? CLASS_DATA (sym)->as : sym->as;
     }
 
   return lval;
@@ -4151,15 +4216,101 @@ gfc_expr_replace_comp (gfc_expr *expr, gfc_component *dest)
 
 
 bool
+gfc_ref_this_image (gfc_ref *ref)
+{
+  int n;
+
+  gcc_assert (ref->type == REF_ARRAY && ref->u.ar.codimen > 0);
+
+  for (n = ref->u.ar.dimen; n < ref->u.ar.dimen + ref->u.ar.codimen; n++)
+    if (ref->u.ar.dimen_type[n] != DIMEN_THIS_IMAGE)
+      return false;
+
+  return true;
+}
+
+
+bool
 gfc_is_coindexed (gfc_expr *e)
 {
   gfc_ref *ref;
 
   for (ref = e->ref; ref; ref = ref->next)
     if (ref->type == REF_ARRAY && ref->u.ar.codimen > 0)
-      return true;
+      return !gfc_ref_this_image (ref);
 
   return false;
+}
+
+
+/* Coarrays are variables with a corank but not being coindexed. However, also
+   the following is a coarray: A subobject of a coarray is a coarray if it does
+   not have any cosubscripts, vector subscripts, allocatable component
+   selection, or pointer component selection. (F2008, 2.4.7)  */
+
+bool
+gfc_is_coarray (gfc_expr *e)
+{
+  gfc_ref *ref;
+  gfc_symbol *sym;
+  gfc_component *comp;
+  bool coindexed;
+  bool coarray;
+  int i;
+
+  if (e->expr_type != EXPR_VARIABLE)
+    return false;
+
+  coindexed = false;
+  sym = e->symtree->n.sym;
+
+  if (sym->ts.type == BT_CLASS && sym->attr.class_ok)
+    coarray = CLASS_DATA (sym)->attr.codimension;
+  else
+    coarray = sym->attr.codimension;
+
+  for (ref = e->ref; ref; ref = ref->next)
+    switch (ref->type)
+    {
+      case REF_COMPONENT:
+	comp = ref->u.c.component;
+	if (comp->ts.type == BT_CLASS && comp->attr.class_ok
+	    && (CLASS_DATA (comp)->attr.class_pointer
+		|| CLASS_DATA (comp)->attr.allocatable))
+	  {
+	    coindexed = false;
+	    coarray = CLASS_DATA (comp)->attr.codimension;
+	  }
+        else if (comp->attr.pointer || comp->attr.allocatable)
+	  {
+	    coindexed = false;
+	    coarray = comp->attr.codimension;
+	  }
+        break;
+
+     case REF_ARRAY:
+	if (!coarray)
+	  break;
+
+	if (ref->u.ar.codimen > 0 && !gfc_ref_this_image (ref))
+	  {
+	    coindexed = true;
+	    break;
+	  }
+
+	for (i = 0; i < ref->u.ar.dimen; i++)
+	  if (ref->u.ar.dimen_type[i] == DIMEN_VECTOR)
+	    {
+	      coarray = false;
+	      break;
+	    }
+	break;
+
+     case REF_SUBSTRING:
+	break;
+    }
+
+  return coarray && !coindexed;
 }
 
 
@@ -4168,13 +4319,23 @@ gfc_get_corank (gfc_expr *e)
 {
   int corank;
   gfc_ref *ref;
-  corank = e->symtree->n.sym->as ? e->symtree->n.sym->as->corank : 0;
+
+  if (!gfc_is_coarray (e))
+    return 0;
+
+  if (e->ts.type == BT_CLASS && e->ts.u.derived->components)
+    corank = e->ts.u.derived->components->as
+	     ? e->ts.u.derived->components->as->corank : 0;
+  else 
+    corank = e->symtree->n.sym->as ? e->symtree->n.sym->as->corank : 0;
+
   for (ref = e->ref; ref; ref = ref->next)
     {
       if (ref->type == REF_ARRAY)
 	corank = ref->u.ar.as->corank;
       gcc_assert (ref->type != REF_SUBSTRING);
     }
+
   return corank;
 }
 
@@ -4251,6 +4412,7 @@ gfc_is_simply_contiguous (gfc_expr *expr, bool strict)
   int i;
   gfc_array_ref *ar = NULL;
   gfc_ref *ref, *part_ref = NULL;
+  gfc_symbol *sym;
 
   if (expr->expr_type == EXPR_FUNCTION)
     return expr->value.function.esym
@@ -4274,11 +4436,15 @@ gfc_is_simply_contiguous (gfc_expr *expr, bool strict)
 	ar = &ref->u.ar;
     }
 
-  if ((part_ref && !part_ref->u.c.component->attr.contiguous
-       && part_ref->u.c.component->attr.pointer)
-      || (!part_ref && !expr->symtree->n.sym->attr.contiguous
-	  && (expr->symtree->n.sym->attr.pointer
-	      || expr->symtree->n.sym->as->type == AS_ASSUMED_SHAPE)))
+  sym = expr->symtree->n.sym;
+  if (expr->ts.type != BT_CLASS
+	&& ((part_ref
+		&& !part_ref->u.c.component->attr.contiguous
+		&& part_ref->u.c.component->attr.pointer)
+	    || (!part_ref
+		&& !sym->attr.contiguous
+		&& (sym->attr.pointer
+		      || sym->as->type == AS_ASSUMED_SHAPE))))
     return false;
 
   if (!ar || ar->type == AR_FULL)
@@ -4405,7 +4571,8 @@ gfc_build_intrinsic_call (gfc_namespace *ns, gfc_isym_id id, const char* name,
    and just the return status (SUCCESS / FAILURE) be requested.  */
 
 gfc_try
-gfc_check_vardef_context (gfc_expr* e, bool pointer, const char* context)
+gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
+			  const char* context)
 {
   gfc_symbol* sym = NULL;
   bool is_pointer;
@@ -4469,6 +4636,19 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, const char* context)
       if (context)
 	gfc_error ("Non-POINTER in pointer association context (%s)"
 		   " at %L", context, &e->where);
+      return FAILURE;
+    }
+
+  /* F2008, C1303.  */
+  if (!alloc_obj
+      && (attr.lock_comp
+	  || (e->ts.type == BT_DERIVED
+	      && e->ts.u.derived->from_intmod == INTMOD_ISO_FORTRAN_ENV
+	      && e->ts.u.derived->intmod_sym_id == ISOFORTRAN_LOCK_TYPE)))
+    {
+      if (context)
+	gfc_error ("LOCK_TYPE in variable definition context (%s) at %L",
+		   context, &e->where);
       return FAILURE;
     }
 
@@ -4605,7 +4785,8 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, const char* context)
 	}
 
       /* Target must be allowed to appear in a variable definition context.  */
-      if (gfc_check_vardef_context (assoc->target, pointer, NULL) == FAILURE)
+      if (gfc_check_vardef_context (assoc->target, pointer, false, NULL)
+	  == FAILURE)
 	{
 	  if (context)
 	    gfc_error ("Associate-name '%s' can not appear in a variable"

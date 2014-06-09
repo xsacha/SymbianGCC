@@ -17,5 +17,5 @@ void test_vpadals16 (void)
   out_int32x2_t = vpadal_s16 (arg0_int32x2_t, arg1_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vpadal\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vpadal\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

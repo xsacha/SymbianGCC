@@ -40,10 +40,6 @@ enum libfunc_index
   LTI_profile_function_entry,
   LTI_profile_function_exit,
 
-  LTI_profile_call_entry,
-  LTI_profile_call_inside,
-  LTI_profile_call_exit,
-
   LTI_synchronize,
 
   LTI_gcov_flush,
@@ -97,10 +93,6 @@ extern struct target_libfuncs *this_target_libfuncs;
 
 #define profile_function_entry_libfunc	(libfunc_table[LTI_profile_function_entry])
 #define profile_function_exit_libfunc	(libfunc_table[LTI_profile_function_exit])
-
-#define profile_call_entry_libfunc	(libfunc_table[LTI_profile_call_entry])
-#define profile_call_inside_libfunc	(libfunc_table[LTI_profile_call_inside])
-#define profile_call_exit_libfunc	(libfunc_table[LTI_profile_call_exit])
 
 #define synchronize_libfunc	(libfunc_table[LTI_synchronize])
 

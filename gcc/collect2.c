@@ -1,7 +1,7 @@
 /* Collect static initialization info into data structures that can be
    traversed by C++ initialization and finalization routines.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Chris Smith (csmith@convex.com).
    Heavily modified by Michael Meissner (meissner@cygnus.com),
@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "filenames.h"
 
 /* TARGET_64BIT may be defined to use driver specific functionality. */
 #undef TARGET_64BIT
@@ -43,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "collect2.h"
 #include "collect2-aix.h"
+#include "diagnostic.h"
 #include "demangle.h"
 #include "obstack.h"
 #include "intl.h"
@@ -441,62 +443,6 @@ notice_translated (const char *cmsgid, ...)
   va_start (ap, cmsgid);
   vfprintf (stderr, cmsgid, ap);
   va_end (ap);
-}
-
-/* Die when sys call fails.  */
-
-void
-fatal_perror (const char * cmsgid, ...)
-{
-  int e = errno;
-  va_list ap;
-
-  va_start (ap, cmsgid);
-  fprintf (stderr, "collect2: ");
-  vfprintf (stderr, _(cmsgid), ap);
-  fprintf (stderr, ": %s\n", xstrerror (e));
-  va_end (ap);
-
-  collect_exit (FATAL_EXIT_CODE);
-}
-
-/* Just die.  */
-
-void
-fatal (const char * cmsgid, ...)
-{
-  va_list ap;
-
-  va_start (ap, cmsgid);
-  fprintf (stderr, "collect2: ");
-  vfprintf (stderr, _(cmsgid), ap);
-  fprintf (stderr, "\n");
-  va_end (ap);
-
-  collect_exit (FATAL_EXIT_CODE);
-}
-
-/* Write error message.  */
-
-void
-error (const char * gmsgid, ...)
-{
-  va_list ap;
-
-  va_start (ap, gmsgid);
-  fprintf (stderr, "collect2: ");
-  vfprintf (stderr, _(gmsgid), ap);
-  fprintf (stderr, "\n");
-  va_end(ap);
-}
-
-/* In case obstack is linked in, and abort is defined to fancy_abort,
-   provide a default entry.  */
-
-void
-fancy_abort (const char *file, int line, const char *func)
-{
-  fatal ("internal gcc abort in %s, at %s:%d", func, file, line);
 }
 
 static void
@@ -951,7 +897,7 @@ maybe_run_lto_and_relink (char **lto_ld_argv, char **object_lst,
       size_t num_files;
 
       if (!lto_wrapper)
-	fatal ("COLLECT_LTO_WRAPPER must be set");
+	fatal_error ("COLLECT_LTO_WRAPPER must be set");
 
       num_lto_c_args++;
 
@@ -1145,9 +1091,19 @@ main (int argc, char **argv)
   const char **ld2;
   char **object_lst;
   const char **object;
+#ifdef TARGET_AIX_VERSION
+  int object_nbr = argc;
+#endif
   int first_file;
   int num_c_args;
   char **old_argv;
+
+  p = argv[0] + strlen (argv[0]);
+  while (p != argv[0] && !IS_DIR_SEPARATOR (p[-1]))
+    --p;
+  progname = p;
+
+  xmalloc_set_program_name (progname);
 
   old_argv = argv;
   expandargv (&argc, &argv);
@@ -1180,6 +1136,8 @@ main (int argc, char **argv)
   unlock_std_streams ();
 
   gcc_init_libintl ();
+
+  diagnostic_initialize (global_dc, 0);
 
   /* Do not invoke xcalloc before this point, since locale needs to be
      set first, in case a diagnostic is issued.  */
@@ -1270,7 +1228,7 @@ main (int argc, char **argv)
   c_ptr = CONST_CAST2 (const char **, char **, c_argv);
 
   if (argc < 2)
-    fatal ("no arguments");
+    fatal_error ("no arguments");
 
 #ifdef SIGQUIT
   if (signal (SIGQUIT, SIG_IGN) != SIG_IGN)
@@ -1485,6 +1443,60 @@ main (int argc, char **argv)
 			 "configuration");
 #endif
 		}
+#ifdef TARGET_AIX_VERSION
+	      else
+		{
+		  /* File containing a list of input files to process.  */
+
+		  FILE *stream;
+                  char buf[MAXPATHLEN + 2];
+		  /* Number of additionnal object files.  */
+		  int add_nbr = 0;
+		  /* Maximum of additionnal object files before vector
+		     expansion.  */
+		  int add_max = 0;
+		  const char *list_filename = arg + 2;
+
+		  /* Accept -fFILENAME and -f FILENAME.  */
+		  if (*list_filename == '\0' && argv[1])
+		    {
+		      ++argv;
+		      list_filename = *argv;
+		      *ld1++ = *ld2++ = *argv;
+		    }
+
+		  stream = fopen (list_filename, "r");
+		  if (stream == NULL)
+		    fatal_error ("can't open %s: %m", list_filename);
+
+		  while (fgets (buf, sizeof buf, stream) != NULL)
+		    {
+		      /* Remove end of line.  */
+		      int len = strlen (buf);
+		      if (len >= 1 && buf[len - 1] =='\n')
+			buf[len - 1] = '\0';
+
+		      /* Put on object vector.
+			 Note: we only expanse vector here, so we must keep
+			 extra space for remaining arguments.  */
+		      if (add_nbr >= add_max)
+			{
+			  int pos =
+			    object - CONST_CAST2 (const char **, char **,
+						  object_lst);
+			  add_max = (add_max == 0) ? 16 : add_max * 2;
+			  object_lst = XRESIZEVEC (char *, object_lst,
+                                                   object_nbr + add_max);
+			  object = CONST_CAST2 (const char **, char **,
+						object_lst) + pos;
+			  object_nbr += add_max;
+			}
+		      *object++ = xstrdup (buf);
+		      add_nbr++;
+		    }
+		  fclose (stream);
+		}
+#endif
               break;
 
 	    case 'l':
@@ -1665,10 +1677,10 @@ main (int argc, char **argv)
 
       exportf = fopen (export_file, "w");
       if (exportf == (FILE *) 0)
-	fatal_perror ("fopen %s", export_file);
+	fatal_error ("fopen %s: %m", export_file);
       write_aix_file (exportf, exports.first);
       if (fclose (exportf))
-	fatal_perror ("fclose %s", export_file);
+	fatal_error ("fclose %s: %m", export_file);
     }
 #endif
 
@@ -1676,13 +1688,7 @@ main (int argc, char **argv)
   *c_ptr = *ld1 = *object = (char *) 0;
 
   if (vflag)
-    {
-      notice ("collect2 version %s", version_string);
-#ifdef TARGET_VERSION
-      TARGET_VERSION;
-#endif
-      fprintf (stderr, "\n");
-    }
+    notice ("collect2 version %s\n", version_string);
 
   if (helpflag)
     {
@@ -1854,12 +1860,12 @@ main (int argc, char **argv)
   maybe_unlink(output_file);
   outf = fopen (c_file, "w");
   if (outf == (FILE *) 0)
-    fatal_perror ("fopen %s", c_file);
+    fatal_error ("fopen %s: %m", c_file);
 
   write_c_file (outf, c_file);
 
   if (fclose (outf))
-    fatal_perror ("fclose %s", c_file);
+    fatal_error ("fclose %s: %m", c_file);
 
   /* Tell the linker that we have initializer and finalizer functions.  */
 #ifdef LD_INIT_SWITCH
@@ -1889,10 +1895,10 @@ main (int argc, char **argv)
 #endif
       exportf = fopen (export_file, "w");
       if (exportf == (FILE *) 0)
-	fatal_perror ("fopen %s", export_file);
+	fatal_error ("fopen %s: %m", export_file);
       write_aix_file (exportf, exports.first);
       if (fclose (exportf))
-	fatal_perror ("fclose %s", export_file);
+	fatal_error ("fclose %s: %m", export_file);
     }
 #endif
 
@@ -1956,7 +1962,7 @@ collect_wait (const char *prog, struct pex_obj *pex)
   int status;
 
   if (!pex_get_status (pex, 1, &status))
-    fatal_perror ("can't get program status");
+    fatal_error ("can't get program status: %m");
   pex_free (pex);
 
   if (status)
@@ -2025,17 +2031,17 @@ collect_execute (const char *prog, char **argv, const char *outname,
       f = fopen (response_file, "w");
 
       if (f == NULL)
-        fatal ("could not open response file %s", response_file);
+        fatal_error ("could not open response file %s", response_file);
 
       status = writeargv (current_argv, f);
 
       if (status)
-        fatal ("could not write to response file %s", response_file);
+        fatal_error ("could not write to response file %s", response_file);
 
       status = fclose (f);
 
       if (EOF == status)
-        fatal ("could not close response file %s", response_file);
+        fatal_error ("could not close response file %s", response_file);
 
       response_arg = concat ("@", response_file, NULL);
       response_argv[0] = argv0;
@@ -2068,11 +2074,11 @@ collect_execute (const char *prog, char **argv, const char *outname,
      since we might not end up needing something that we could not find.  */
 
   if (argv[0] == 0)
-    fatal ("cannot find '%s'", prog);
+    fatal_error ("cannot find '%s'", prog);
 
   pex = pex_init (0, "collect2", NULL);
   if (pex == NULL)
-    fatal_perror ("pex_init failed");
+    fatal_error ("pex_init failed: %m");
 
   errmsg = pex_run (pex, flags, argv[0], argv, outname,
 		    errname, &err);
@@ -2081,14 +2087,13 @@ collect_execute (const char *prog, char **argv, const char *outname,
       if (err != 0)
 	{
 	  errno = err;
-	  fatal_perror (errmsg);
+	  fatal_error ("%s: %m", _(errmsg));
 	}
       else
-	fatal (errmsg);
+	fatal_error (errmsg);
     }
 
-  if (response_arg)
-    free (response_arg);
+  free (response_arg);
 
   return pex;
 }
@@ -2309,12 +2314,8 @@ write_c_file_stat (FILE *stream, const char *name ATTRIBUTE_UNUSED)
   int frames = (frame_tables.number > 0);
 
   /* Figure out name of output_file, stripping off .so version.  */
-  p = strrchr (output_file, '/');
-  if (p == 0)
-    p = output_file;
-  else
-    p++;
-  q = p;
+  q = p = lbasename (output_file);
+
   while (q)
     {
       q = strchr (q,'.');
@@ -2325,7 +2326,7 @@ write_c_file_stat (FILE *stream, const char *name ATTRIBUTE_UNUSED)
 	}
       else
 	{
-	  if (strncmp (q, SHLIB_SUFFIX, strlen (SHLIB_SUFFIX)) == 0)
+	  if (filename_ncmp (q, SHLIB_SUFFIX, strlen (SHLIB_SUFFIX)) == 0)
 	    {
 	      q += strlen (SHLIB_SUFFIX);
 	      break;
@@ -2587,7 +2588,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
 
   /* If we do not have an `nm', complain.  */
   if (nm_file_name == 0)
-    fatal ("cannot find 'nm'");
+    fatal_error ("cannot find 'nm'");
 
   nm_argv[argc++] = nm_file_name;
   if (NM_FLAGS[0] != '\0')
@@ -2613,7 +2614,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
 
   pex = pex_init (PEX_USE_PIPES, "collect2", NULL);
   if (pex == NULL)
-    fatal_perror ("pex_init failed");
+    fatal_error ("pex_init failed: %m");
 
   errmsg = pex_run (pex, 0, nm_file_name, real_nm_argv, NULL, HOST_BIT_BUCKET,
 		    &err);
@@ -2622,10 +2623,10 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
       if (err != 0)
 	{
 	  errno = err;
-	  fatal_perror (errmsg);
+	  fatal_error ("%s: %m", _(errmsg));
 	}
       else
-	fatal (errmsg);
+	fatal_error (errmsg);
     }
 
   int_handler  = (void (*) (int)) signal (SIGINT,  SIG_IGN);
@@ -2635,7 +2636,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
 
   inf = pex_read_output (pex, 0);
   if (inf == NULL)
-    fatal_perror ("can't open nm output");
+    fatal_error ("can't open nm output: %m");
 
   if (debug)
     {
@@ -2718,7 +2719,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
 	  if (! (filter & SCAN_INIT))
 	    break;
 	  if (which_pass != PASS_LIB)
-	    fatal ("init function found in object %s", prog_name);
+	    fatal_error ("init function found in object %s", prog_name);
 #ifndef LD_INIT_SWITCH
 	  add_to_list (&constructors, name);
 #endif
@@ -2728,7 +2729,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
 	  if (! (filter & SCAN_FINI))
 	    break;
 	  if (which_pass != PASS_LIB)
-	    fatal ("fini function found in object %s", prog_name);
+	    fatal_error ("fini function found in object %s", prog_name);
 #ifndef LD_FINI_SWITCH
 	  add_to_list (&destructors, name);
 #endif
@@ -2809,7 +2810,7 @@ scan_libraries (const char *prog_name)
 
   pex = pex_init (PEX_USE_PIPES, "collect2", NULL);
   if (pex == NULL)
-    fatal_perror ("pex_init failed");
+    fatal_error ("pex_init failed: %m");
 
   errmsg = pex_run (pex, 0, ldd_file_name, real_ldd_argv, NULL, NULL, &err);
   if (errmsg != NULL)
@@ -2817,10 +2818,10 @@ scan_libraries (const char *prog_name)
       if (err != 0)
 	{
 	  errno = err;
-	  fatal_perror (errmsg);
+	  fatal_error ("%s: %m", _(errmsg));
 	}
       else
-	fatal (errmsg);
+	fatal_error (errmsg);
     }
 
   int_handler  = (void (*) (int)) signal (SIGINT,  SIG_IGN);
@@ -2830,7 +2831,7 @@ scan_libraries (const char *prog_name)
 
   inf = pex_read_output (pex, 0);
   if (inf == NULL)
-    fatal_perror ("can't open ldd output");
+    fatal_error ("can't open ldd output: %m");
 
   if (debug)
     notice ("\nldd output with constructors/destructors.\n");
@@ -2848,7 +2849,7 @@ scan_libraries (const char *prog_name)
 
       name = p;
       if (strncmp (name, "not found", sizeof ("not found") - 1) == 0)
-	fatal ("dynamic dependency %s not found", buf);
+	fatal_error ("dynamic dependency %s not found", buf);
 
       /* Find the end of the symbol name.  */
       for (end = p;
@@ -2860,7 +2861,7 @@ scan_libraries (const char *prog_name)
       if (access (name, R_OK) == 0)
 	add_to_list (&libraries, name);
       else
-	fatal ("unable to open dynamic dependency '%s'", buf);
+	fatal_error ("unable to open dynamic dependency '%s'", buf);
 
       if (debug)
 	fprintf (stderr, "\t%s\n", buf);
@@ -2931,12 +2932,14 @@ scan_libraries (const char *prog_name)
 /* 0757 = U803XTOCMAGIC (AIX 4.3) and 0767 = U64_TOCMAGIC (AIX V5) */
 #if TARGET_AIX_VERSION >= 51
 #   define GCC_CHECK_HDR(X) \
-     ((HEADER (X).f_magic == U802TOCMAGIC && ! aix64_flag) \
-      || (HEADER (X).f_magic == 0767 && aix64_flag))
+     (((HEADER (X).f_magic == U802TOCMAGIC && ! aix64_flag) \
+       || (HEADER (X).f_magic == 0767 && aix64_flag)) \
+      && !(HEADER (X).f_flags & F_LOADONLY))
 #else
 #   define GCC_CHECK_HDR(X) \
-     ((HEADER (X).f_magic == U802TOCMAGIC && ! aix64_flag) \
-      || (HEADER (X).f_magic == 0757 && aix64_flag))
+     (((HEADER (X).f_magic == U802TOCMAGIC && ! aix64_flag) \
+       || (HEADER (X).f_magic == 0757 && aix64_flag)) \
+      && !(HEADER (X).f_flags & F_LOADONLY))
 #endif
 
 #endif
@@ -3021,7 +3024,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
       if ((ldptr = ldopen (CONST_CAST (char *, prog_name), ldptr)) != NULL)
 	{
 	  if (! MY_ISCOFF (HEADER (ldptr).f_magic))
-	    fatal ("%s: not a COFF file", prog_name);
+	    fatal_error ("%s: not a COFF file", prog_name);
 
 	  if (GCC_CHECK_HDR (ldptr))
 	    {
@@ -3151,7 +3154,7 @@ scan_prog_file (const char *prog_name, scanpass which_pass,
 	}
       else
 	{
-	  fatal ("%s: cannot open as COFF file", prog_name);
+	  fatal_error ("%s: cannot open as COFF file", prog_name);
 	}
 #ifdef COLLECT_EXPORT_LIST
       /* On AIX loop continues while there are more members in archive.  */
@@ -3187,10 +3190,10 @@ resolve_lib_name (const char *name)
       for (; list; list = list->next)
 	{
 	  /* The following lines are needed because path_prefix list
-	     may contain directories both with trailing '/' and
+	     may contain directories both with trailing DIR_SEPARATOR and
 	     without it.  */
 	  const char *p = "";
-	  if (list->prefix[strlen(list->prefix)-1] != '/')
+	  if (!IS_DIR_SEPARATOR (list->prefix[strlen(list->prefix)-1]))
 	    p = "/";
 	  for (j = 0; j < 2; j++)
 	    {
@@ -3209,7 +3212,7 @@ resolve_lib_name (const char *name)
   if (debug)
     fprintf (stderr, "not found\n");
   else
-    fatal ("library lib%s not found", name);
+    fatal_error ("library lib%s not found", name);
   return (NULL);
 }
 #endif /* COLLECT_EXPORT_LIST */

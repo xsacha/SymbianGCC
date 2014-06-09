@@ -18,5 +18,5 @@ void test_vqdmlsls32 (void)
   out_int64x2_t = vqdmlsl_s32 (arg0_int64x2_t, arg1_int32x2_t, arg2_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vqdmlsl\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqdmlsl\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

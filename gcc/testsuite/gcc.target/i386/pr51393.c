@@ -1,6 +1,5 @@
-/* { dg-do run } */
+/* { dg-do run { target { ! { ia32 } } } } */
 /* { dg-require-effective-target avx } */
-/* { dg-require-effective-target lp64 } */
 /* { dg-options "-O -mavx" } */
 
 #include "avx-check.h"

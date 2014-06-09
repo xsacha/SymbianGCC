@@ -16,5 +16,5 @@ void test_vrev64u8 (void)
   out_uint8x8_t = vrev64_u8 (arg0_uint8x8_t);
 }
 
-/* { dg-final { scan-assembler "vrev64\.8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrev64\.8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -17,5 +17,5 @@ void test_vqRshlQu16 (void)
   out_uint16x8_t = vqrshlq_u16 (arg0_uint16x8_t, arg1_int16x8_t);
 }
 
-/* { dg-final { scan-assembler "vqrshl\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqrshl\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

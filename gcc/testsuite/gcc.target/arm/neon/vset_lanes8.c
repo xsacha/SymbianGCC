@@ -17,5 +17,5 @@ void test_vset_lanes8 (void)
   out_int8x8_t = vset_lane_s8 (arg0_int8_t, arg1_int8x8_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmov\.8\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmov\.8\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

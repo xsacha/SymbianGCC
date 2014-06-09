@@ -166,7 +166,7 @@ AC_PATH_PROG([UNZIP], [unzip], unzip)
 # We need a jar that supports -@.  This is a GNU extension.
 if test "$JAR" != no; then
    rm -f config-test.jar
-   echo $srcdir/configure.ac | $JAR -cf@ config-test.jar
+   echo $srcdir/configure.ac | $JAR -cf@ config-test.jar >/dev/null 2>&1
    if test -f config-test.jar; then
      rm -f config-test.jar
    else
@@ -214,6 +214,16 @@ if test -z "$libgcj_ld_symbolic"; then
   libgcj_ld_symbolic=$SYMBOLIC_LDFLAGS
 fi
 
+# for windows native targets enforce export of all symbols for shared libgcj.
+libgcj_ld_export_all=
+case "$host" in
+      *mingw*)
+	libgcj_ld_export_all=-Wl,--export-all-symbols
+	;;
+      *)
+        ;;
+esac
+
 LIBGCJ_CFLAGS="${libgcj_cflags}"
 LIBGCJ_CXXFLAGS="${libgcj_cxxflags}"
 LIBGCJ_JAVAFLAGS="${libgcj_javaflags}"
@@ -221,6 +231,7 @@ LIBGCJ_SUBLIB_LTFLAGS="${libgcj_sublib_ltflags}"
 LIBGCJ_SUBLIB_CORE_EXTRA_DEPS="${libgcj_sublib_core_extra_deps}"
 LIBGCJ_LD_SYMBOLIC="${libgcj_ld_symbolic}"
 LIBGCJ_LD_SYMBOLIC_FUNCTIONS="${libgcj_ld_symbolic_functions}"
+LIBGCJ_LD_EXPORT_ALL="${libgcj_ld_export_all}"
 AC_SUBST(LIBGCJ_CFLAGS)
 AC_SUBST(LIBGCJ_CXXFLAGS)
 AC_SUBST(LIBGCJ_JAVAFLAGS)
@@ -228,6 +239,7 @@ AC_SUBST(LIBGCJ_SUBLIB_LTFLAGS)
 AC_SUBST(LIBGCJ_SUBLIB_CORE_EXTRA_DEPS)
 AC_SUBST(LIBGCJ_LD_SYMBOLIC)
 AC_SUBST(LIBGCJ_LD_SYMBOLIC_FUNCTIONS)
+AC_SUBST(LIBGCJ_LD_EXPORT_ALL)
 
 # Only use libltdl for non-newlib builds.
 if test "x${with_newlib}" = "x" || test "x${with_newlib}" = "xno"; then
@@ -457,7 +469,7 @@ case "${which_gcj}" in
    cross)
       if test "x${with_newlib}" = "xyes"; then
          # FIXME (comment): Why is this needed?
-         GCC_UNWIND_INCLUDE=
+         LIBGCC_UNWIND_INCLUDE=
       fi
       GCJH='$(target_noncanonical)-gcjh'
    ;;
@@ -919,7 +931,7 @@ case "${host}" in
     # on Darwin -single_module speeds up loading of the dynamic libraries.
     extra_ldflags_libjava=-Wl,-single_module
     ;;
-arm*linux*eabi)
+arm*-*-linux*eabi*)
     # Some of the ARM unwinder code is actually in libstdc++.  We
     # could in principle replicate it in libgcj, but it's better to
     # have a dependency on libstdc++.
@@ -929,6 +941,9 @@ arm*linux*eabi)
     ;;
 *-*-cygwin)
     extra_ldflags_libjava=-liconv
+    ;;
+*-*-mingw*)
+    extra_ldflags_libjava=-lws2_32
     ;;
 esac
 
@@ -1023,7 +1038,7 @@ case "$THREADS" in
  no | none | single)
     THREADS=none
     ;;
- aix | posix | posix95 | pthreads)
+ aix | posix | pthreads)
     THREADS=posix
     case "$host" in
      *-*-linux*)
@@ -1033,7 +1048,7 @@ case "$THREADS" in
     ;;
  win32)
     ;;
- decosf1 | irix | mach | os2 | solaris | dce | vxworks)
+ dce | vxworks)
     AC_MSG_ERROR(thread package $THREADS not yet supported)
     ;;
  *)
@@ -1189,8 +1204,8 @@ AC_SUBST(HASH_SYNC_SPEC)
 
 AM_CONDITIONAL(USING_GCC, test "$GCC" = yes)
 
-# We're in the tree with gcc, and need to include some of its headers.
-GCC_UNWIND_INCLUDE='-I$(multi_basedir)/./libjava/../gcc'
+# We're in the tree with libgcc, and need to include some of its headers.
+LIBGCC_UNWIND_INCLUDE='-I$(multi_basedir)/./libjava/../libgcc'
 
 if test "x${with_newlib}" = "xyes"; then
    # We are being configured with a cross compiler.  AC_REPLACE_FUNCS
@@ -1554,7 +1569,7 @@ AM_CONDITIONAL(NATIVE, test "$NATIVE" = yes)
 AM_CONDITIONAL(ENABLE_SHARED, test "$enable_shared" = yes)
 AM_CONDITIONAL(NEEDS_DATA_START, test "$NEEDS_DATA_START" = yes && test "$NATIVE" = yes)
 AM_CONDITIONAL(INSTALL_BINARIES, test -z "${with_multisubdir}")
-AC_SUBST(GCC_UNWIND_INCLUDE)
+AC_SUBST(LIBGCC_UNWIND_INCLUDE)
 
 # Process the option "--enable-version-specific-runtime-libs"
 # Calculate toolexeclibdir
@@ -1602,10 +1617,10 @@ gcjsubdir=gcj-$gcjversion-$libgcj_soversion
 multi_os_directory=`$CC -print-multi-os-directory`
 case $multi_os_directory in
   .)
-   dbexecdir='$(toolexeclibdir)/'$gcjsubdir # Avoid /.
+   dbexecdir='$(libdir)/'$gcjsubdir # Avoid /.
    ;;
   *)
-   dbexecdir='$(toolexeclibdir)/'$multi_os_directory/$gcjsubdir
+   dbexecdir='$(libdir)/'$multi_os_directory/$gcjsubdir
    ;;
 esac
 AC_SUBST(dbexecdir)
@@ -1717,11 +1732,12 @@ SYSDEP_SOURCES=
 SIGNAL_HANDLER_AUX=
 
 case "${host}" in
+ alpha*-dec-osf* | mips-sgi-irix* | *-*-solaris2*)
+    SIGNAL_HANDLER=include/posix-signal.h
+    ;;
  i?86-*-linux*)
     SIGNAL_HANDLER=include/i386-signal.h
-    ;;
- *-*-solaris2*)
-    SIGNAL_HANDLER=include/solaris-signal.h
+    SIGNAL_HANDLER_AUX=include/x86_64-signal.h
     ;;
 # ia64-*)
 #    SYSDEP_SOURCES=sysdep/ia64.c
@@ -1809,7 +1825,7 @@ AC_CACHE_CHECK([whether ld supports anonymous version scripts],
      AS_HELP_STRING([--disable-symvers],
 		    [disable symbol versioning for libjava]),
        [case "$enableval" in
-         yes) libjava_cv_anon_version_script=yes ;;
+         yes|gnu*) libjava_cv_anon_version_script=yes ;;
          no)  libjava_cv_anon_version_script=no ;;
          *)   AC_MSG_ERROR([Unknown argument to enable/disable symvers]);;
         esac],

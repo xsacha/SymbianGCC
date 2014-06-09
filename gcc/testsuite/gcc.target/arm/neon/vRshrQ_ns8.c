@@ -16,5 +16,5 @@ void test_vRshrQ_ns8 (void)
   out_int8x16_t = vrshrq_n_s8 (arg0_int8x16_t, 1);
 }
 
-/* { dg-final { scan-assembler "vrshr\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vrshr\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

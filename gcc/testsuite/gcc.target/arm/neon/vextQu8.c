@@ -17,5 +17,5 @@ void test_vextQu8 (void)
   out_uint8x16_t = vextq_u8 (arg0_uint8x16_t, arg1_uint8x16_t, 0);
 }
 
-/* { dg-final { scan-assembler "vext\.8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vext\.8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

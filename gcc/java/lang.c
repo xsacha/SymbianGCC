@@ -75,8 +75,8 @@ static tree java_eh_personality (void);
 const struct attribute_spec java_attribute_table[] =
 {
  { "nonnull",                0, -1, false, true, true,
-			      NULL },
-  { NULL,                     0, 0, false, false, false, NULL }
+			      NULL, false },
+  { NULL,                     0, 0, false, false, false, NULL, false }
 };
 
 /* Used to avoid printing error messages with bogus function
@@ -557,6 +557,10 @@ java_init_options_struct (struct gcc_options *opts)
 
   /* Java requires left-to-right evaluation of subexpressions.  */
   opts->x_flag_evaluation_order = 1;
+
+  /* Java catches NULL pointer exceptions, thus we can not necessarily
+     rely on a pointer having a non-NULL value after a dereference.  */
+  opts->x_flag_delete_null_pointer_checks = 0;
 }
 
 static void

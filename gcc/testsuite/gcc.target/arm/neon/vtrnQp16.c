@@ -17,5 +17,5 @@ void test_vtrnQp16 (void)
   out_poly16x8x2_t = vtrnq_p16 (arg0_poly16x8_t, arg1_poly16x8_t);
 }
 
-/* { dg-final { scan-assembler "vtrn\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vtrn\.16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

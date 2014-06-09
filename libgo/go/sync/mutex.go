@@ -2,48 +2,65 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// The sync package provides basic synchronization primitives
-// such as mutual exclusion locks.  Other than the Once type,
-// most are intended for use by low-level library routines.
-// Higher-level synchronization  is better done via channels
-// and communication.
+// Package sync provides basic synchronization primitives such as mutual
+// exclusion locks.  Other than the Once and WaitGroup types, most are intended
+// for use by low-level library routines.  Higher-level synchronization is
+// better done via channels and communication.
+//
+// Values containing the types defined in this package should not be copied.
 package sync
 
-import "runtime"
-
-func cas(val *uint32, old, new uint32) bool
+import "sync/atomic"
 
 // A Mutex is a mutual exclusion lock.
 // Mutexes can be created as part of other structures;
 // the zero value for a Mutex is an unlocked mutex.
 type Mutex struct {
-	key  uint32
-	sema uint32
+	state int32
+	sema  uint32
 }
 
-// Add delta to *val, and return the new *val in a thread-safe way. If multiple
-// goroutines call xadd on the same val concurrently, the changes will be
-// serialized, and all the deltas will be added in an undefined order.
-func xadd(val *uint32, delta int32) (new uint32) {
-	for {
-		v := *val
-		nv := v + uint32(delta)
-		if cas(val, v, nv) {
-			return nv
-		}
-	}
-	panic("unreached")
+// A Locker represents an object that can be locked and unlocked.
+type Locker interface {
+	Lock()
+	Unlock()
 }
+
+const (
+	mutexLocked = 1 << iota // mutex is locked
+	mutexWoken
+	mutexWaiterShift = iota
+)
 
 // Lock locks m.
 // If the lock is already in use, the calling goroutine
 // blocks until the mutex is available.
 func (m *Mutex) Lock() {
-	if xadd(&m.key, 1) == 1 {
-		// changed from 0 to 1; we hold lock
+	// Fast path: grab unlocked mutex.
+	if atomic.CompareAndSwapInt32(&m.state, 0, mutexLocked) {
 		return
 	}
-	runtime.Semacquire(&m.sema)
+
+	awoke := false
+	for {
+		old := m.state
+		new := old | mutexLocked
+		if old&mutexLocked != 0 {
+			new = old + 1<<mutexWaiterShift
+		}
+		if awoke {
+			// The goroutine has been woken from sleep,
+			// so we need to reset the flag in either case.
+			new &^= mutexWoken
+		}
+		if atomic.CompareAndSwapInt32(&m.state, old, new) {
+			if old&mutexLocked == 0 {
+				break
+			}
+			runtime_Semacquire(&m.sema)
+			awoke = true
+		}
+	}
 }
 
 // Unlock unlocks m.
@@ -53,9 +70,25 @@ func (m *Mutex) Lock() {
 // It is allowed for one goroutine to lock a Mutex and then
 // arrange for another goroutine to unlock it.
 func (m *Mutex) Unlock() {
-	if xadd(&m.key, -1) == 0 {
-		// changed from 1 to 0; no contention
-		return
+	// Fast path: drop lock bit.
+	new := atomic.AddInt32(&m.state, -mutexLocked)
+	if (new+mutexLocked)&mutexLocked == 0 {
+		panic("sync: unlock of unlocked mutex")
 	}
-	runtime.Semrelease(&m.sema)
+
+	old := new
+	for {
+		// If there are no waiters or a goroutine has already
+		// been woken or grabbed the lock, no need to wake anyone.
+		if old>>mutexWaiterShift == 0 || old&(mutexLocked|mutexWoken) != 0 {
+			return
+		}
+		// Grab the right to wake someone.
+		new = (old - 1<<mutexWaiterShift) | mutexWoken
+		if atomic.CompareAndSwapInt32(&m.state, old, new) {
+			runtime_Semrelease(&m.sema)
+			return
+		}
+		old = m.state
+	}
 }

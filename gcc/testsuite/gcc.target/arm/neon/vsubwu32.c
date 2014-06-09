@@ -17,5 +17,5 @@ void test_vsubwu32 (void)
   out_uint64x2_t = vsubw_u32 (arg0_uint64x2_t, arg1_uint32x2_t);
 }
 
-/* { dg-final { scan-assembler "vsubw\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsubw\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

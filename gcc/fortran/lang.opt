@@ -1,5 +1,5 @@
 ; Options for the Fortran 95 front end.
-; Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+; Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
 ; Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
@@ -222,6 +222,10 @@ Wconversion-extra
 Fortran Warning
 Warn about most implicit conversions
 
+Wfunction-elimination
+Fortran Warning
+Warn about function call elimination
+
 Wimplicit-interface
 Fortran Warning
 Warn about calls with implicit interface
@@ -281,6 +285,10 @@ Disable preprocessing
 d
 Fortran Joined
 ; Documented in common.opt
+
+faggressive-function-elimination
+Fortran
+Eliminate multiple function invokations also for impure functions
 
 falign-commons
 Fortran
@@ -359,8 +367,8 @@ Fortran
 Allow dollar signs in entity names
 
 fdump-core
-Fortran
-Dump a core file when a runtime error occurs
+Fortran Ignore
+Does nothing. Preserved for backward compatibility.
 
 fdump-fortran-original
 Fortran
@@ -385,6 +393,10 @@ Use f2c calling convention
 ffixed-form
 Fortran RejectNegative
 Assume that the source file is fixed form
+
+finteger-4-integer-8
+Fortran RejectNegative
+Interpret any INTEGER(4) as an INTEGER(8)
 
 fintrinsic-modules-path
 Fortran RejectNegative Joined Separate
@@ -413,6 +425,10 @@ Allow arbitrary character line width in free mode
 ffree-line-length-
 Fortran RejectNegative Joined UInteger
 -ffree-line-length-<n>	Use n as character line width in free mode
+
+ffrontend-optimize
+Fortran
+Enable front end optimization
 
 fimplicit-none
 Fortran
@@ -454,6 +470,10 @@ fmax-stack-var-size=
 Fortran RejectNegative Joined UInteger
 -fmax-stack-var-size=<n>	Size in bytes of the largest array that will be put on the stack
 
+fstack-arrays
+Fortran
+Put all local arrays on stack.
+
 fmodule-private
 Fortran
 Set default accessibility of module entities to PRIVATE.
@@ -477,6 +497,30 @@ Protect parentheses in expressions
 frange-check
 Fortran
 Enable range checking during compilation
+
+freal-4-real-8
+Fortran RejectNegative
+Interpret any REAL(4) as a REAL(8)
+
+freal-4-real-10
+Fortran RejectNegative
+Interpret any REAL(4) as a REAL(10)
+
+freal-4-real-16
+Fortran RejectNegative
+Interpret any REAL(4) as a REAL(16)
+
+freal-8-real-4
+Fortran RejectNegative
+Interpret any REAL(8) as a REAL(4)
+
+freal-8-real-10
+Fortran RejectNegative
+Interpret any REAL(8) as a REAL(10)
+
+freal-8-real-16
+Fortran RejectNegative
+Interpret any REAL(8) as a REAL(16)
 
 frealloc-lhs
 Fortran
@@ -573,6 +617,10 @@ Conform to the ISO Fortran 2003 standard
 std=f2008
 Fortran
 Conform to the ISO Fortran 2008 standard
+
+std=f2008ts
+Fortran
+Conform to the ISO Fortran 2008 standard including TS 29113
 
 std=f95
 Fortran

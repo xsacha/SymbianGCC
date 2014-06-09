@@ -54,7 +54,7 @@ func (f *file) readLine() (s string, ok bool) {
 		if n >= 0 {
 			f.data = f.data[0 : ln+n]
 		}
-		if err == os.EOF {
+		if err == io.EOF {
 			f.atEOF = true
 		}
 	}
@@ -62,12 +62,12 @@ func (f *file) readLine() (s string, ok bool) {
 	return
 }
 
-func open(name string) (*file, os.Error) {
-	fd, err := os.Open(name, os.O_RDONLY, 0)
+func open(name string) (*file, error) {
+	fd, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	return &file{fd, make([]byte, 1024)[0:0], false}, nil
+	return &file{fd, make([]byte, os.Getpagesize())[0:0], false}, nil
 }
 
 func byteIndex(s string, c byte) int {
@@ -159,6 +159,18 @@ func xtoi(s string, i0 int) (n int, i int, ok bool) {
 	return n, i, true
 }
 
+// xtoi2 converts the next two hex digits of s into a byte.
+// If s is longer than 2 bytes then the third byte must be e.
+// If the first two bytes of s are not hex digits or the third byte
+// does not match e, false is returned.
+func xtoi2(s string, e byte) (byte, bool) {
+	if len(s) > 2 && s[2] != e {
+		return 0, false
+	}
+	n, ei, ok := xtoi(s[:2], 0)
+	return byte(n), ok && ei == 2
+}
+
 // Integer to decimal.
 func itoa(i int) string {
 	var buf [30]byte
@@ -181,6 +193,37 @@ func itoa(i int) string {
 	return string(buf[n:])
 }
 
+// Convert i to decimal string.
+func itod(i uint) string {
+	if i == 0 {
+		return "0"
+	}
+
+	// Assemble decimal in reverse order.
+	var b [32]byte
+	bp := len(b)
+	for ; i > 0; i /= 10 {
+		bp--
+		b[bp] = byte(i%10) + '0'
+	}
+
+	return string(b[bp:])
+}
+
+// Convert i to hexadecimal string.
+func itox(i uint, min int) string {
+	// Assemble hexadecimal in reverse order.
+	var b [32]byte
+	bp := len(b)
+	for ; i > 0 || min > 0; i /= 16 {
+		bp--
+		b[bp] = "0123456789abcdef"[byte(i%16)]
+		min--
+	}
+
+	return string(b[bp:])
+}
+
 // Number of occurrences of b in s.
 func count(s string, b byte) int {
 	n := 0
@@ -190,16 +233,6 @@ func count(s string, b byte) int {
 		}
 	}
 	return n
-}
-
-// Returns the prefix of s up to but not including the character c
-func prefixBefore(s string, c byte) string {
-	for i, v := range s {
-		if v == int(c) {
-			return s[0:i]
-		}
-	}
-	return s
 }
 
 // Index of rightmost occurrence of b in s.

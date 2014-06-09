@@ -128,6 +128,7 @@ SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
+THREADCFLAGS = @THREADCFLAGS@
 THREADLIBS = @THREADLIBS@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
@@ -197,7 +198,7 @@ toolexeclibdir = @toolexeclibdir@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AUTOMAKE_OPTIONS = foreign no-dist
+AUTOMAKE_OPTIONS = foreign
 noinst_HEADERS = gc.h gc_backptr.h gc_local_alloc.h \
   gc_pthread_redirects.h gc_cpp.h
 

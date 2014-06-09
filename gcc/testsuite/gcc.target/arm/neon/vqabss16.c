@@ -16,5 +16,5 @@ void test_vqabss16 (void)
   out_int16x4_t = vqabs_s16 (arg0_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vqabs\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqabs\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

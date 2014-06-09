@@ -1,5 +1,4 @@
-/* Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+/* Copyright (C) 2002-2013 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -153,8 +152,12 @@ static const st_option async_opt[] =
 static void
 test_endfile (gfc_unit * u)
 {
-  if (u->endfile == NO_ENDFILE && file_length (u->s) == stell (u->s))
-    u->endfile = AT_ENDFILE;
+  if (u->endfile == NO_ENDFILE)
+    { 
+      gfc_offset sz = ssize (u->s);
+      if (sz == 0 || sz == stell (u->s))
+	u->endfile = AT_ENDFILE;
+    }
 }
 
 
@@ -467,12 +470,8 @@ new_unit (st_parameter_open *opp, gfc_unit *u, unit_flags * flags)
 	break;
 
       opp->file = tmpname;
-#ifdef HAVE_SNPRINTF
       opp->file_len = snprintf(opp->file, sizeof (tmpname), "fort.%d", 
 			       (int) opp->common.unit);
-#else
-      opp->file_len = sprintf(opp->file, "fort.%d", (int) opp->common.unit);
-#endif
       break;
 
     default:
@@ -504,26 +503,29 @@ new_unit (st_parameter_open *opp, gfc_unit *u, unit_flags * flags)
   if (s == NULL)
     {
       char *path, *msg;
+      size_t msglen;
       path = (char *) gfc_alloca (opp->file_len + 1);
-      msg = (char *) gfc_alloca (opp->file_len + 51);
+      msglen = opp->file_len + 51;
+      msg = (char *) gfc_alloca (msglen);
       unpack_filename (path, opp->file, opp->file_len);
 
       switch (errno)
 	{
 	case ENOENT: 
-	  sprintf (msg, "File '%s' does not exist", path);
+	  snprintf (msg, msglen, "File '%s' does not exist", path);
 	  break;
 
 	case EEXIST:
-	  sprintf (msg, "File '%s' already exists", path);
+	  snprintf (msg, msglen, "File '%s' already exists", path);
 	  break;
 
 	case EACCES:
-	  sprintf (msg, "Permission denied trying to open file '%s'", path);
+	  snprintf (msg, msglen, 
+		    "Permission denied trying to open file '%s'", path);
 	  break;
 
 	case EISDIR:
-	  sprintf (msg, "'%s' is a directory", path);
+	  snprintf (msg, msglen, "'%s' is a directory", path);
 	  break;
 
 	default:
@@ -555,7 +557,7 @@ new_unit (st_parameter_open *opp, gfc_unit *u, unit_flags * flags)
 
   if (flags->position == POSITION_APPEND)
     {
-      if (file_size (opp->file, opp->file_len) > 0 && sseek (u->s, 0, SEEK_END) < 0)
+      if (sseek (u->s, 0, SEEK_END) < 0)
 	generate_error (&opp->common, LIBERROR_OS, NULL);
       u->endfile = AT_ENDFILE;
     }
@@ -689,8 +691,7 @@ already_open (st_parameter_open *opp, gfc_unit * u, unit_flags * flags)
 	}
 
       u->s = NULL;
-      if (u->file)
-	free (u->file);
+      free (u->file);
       u->file = NULL;
       u->file_len = 0;
 

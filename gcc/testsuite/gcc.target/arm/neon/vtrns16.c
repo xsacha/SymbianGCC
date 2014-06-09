@@ -17,5 +17,5 @@ void test_vtrns16 (void)
   out_int16x4x2_t = vtrn_s16 (arg0_int16x4_t, arg1_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vtrn\.16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vtrn\.16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

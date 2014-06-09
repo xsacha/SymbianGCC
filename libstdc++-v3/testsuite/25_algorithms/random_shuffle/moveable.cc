@@ -1,5 +1,4 @@
 // { dg-options "-std=gnu++0x" }
-// { dg-add-options large_stack }
 
 // Copyright (C) 2009, 2010 Free Software Foundation, Inc.
 //

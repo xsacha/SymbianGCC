@@ -1,5 +1,4 @@
-// { dg-do run }
-// { dg-options "-std=c++0x -pedantic-errors" }
+// { dg-do run { target c++11 } }
 
 typedef decltype(nullptr) nullptr_t;
 

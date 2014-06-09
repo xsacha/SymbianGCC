@@ -16,5 +16,5 @@ void test_vshll_ns32 (void)
   out_int64x2_t = vshll_n_s32 (arg0_int32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vshll\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vshll\.s32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

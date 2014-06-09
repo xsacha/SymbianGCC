@@ -18,5 +18,5 @@ void test_vmlal_laneu32 (void)
   out_uint64x2_t = vmlal_lane_u32 (arg0_uint64x2_t, arg1_uint32x2_t, arg2_uint32x2_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmlal\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmlal\.u32\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

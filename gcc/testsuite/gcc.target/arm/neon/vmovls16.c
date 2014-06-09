@@ -16,5 +16,5 @@ void test_vmovls16 (void)
   out_int32x4_t = vmovl_s16 (arg0_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vmovl\.s16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmovl\.s16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

@@ -17,5 +17,5 @@ void test_vcgeu32 (void)
   out_uint32x2_t = vcge_u32 (arg0_uint32x2_t, arg1_uint32x2_t);
 }
 
-/* { dg-final { scan-assembler "vcge\.u32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcge\.u32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

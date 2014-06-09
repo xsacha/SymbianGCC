@@ -18,5 +18,5 @@ void test_vabau8 (void)
   out_uint8x8_t = vaba_u8 (arg0_uint8x8_t, arg1_uint8x8_t, arg2_uint8x8_t);
 }
 
-/* { dg-final { scan-assembler "vaba\.u8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vaba\.u8\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

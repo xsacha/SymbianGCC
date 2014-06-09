@@ -17,5 +17,5 @@ void test_vhsubQs8 (void)
   out_int8x16_t = vhsubq_s8 (arg0_int8x16_t, arg1_int8x16_t);
 }
 
-/* { dg-final { scan-assembler "vhsub\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vhsub\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

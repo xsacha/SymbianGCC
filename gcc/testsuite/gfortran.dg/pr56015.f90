@@ -1,6 +1,6 @@
 ! PR middle-end/56015
 ! { dg-do run }
-! { dg-options "-O3 -ffast-math -fno-inline" }
+! { dg-options "-Ofast -fno-inline" }
 
 program pr56015
   implicit none

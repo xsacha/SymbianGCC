@@ -17,5 +17,5 @@ void test_vsublu8 (void)
   out_uint16x8_t = vsubl_u8 (arg0_uint8x8_t, arg1_uint8x8_t);
 }
 
-/* { dg-final { scan-assembler "vsubl\.u8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vsubl\.u8\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

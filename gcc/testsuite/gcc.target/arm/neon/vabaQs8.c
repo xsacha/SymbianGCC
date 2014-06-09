@@ -18,5 +18,5 @@ void test_vabaQs8 (void)
   out_int8x16_t = vabaq_s8 (arg0_int8x16_t, arg1_int8x16_t, arg2_int8x16_t);
 }
 
-/* { dg-final { scan-assembler "vaba\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vaba\.s8\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

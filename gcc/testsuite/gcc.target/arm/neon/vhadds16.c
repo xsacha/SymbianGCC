@@ -17,5 +17,5 @@ void test_vhadds16 (void)
   out_int16x4_t = vhadd_s16 (arg0_int16x4_t, arg1_int16x4_t);
 }
 
-/* { dg-final { scan-assembler "vhadd\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vhadd\.s16\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

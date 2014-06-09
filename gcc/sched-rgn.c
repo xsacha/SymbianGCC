@@ -1,6 +1,6 @@
 /* Instruction scheduling pass.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) Enhanced by,
    and currently maintained by, Jim Wilson (wilson@cygnus.com)
@@ -125,9 +125,6 @@ int current_blocks;
    target are in array bblst_table.  */
 static basic_block *bblst_table;
 static int bblst_size, bblst_last;
-
-static char *bb_state_array;
-static state_t *bb_state;
 
 /* Target info declarations.
 
@@ -1764,29 +1761,18 @@ update_live_1 (int src, rtx x)
 
   regno = REGNO (reg);
 
-  if (regno >= FIRST_PSEUDO_REGISTER || !global_regs[regno])
+  if (! HARD_REGISTER_NUM_P (regno)
+      || !global_regs[regno])
     {
-      if (regno < FIRST_PSEUDO_REGISTER)
+      for (i = 0; i < candidate_table[src].update_bbs.nr_members; i++)
 	{
-	  int j = hard_regno_nregs[regno][GET_MODE (reg)];
-	  while (--j >= 0)
-	    {
-	      for (i = 0; i < candidate_table[src].update_bbs.nr_members; i++)
-		{
-		  basic_block b = candidate_table[src].update_bbs.first_member[i];
+	  basic_block b = candidate_table[src].update_bbs.first_member[i];
 
-		  SET_REGNO_REG_SET (df_get_live_in (b), regno + j);
-		}
-	    }
-	}
-      else
-	{
-	  for (i = 0; i < candidate_table[src].update_bbs.nr_members; i++)
-	    {
-	      basic_block b = candidate_table[src].update_bbs.first_member[i];
-
-	      SET_REGNO_REG_SET (df_get_live_in (b), regno);
-	    }
+	  if (HARD_REGISTER_NUM_P (regno))
+	    bitmap_set_range (df_get_live_in (b), regno,
+			      hard_regno_nregs[regno][GET_MODE (reg)]);
+	  else
+	    bitmap_set_bit (df_get_live_in (b), regno);
 	}
     }
 }
@@ -2989,21 +2975,9 @@ schedule_region (int rgn)
       curr_bb = first_bb;
       if (dbg_cnt (sched_block))
         {
-	  edge f;
-
-          schedule_block (&curr_bb, bb_state[first_bb->index]);
+          schedule_block (&curr_bb);
           gcc_assert (EBB_FIRST_BB (bb) == first_bb);
           sched_rgn_n_insns += sched_n_insns;
-	  f = find_fallthru_edge (last_bb->succs);
-	  if (f && f->probability * 100 / REG_BR_PROB_BASE >=
-	      PARAM_VALUE (PARAM_SCHED_STATE_EDGE_PROB_CUTOFF))
-	    {
-	      memcpy (bb_state[f->dest->index], curr_state,
-		      dfa_state_size);
-	      if (sched_verbose >= 5)
-		fprintf (sched_dump, "saving state for edge %d->%d\n",
-			 f->src->index, f->dest->index);
-	    }
         }
       else
         {
@@ -3036,8 +3010,6 @@ schedule_region (int rgn)
 void
 sched_rgn_init (bool single_blocks_p)
 {
-  int i;
-
   min_spec_prob = ((PARAM_VALUE (PARAM_MIN_SPEC_PROB) * REG_BR_PROB_BASE)
 		    / 100);
 
@@ -3048,15 +3020,6 @@ sched_rgn_init (bool single_blocks_p)
 
   CONTAINING_RGN (ENTRY_BLOCK) = -1;
   CONTAINING_RGN (EXIT_BLOCK) = -1;
-
-  bb_state_array = (char *) xmalloc (last_basic_block * dfa_state_size);
-  bb_state = XNEWVEC (state_t, last_basic_block);
-  for (i = 0; i < last_basic_block; i++)
-    {
-      bb_state[i] = (state_t) (bb_state_array + i * dfa_state_size);
-      
-      state_reset (bb_state[i]);
-    }
 
   /* Compute regions for scheduling.  */
   if (single_blocks_p
@@ -3094,9 +3057,6 @@ sched_rgn_init (bool single_blocks_p)
 void
 sched_rgn_finish (void)
 {
-  free (bb_state_array);
-  free (bb_state);
-
   /* Reposition the prologue and epilogue notes in case we moved the
      prologue/epilogue insns.  */
   if (reload_completed)
@@ -3424,7 +3384,8 @@ rgn_add_block (basic_block bb, basic_block after)
       /* Now POS is the index of the last block in the region.  */
 
       /* Find index of basic block AFTER.  */
-      for (; rgn_bb_table[pos] != after->index; pos--);
+      for (; rgn_bb_table[pos] != after->index; pos--)
+	;
 
       pos++;
       gcc_assert (pos > ebb_head[i - 1]);
@@ -3471,12 +3432,14 @@ rgn_fix_recovery_cfg (int bbi, int check_bbi, int check_bb_nexti)
 
   for (old_pos = ebb_head[BLOCK_TO_BB (check_bbi) + 1] - 1;
        rgn_bb_table[old_pos] != check_bb_nexti;
-       old_pos--);
+       old_pos--)
+    ;
   gcc_assert (old_pos > ebb_head[BLOCK_TO_BB (check_bbi)]);
 
   for (new_pos = ebb_head[BLOCK_TO_BB (bbi) + 1] - 1;
        rgn_bb_table[new_pos] != bbi;
-       new_pos--);
+       new_pos--)
+    ;
   new_pos++;
   gcc_assert (new_pos > ebb_head[BLOCK_TO_BB (bbi)]);
 
@@ -3579,7 +3542,6 @@ struct rtl_opt_pass pass_sched =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func |
   TODO_verify_flow |
   TODO_ggc_collect                      /* todo_flags_finish */
  }
@@ -3601,7 +3563,6 @@ struct rtl_opt_pass pass_sched2 =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func |
   TODO_verify_flow |
   TODO_ggc_collect                      /* todo_flags_finish */
  }

@@ -19,17 +19,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#undef TARGET_MIPS_SDE
-#define TARGET_MIPS_SDE 1
-
-#ifdef HAVE_GAS_EH_FRAME_ENTRY
-#undef MIPS_EH_ENCODING
-#define MIPS_EH_ENCODING (DW_EH_PE_pcrel | DW_EH_PE_sdata4)
-#define LINK_EH_SPEC "--pcrel-eh-reloc "
-#else
-#define LINK_EH_SPEC ""
-#endif
-
 #undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS						\
   /* Make sure a -mips option is present.  This helps us to pick	\
@@ -67,7 +56,7 @@ along with GCC; see the file COPYING3.  If not see
 %{mips16:-no-mips16}"
 
 #undef LINK_SPEC
-#define LINK_SPEC LINK_EH_SPEC "\
+#define LINK_SPEC "\
 %(endian_spec) \
 %{G*} %{mips1} %{mips2} %{mips3} %{mips4} %{mips32*} %{mips64*} \
 %{shared} \

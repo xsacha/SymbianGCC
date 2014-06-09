@@ -93,7 +93,8 @@ func main() {
 
 	m[13] = 'B'
 	//  13        14
-	m[gint()] = gbyte(), false
+	delete(m, gint())
+	gbyte()
 	if _, present := m[13]; present {
 		println("bad map removal")
 		panic("fail")
@@ -103,6 +104,7 @@ func main() {
 	c <- 'C'
 	// 15          16
 	*f(), p1 = <-e1(c, 16)
+	close(c)
 	// 17          18
 	*f(), p2 = <-e1(c, 18)
 	a[17] += '0'

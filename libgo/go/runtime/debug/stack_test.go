@@ -23,7 +23,7 @@ func (t T) method() []byte {
 	Don't worry much about the base levels, but check the ones in our own package.
 
 		/Users/r/go/src/pkg/runtime/debug/stack_test.go:15 (0x13878)
-			*T.ptrmethod: return Stack()
+			(*T).ptrmethod: return Stack()
 		/Users/r/go/src/pkg/runtime/debug/stack_test.go:18 (0x138dd)
 			T.method: return t.ptrmethod()
 		/Users/r/go/src/pkg/runtime/debug/stack_test.go:23 (0x13920)
@@ -35,17 +35,24 @@ func (t T) method() []byte {
 */
 func TestStack(t *testing.T) {
 	b := T(0).method()
-	lines := strings.Split(string(b), "\n", -1)
+	lines := strings.Split(string(b), "\n")
 	if len(lines) <= 6 {
 		t.Fatal("too few lines")
 	}
-	check(t, lines[0], "src/pkg/runtime/debug/stack_test.go")
-	check(t, lines[1], "\t*T.ptrmethod: return Stack()")
-	check(t, lines[2], "src/pkg/runtime/debug/stack_test.go")
-	check(t, lines[3], "\tT.method: return t.ptrmethod()")
-	check(t, lines[4], "src/pkg/runtime/debug/stack_test.go")
-	check(t, lines[5], "\tTestStack: b := T(0).method()")
-	check(t, lines[6], "src/pkg/testing/testing.go")
+	n := 0
+	frame := func(line, code string) {
+		check(t, lines[n], line)
+		n++
+		// The source might not be available while running the test.
+		if strings.HasPrefix(lines[n], "\t") {
+			check(t, lines[n], code)
+			n++
+		}
+	}
+	frame("src/pkg/runtime/debug/stack_test.go", "\t(*T).ptrmethod: return Stack()")
+	frame("src/pkg/runtime/debug/stack_test.go", "\tT.method: return t.ptrmethod()")
+	frame("src/pkg/runtime/debug/stack_test.go", "\tTestStack: b := T(0).method()")
+	frame("src/pkg/testing/testing.go", "")
 }
 
 func check(t *testing.T, line, has string) {

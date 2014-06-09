@@ -1,22 +1,29 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
-2012-03-01  Release Manager
+2013-01-10  Matthias Klose <doko@ubuntu.com>
 
-	* GCC 4.6.3 released.
+	* tools/gnu/classpath/tools/gjdoc/Main.java: Accept -source 1.5,
+	1.6, 1.7.
 
-2011-10-26  Release Manager
+2012-09-20  Release Manager
 
-	* GCC 4.6.2 released.
+	* GCC 4.7.2 released.
 
-2011-06-27  Release Manager
+2012-06-14  Release Manager
 
-	* GCC 4.6.1 released.
+	* GCC 4.7.1 released.
 
-2011-03-25  Release Manager
+2012-03-22  Release Manager
 
-	* GCC 4.6.0 released.
+	* GCC 4.7.0 released.
+
+2011-09-29  Jan Beulich  <jbeulich@suse.com>
+
+	* tools/Makefile.am (TOOLS_ZIP): Make writable the copied subtrees
+	asm/ and classes/.
+	* tools/Makefile.in: Re-generate.
 
 2010-06-03  Andrew John Hughes  <ahughes@redhat.com>
 

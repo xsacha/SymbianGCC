@@ -16,5 +16,5 @@ void test_vpaddlQu16 (void)
   out_uint32x4_t = vpaddlq_u16 (arg0_uint16x8_t);
 }
 
-/* { dg-final { scan-assembler "vpaddl\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vpaddl\.u16\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

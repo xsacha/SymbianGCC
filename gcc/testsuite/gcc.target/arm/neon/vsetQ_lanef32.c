@@ -17,5 +17,5 @@ void test_vsetQ_lanef32 (void)
   out_float32x4_t = vsetq_lane_f32 (arg0_float32_t, arg1_float32x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmov\.32\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmov\.32\[ 	\]+\[dD\]\[0-9\]+\\\[\[0-9\]+\\\], \[rR\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

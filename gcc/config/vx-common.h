@@ -92,6 +92,3 @@ along with GCC; see the file COPYING3.  If not see
 /* We occasionally need to distinguish between the VxWorks variants.  */
 #define VXWORKS_KIND_NORMAL  1
 #define VXWORKS_KIND_AE      2
-
-/* Enable get_feature license checking.  */
-#define TARGET_FLEXLM

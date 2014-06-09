@@ -15,35 +15,28 @@ package multipart
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"mime"
-	"os"
-	"regexp"
-	"strings"
+	"net/textproto"
 )
 
-var headerRegexp *regexp.Regexp = regexp.MustCompile("^([a-zA-Z0-9\\-]+): *([^\r\n]+)")
-
-// Reader is an iterator over parts in a MIME multipart body.
-// Reader's underlying parser consumes its input as needed.  Seeking
-// isn't supported.
-type Reader interface {
-	// NextPart returns the next part in the multipart, or (nil,
-	// nil) on EOF.  An error is returned if the underlying reader
-	// reports errors, or on truncated or otherwise malformed
-	// input.
-	NextPart() (*Part, os.Error)
-}
+var emptyParams = make(map[string]string)
 
 // A Part represents a single part in a multipart body.
 type Part struct {
 	// The headers of the body, if any, with the keys canonicalized
 	// in the same fashion that the Go http.Request headers are.
 	// i.e. "foo-bar" changes case to "Foo-Bar"
-	Header map[string]string
+	Header textproto.MIMEHeader
 
-	buffer *bytes.Buffer
-	mr     *multiReader
+	buffer    *bytes.Buffer
+	mr        *Reader
+	bytesRead int
+
+	disposition       string
+	dispositionParams map[string]string
 }
 
 // FormName returns the name parameter if p has a Content-Disposition
@@ -51,230 +44,276 @@ type Part struct {
 func (p *Part) FormName() string {
 	// See http://tools.ietf.org/html/rfc2183 section 2 for EBNF
 	// of Content-Disposition value format.
-	v, ok := p.Header["Content-Disposition"]
-	if !ok {
+	if p.dispositionParams == nil {
+		p.parseContentDisposition()
+	}
+	if p.disposition != "form-data" {
 		return ""
 	}
-	d, params := mime.ParseMediaType(v)
-	if d != "form-data" {
-		return ""
-	}
-	return params["name"]
+	return p.dispositionParams["name"]
 }
 
-// NewReader creates a new multipart Reader reading from r using the
+// FileName returns the filename parameter of the Part's
+// Content-Disposition header.
+func (p *Part) FileName() string {
+	if p.dispositionParams == nil {
+		p.parseContentDisposition()
+	}
+	return p.dispositionParams["filename"]
+}
+
+func (p *Part) parseContentDisposition() {
+	v := p.Header.Get("Content-Disposition")
+	var err error
+	p.disposition, p.dispositionParams, err = mime.ParseMediaType(v)
+	if err != nil {
+		p.dispositionParams = emptyParams
+	}
+}
+
+// NewReader creates a new multipart Reader reading from reader using the
 // given MIME boundary.
-func NewReader(reader io.Reader, boundary string) Reader {
-	return &multiReader{
-		boundary:     boundary,
-		dashBoundary: "--" + boundary,
-		endLine:      "--" + boundary + "--",
-		bufReader:    bufio.NewReader(reader),
+func NewReader(reader io.Reader, boundary string) *Reader {
+	b := []byte("\r\n--" + boundary + "--")
+	return &Reader{
+		bufReader: bufio.NewReader(reader),
+
+		nl:               b[:2],
+		nlDashBoundary:   b[:len(b)-2],
+		dashBoundaryDash: b[2:],
+		dashBoundary:     b[2 : len(b)-2],
 	}
 }
 
-// Implementation ....
-
-type devNullWriter bool
-
-func (*devNullWriter) Write(p []byte) (n int, err os.Error) {
-	return len(p), nil
+func newPart(mr *Reader) (*Part, error) {
+	bp := &Part{
+		Header: make(map[string][]string),
+		mr:     mr,
+		buffer: new(bytes.Buffer),
+	}
+	if err := bp.populateHeaders(); err != nil {
+		return nil, err
+	}
+	return bp, nil
 }
 
-var devNull = devNullWriter(false)
-
-func newPart(mr *multiReader) (bp *Part, err os.Error) {
-	bp = new(Part)
-	bp.Header = make(map[string]string)
-	bp.mr = mr
-	bp.buffer = new(bytes.Buffer)
-	if err = bp.populateHeaders(); err != nil {
-		bp = nil
+func (bp *Part) populateHeaders() error {
+	r := textproto.NewReader(bp.mr.bufReader)
+	header, err := r.ReadMIMEHeader()
+	if err == nil {
+		bp.Header = header
 	}
-	return
-}
-
-func (bp *Part) populateHeaders() os.Error {
-	for {
-		line, err := bp.mr.bufReader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		if line == "\n" || line == "\r\n" {
-			return nil
-		}
-		if matches := headerRegexp.FindStringSubmatch(line); len(matches) == 3 {
-			key := matches[1]
-			value := matches[2]
-			// TODO: canonicalize headers ala http.Request.Header?
-			bp.Header[key] = value
-			continue
-		}
-		return os.NewError("Unexpected header line found parsing multipart body")
-	}
-	panic("unreachable")
+	return err
 }
 
 // Read reads the body of a part, after its headers and before the
 // next part (if any) begins.
-func (bp *Part) Read(p []byte) (n int, err os.Error) {
-	for {
-		if bp.buffer.Len() >= len(p) {
-			// Internal buffer of unconsumed data is large enough for
-			// the read request.  No need to parse more at the moment.
-			break
-		}
-		if !bp.mr.ensureBufferedLine() {
-			return 0, io.ErrUnexpectedEOF
-		}
-		if bp.mr.bufferedLineIsBoundary() {
-			// Don't consume this line
-			break
-		}
-
-		// Write all of this line, except the final CRLF
-		s := *bp.mr.bufferedLine
-		if strings.HasSuffix(s, "\r\n") {
-			bp.mr.consumeLine()
-			if !bp.mr.ensureBufferedLine() {
-				return 0, io.ErrUnexpectedEOF
-			}
-			if bp.mr.bufferedLineIsBoundary() {
-				// The final \r\n isn't ours.  It logically belongs
-				// to the boundary line which follows.
-				bp.buffer.WriteString(s[0 : len(s)-2])
-			} else {
-				bp.buffer.WriteString(s)
-			}
-			break
-		}
-		if strings.HasSuffix(s, "\n") {
-			bp.buffer.WriteString(s)
-			bp.mr.consumeLine()
-			continue
-		}
-		return 0, os.NewError("multipart parse error during Read; unexpected line: " + s)
+func (p *Part) Read(d []byte) (n int, err error) {
+	defer func() {
+		p.bytesRead += n
+	}()
+	if p.buffer.Len() >= len(d) {
+		// Internal buffer of unconsumed data is large enough for
+		// the read request.  No need to parse more at the moment.
+		return p.buffer.Read(d)
 	}
-	return bp.buffer.Read(p)
+	peek, err := p.mr.bufReader.Peek(4096) // TODO(bradfitz): add buffer size accessor
+
+	// Look for an immediate empty part without a leading \r\n
+	// before the boundary separator.  Some MIME code makes empty
+	// parts like this. Most browsers, however, write the \r\n
+	// before the subsequent boundary even for empty parts and
+	// won't hit this path.
+	if p.bytesRead == 0 && p.mr.peekBufferIsEmptyPart(peek) {
+		return 0, io.EOF
+	}
+	unexpectedEOF := err == io.EOF
+	if err != nil && !unexpectedEOF {
+		return 0, fmt.Errorf("multipart: Part Read: %v", err)
+	}
+	if peek == nil {
+		panic("nil peek buf")
+	}
+
+	// Search the peek buffer for "\r\n--boundary". If found,
+	// consume everything up to the boundary. If not, consume only
+	// as much of the peek buffer as cannot hold the boundary
+	// string.
+	nCopy := 0
+	foundBoundary := false
+	if idx := bytes.Index(peek, p.mr.nlDashBoundary); idx != -1 {
+		nCopy = idx
+		foundBoundary = true
+	} else if safeCount := len(peek) - len(p.mr.nlDashBoundary); safeCount > 0 {
+		nCopy = safeCount
+	} else if unexpectedEOF {
+		// If we've run out of peek buffer and the boundary
+		// wasn't found (and can't possibly fit), we must have
+		// hit the end of the file unexpectedly.
+		return 0, io.ErrUnexpectedEOF
+	}
+	if nCopy > 0 {
+		if _, err := io.CopyN(p.buffer, p.mr.bufReader, int64(nCopy)); err != nil {
+			return 0, err
+		}
+	}
+	n, err = p.buffer.Read(d)
+	if err == io.EOF && !foundBoundary {
+		// If the boundary hasn't been reached there's more to
+		// read, so don't pass through an EOF from the buffer
+		err = nil
+	}
+	return
 }
 
-func (bp *Part) Close() os.Error {
-	io.Copy(&devNull, bp)
+func (p *Part) Close() error {
+	io.Copy(ioutil.Discard, p)
 	return nil
 }
 
-type multiReader struct {
-	boundary     string
-	dashBoundary string // --boundary
-	endLine      string // --boundary--
+// Reader is an iterator over parts in a MIME multipart body.
+// Reader's underlying parser consumes its input as needed.  Seeking
+// isn't supported.
+type Reader struct {
+	bufReader *bufio.Reader
 
-	bufferedLine *string
-
-	bufReader   *bufio.Reader
 	currentPart *Part
 	partsRead   int
+
+	nl               []byte // "\r\n" or "\n" (set after seeing first boundary line)
+	nlDashBoundary   []byte // nl + "--boundary"
+	dashBoundaryDash []byte // "--boundary--"
+	dashBoundary     []byte // "--boundary"
 }
 
-func (mr *multiReader) eof() bool {
-	return mr.bufferedLine == nil &&
-		!mr.readLine()
-}
-
-func (mr *multiReader) readLine() bool {
-	line, err := mr.bufReader.ReadString('\n')
-	if err != nil {
-		// TODO: care about err being EOF or not?
-		return false
-	}
-	mr.bufferedLine = &line
-	return true
-}
-
-func (mr *multiReader) bufferedLineIsBoundary() bool {
-	return strings.HasPrefix(*mr.bufferedLine, mr.dashBoundary)
-}
-
-func (mr *multiReader) ensureBufferedLine() bool {
-	if mr.bufferedLine == nil {
-		return mr.readLine()
-	}
-	return true
-}
-
-func (mr *multiReader) consumeLine() {
-	mr.bufferedLine = nil
-}
-
-func (mr *multiReader) NextPart() (*Part, os.Error) {
-	if mr.currentPart != nil {
-		mr.currentPart.Close()
+// NextPart returns the next part in the multipart or an error.
+// When there are no more parts, the error io.EOF is returned.
+func (r *Reader) NextPart() (*Part, error) {
+	if r.currentPart != nil {
+		r.currentPart.Close()
 	}
 
+	expectNewPart := false
 	for {
-		if mr.eof() {
-			return nil, io.ErrUnexpectedEOF
+		line, err := r.bufReader.ReadSlice('\n')
+		if err == io.EOF && r.isFinalBoundary(line) {
+			// If the buffer ends in "--boundary--" without the
+			// trailing "\r\n", ReadSlice will return an error
+			// (since it's missing the '\n'), but this is a valid
+			// multipart EOF so we need to return io.EOF instead of
+			// a fmt-wrapped one.
+			return nil, io.EOF
+		}
+		if err != nil {
+			return nil, fmt.Errorf("multipart: NextPart: %v", err)
 		}
 
-		if isBoundaryDelimiterLine(*mr.bufferedLine, mr.dashBoundary) {
-			mr.consumeLine()
-			mr.partsRead++
-			bp, err := newPart(mr)
+		if r.isBoundaryDelimiterLine(line) {
+			r.partsRead++
+			bp, err := newPart(r)
 			if err != nil {
 				return nil, err
 			}
-			mr.currentPart = bp
+			r.currentPart = bp
 			return bp, nil
 		}
 
-		if hasPrefixThenNewline(*mr.bufferedLine, mr.endLine) {
-			mr.consumeLine()
-			// Expected EOF (no error)
-			return nil, nil
+		if r.isFinalBoundary(line) {
+			// Expected EOF
+			return nil, io.EOF
 		}
 
-		if mr.partsRead == 0 {
+		if expectNewPart {
+			return nil, fmt.Errorf("multipart: expecting a new Part; got line %q", string(line))
+		}
+
+		if r.partsRead == 0 {
 			// skip line
-			mr.consumeLine()
 			continue
 		}
 
-		return nil, os.NewError("Unexpected line in Next().")
+		// Consume the "\n" or "\r\n" separator between the
+		// body of the previous part and the boundary line we
+		// now expect will follow. (either a new part or the
+		// end boundary)
+		if bytes.Equal(line, r.nl) {
+			expectNewPart = true
+			continue
+		}
+
+		return nil, fmt.Errorf("multipart: unexpected line in Next(): %q", line)
 	}
 	panic("unreachable")
 }
 
-func isBoundaryDelimiterLine(line, dashPrefix string) bool {
+// isFinalBoundary returns whether line is the final boundary line
+// indiciating that all parts are over.
+// It matches `^--boundary--[ \t]*(\r\n)?$`
+func (mr *Reader) isFinalBoundary(line []byte) bool {
+	if !bytes.HasPrefix(line, mr.dashBoundaryDash) {
+		return false
+	}
+	rest := line[len(mr.dashBoundaryDash):]
+	rest = skipLWSPChar(rest)
+	return len(rest) == 0 || bytes.Equal(rest, mr.nl)
+}
+
+func (mr *Reader) isBoundaryDelimiterLine(line []byte) (ret bool) {
 	// http://tools.ietf.org/html/rfc2046#section-5.1
 	//   The boundary delimiter line is then defined as a line
 	//   consisting entirely of two hyphen characters ("-",
 	//   decimal value 45) followed by the boundary parameter
 	//   value from the Content-Type header field, optional linear
 	//   whitespace, and a terminating CRLF.
-	if !strings.HasPrefix(line, dashPrefix) {
+	if !bytes.HasPrefix(line, mr.dashBoundary) {
 		return false
 	}
-	if strings.HasSuffix(line, "\r\n") {
-		return onlyHorizontalWhitespace(line[len(dashPrefix) : len(line)-2])
+	rest := line[len(mr.dashBoundary):]
+	rest = skipLWSPChar(rest)
+
+	// On the first part, see our lines are ending in \n instead of \r\n
+	// and switch into that mode if so.  This is a violation of the spec,
+	// but occurs in practice.
+	if mr.partsRead == 0 && len(rest) == 1 && rest[0] == '\n' {
+		mr.nl = mr.nl[1:]
+		mr.nlDashBoundary = mr.nlDashBoundary[1:]
 	}
-	// Violate the spec and also support newlines without the
-	// carriage return...
-	if strings.HasSuffix(line, "\n") {
-		return onlyHorizontalWhitespace(line[len(dashPrefix) : len(line)-1])
-	}
-	return false
+	return bytes.Equal(rest, mr.nl)
 }
 
-func onlyHorizontalWhitespace(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] != ' ' && s[i] != '\t' {
-			return false
-		}
+// peekBufferIsEmptyPart returns whether the provided peek-ahead
+// buffer represents an empty part.  This is only called if we've not
+// already read any bytes in this part and checks for the case of MIME
+// software not writing the \r\n on empty parts. Some does, some
+// doesn't.
+//
+// This checks that what follows the "--boundary" is actually the end
+// ("--boundary--" with optional whitespace) or optional whitespace
+// and then a newline, so we don't catch "--boundaryFAKE", in which
+// case the whole line is part of the data.
+func (mr *Reader) peekBufferIsEmptyPart(peek []byte) bool {
+	// End of parts case.
+	// Test whether peek matches `^--boundary--[ \t]*(?:\r\n|$)`
+	if bytes.HasPrefix(peek, mr.dashBoundaryDash) {
+		rest := peek[len(mr.dashBoundaryDash):]
+		rest = skipLWSPChar(rest)
+		return bytes.HasPrefix(rest, mr.nl) || len(rest) == 0
 	}
-	return true
+	if !bytes.HasPrefix(peek, mr.dashBoundary) {
+		return false
+	}
+	// Test whether rest matches `^[ \t]*\r\n`)
+	rest := peek[len(mr.dashBoundary):]
+	rest = skipLWSPChar(rest)
+	return bytes.HasPrefix(rest, mr.nl)
 }
 
-func hasPrefixThenNewline(s, prefix string) bool {
-	return strings.HasPrefix(s, prefix) &&
-		(len(s) == len(prefix)+1 && strings.HasSuffix(s, "\n") ||
-			len(s) == len(prefix)+2 && strings.HasSuffix(s, "\r\n"))
+// skipLWSPChar returns b with leading spaces and tabs removed.
+// RFC 822 defines:
+//    LWSP-char = SPACE / HTAB
+func skipLWSPChar(b []byte) []byte {
+	for len(b) > 0 && (b[0] == ' ' || b[0] == '\t') {
+		b = b[1:]
+	}
+	return b
 }

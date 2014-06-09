@@ -17,5 +17,5 @@ void test_vpadalu32 (void)
   out_uint64x1_t = vpadal_u32 (arg0_uint64x1_t, arg1_uint32x2_t);
 }
 
-/* { dg-final { scan-assembler "vpadal\.u32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vpadal\.u32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

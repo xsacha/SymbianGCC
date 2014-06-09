@@ -46,7 +46,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "target.h"
 #include "timevar.h"
 #include "tree-pass.h"
-#include "addresses.h"
 #include "df.h"
 #include "dbgcnt.h"
 
@@ -113,8 +112,8 @@ reload_cse_simplify (rtx insn, rtx testreg)
 	  if (REG_P (value)
 	      && ! REG_FUNCTION_VALUE_P (value))
 	    value = 0;
-	  check_for_inc_dec (insn);
-	  delete_insn_and_edges (insn);
+	  if (check_for_inc_dec (insn))
+	    delete_insn_and_edges (insn);
 	  return;
 	}
 
@@ -165,8 +164,8 @@ reload_cse_simplify (rtx insn, rtx testreg)
 
       if (i < 0)
 	{
-	  check_for_inc_dec (insn);
-	  delete_insn_and_edges (insn);
+	  if (check_for_inc_dec (insn))
+	    delete_insn_and_edges (insn);
 	  /* We're done with this insn.  */
 	  return;
 	}
@@ -234,7 +233,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
   int did_change = 0;
   int dreg;
   rtx src;
-  enum reg_class dclass;
+  reg_class_t dclass;
   int old_cost;
   cselib_val *val;
   struct elt_loc_list *l;
@@ -276,7 +275,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
     old_cost = register_move_cost (GET_MODE (src),
 				   REGNO_REG_CLASS (REGNO (src)), dclass);
   else
-    old_cost = rtx_cost (src, SET, speed);
+    old_cost = set_src_cost (src, speed);
 
   for (l = val->locs; l; l = l->next)
     {
@@ -311,7 +310,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
 	      this_rtx = GEN_INT (this_val);
 	    }
 #endif
-	  this_cost = rtx_cost (this_rtx, SET, speed);
+	  this_cost = set_src_cost (this_rtx, speed);
 	}
       else if (REG_P (this_rtx))
 	{
@@ -319,7 +318,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
 	  if (extend_op != UNKNOWN)
 	    {
 	      this_rtx = gen_rtx_fmt_e (extend_op, word_mode, this_rtx);
-	      this_cost = rtx_cost (this_rtx, SET, speed);
+	      this_cost = set_src_cost (this_rtx, speed);
 	    }
 	  else
 #endif
@@ -580,10 +579,12 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
 		      && recog_data.alternative_enabled_p[j]
 		      && reg_fits_class_p (testreg, rclass, 0, mode)
 		      && (!CONST_INT_P (recog_data.operand[i])
-			  || (rtx_cost (recog_data.operand[i], SET,
-			  		optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn)))
-			      > rtx_cost (testreg, SET,
-			  		optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn))))))
+			  || (set_src_cost (recog_data.operand[i],
+					    optimize_bb_for_speed_p
+					     (BLOCK_FOR_INSN (insn)))
+			      > set_src_cost (testreg,
+					      optimize_bb_for_speed_p
+					       (BLOCK_FOR_INSN (insn))))))
 		    {
 		      alternative_nregs[j]++;
 		      op_alt_regno[i][j] = regno;
@@ -917,12 +918,12 @@ try_replace_in_use (struct reg_use *use, rtx reg, rtx src)
 	  && CONSTANT_P (XEXP (SET_SRC (new_set), 1)))
 	{
 	  rtx new_src;
-	  int old_cost = rtx_cost (SET_SRC (new_set), SET, speed);
+	  int old_cost = set_src_cost (SET_SRC (new_set), speed);
 
 	  gcc_assert (rtx_equal_p (XEXP (SET_SRC (new_set), 0), reg));
 	  new_src = simplify_replace_rtx (SET_SRC (new_set), reg, src);
 
-	  if (rtx_cost (new_src, SET, speed) <= old_cost
+	  if (set_src_cost (new_src, speed) <= old_cost
 	      && validate_change (use_insn, &SET_SRC (new_set),
 				  new_src, 0))
 	    return true;
@@ -1123,7 +1124,6 @@ reload_combine_recognize_pattern (rtx insn)
       && reg_state[regno].use_index < RELOAD_COMBINE_MAX_USES
       && last_label_ruid < reg_state[regno].use_ruid)
     {
-      enum reg_class index_regs = index_reg_class (VOIDmode);
       rtx base = XEXP (src, 1);
       rtx prev = prev_nonnote_nondebug_insn (insn);
       rtx prev_set = prev ? single_set (prev) : NULL_RTX;
@@ -1136,8 +1136,8 @@ reload_combine_recognize_pattern (rtx insn)
 	 register+register that we want to use to substitute uses of REG
 	 (typically in MEMs) with.  First check REG and BASE for being
 	 index registers; we can use them even if they are not dead.  */
-      if (TEST_HARD_REG_BIT (reg_class_contents[index_regs], regno)
-	  || TEST_HARD_REG_BIT (reg_class_contents[index_regs],
+      if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], regno)
+	  || TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS],
 				REGNO (base)))
 	{
 	  index_reg = reg;
@@ -1151,7 +1151,7 @@ reload_combine_recognize_pattern (rtx insn)
 	     two registers.  */
 	  for (i = first_index_reg; i <= last_index_reg; i++)
 	    {
-	      if (TEST_HARD_REG_BIT (reg_class_contents[index_regs], i)
+	      if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], i)
 		  && reg_state[i].use_index == RELOAD_COMBINE_MAX_USES
 		  && reg_state[i].store_ruid <= reg_state[regno].use_ruid
 		  && (call_used_regs[i] || df_regs_ever_live_p (i))
@@ -1239,17 +1239,15 @@ reload_combine (void)
   unsigned int r;
   int min_labelno, n_labels;
   HARD_REG_SET ever_live_at_start, *label_live;
-  enum reg_class index_regs;
 
   /* To avoid wasting too much time later searching for an index register,
      determine the minimum and maximum index register numbers.  */
-  index_regs = index_reg_class (VOIDmode);
-  if (index_regs == NO_REGS)
+  if (INDEX_REG_CLASS == NO_REGS)
     last_index_reg = -1;
   else if (first_index_reg == -1 && last_index_reg == 0)
     {
       for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	if (TEST_HARD_REG_BIT (reg_class_contents[index_regs], r))
+	if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], r))
 	  {
 	    if (first_index_reg == -1)
 	      first_index_reg = r;
@@ -1315,9 +1313,20 @@ reload_combine (void)
       if (LABEL_P (insn))
 	last_label_ruid = reload_combine_ruid;
       else if (BARRIER_P (insn))
-	for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	  if (! fixed_regs[r])
+	{
+	  /* Crossing a barrier resets all the use information.  */
+	  for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
+	    if (! fixed_regs[r])
 	      reg_state[r].use_index = RELOAD_COMBINE_MAX_USES;
+	}
+      else if (INSN_P (insn) && volatile_insn_p (PATTERN (insn)))
+	/* Optimizations across insns being marked as volatile must be
+	   prevented.  All the usage information is invalidated
+	   here.  */
+	for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
+	  if (! fixed_regs[r]
+	      && reg_state[r].use_index != RELOAD_COMBINE_MAX_USES)
+	    reg_state[r].use_index = -1;
 
       if (! NONDEBUG_INSN_P (insn))
 	continue;
@@ -1348,10 +1357,8 @@ reload_combine (void)
 	  for (link = CALL_INSN_FUNCTION_USAGE (insn); link;
 	       link = XEXP (link, 1))
 	    {
-	      rtx setuse = XEXP (link, 0);
-	      rtx usage_rtx = XEXP (setuse, 0);
-	      if ((GET_CODE (setuse) == USE || GET_CODE (setuse) == CLOBBER)
-		  && REG_P (usage_rtx))
+	      rtx usage_rtx = XEXP (XEXP (link, 0), 0);
+	      if (REG_P (usage_rtx))
 	        {
 		  unsigned int i;
 		  unsigned int start_reg = REGNO (usage_rtx);
@@ -1649,8 +1656,7 @@ static int move2add_last_label_luid;
 #define MODES_OK_FOR_MOVE2ADD(OUTMODE, INMODE) \
   (GET_MODE_SIZE (OUTMODE) == GET_MODE_SIZE (INMODE) \
    || (GET_MODE_SIZE (OUTMODE) <= GET_MODE_SIZE (INMODE) \
-       && TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (OUTMODE), \
-				 GET_MODE_BITSIZE (INMODE))))
+       && TRULY_NOOP_TRUNCATION_MODES_P (OUTMODE, INMODE)))
 
 /* This function is called with INSN that sets REG to (SYM + OFF),
    while REG is known to already have value (SYM + offset).
@@ -1690,9 +1696,9 @@ move2add_use_add2_insn (rtx reg, rtx sym, rtx off, rtx insn)
       struct full_rtx_costs oldcst, newcst;
       rtx tem = gen_rtx_PLUS (GET_MODE (reg), reg, new_src);
 
-      get_full_rtx_cost (pat, SET, &oldcst);
+      get_full_set_rtx_cost (pat, &oldcst);
       SET_SRC (pat) = tem;
-      get_full_rtx_cost (pat, SET, &newcst);
+      get_full_set_rtx_cost (pat, &newcst);
       SET_SRC (pat) = src;
 
       if (costs_lt_p (&newcst, &oldcst, speed)
@@ -1759,7 +1765,7 @@ move2add_use_add3_insn (rtx reg, rtx sym, rtx off, rtx insn)
   rtx plus_expr;
 
   init_costs_to_max (&mincst);
-  get_full_rtx_cost (pat, SET, &oldcst);
+  get_full_set_rtx_cost (pat, &oldcst);
 
   plus_expr = gen_rtx_PLUS (GET_MODE (reg), reg, const0_rtx);
   SET_SRC (pat) = plus_expr;
@@ -1788,7 +1794,7 @@ move2add_use_add3_insn (rtx reg, rtx sym, rtx off, rtx insn)
 	else
 	  {
 	    XEXP (plus_expr, 1) = new_src;
-	    get_full_rtx_cost (pat, SET, &newcst);
+	    get_full_set_rtx_cost (pat, &newcst);
 
 	    if (costs_lt_p (&newcst, &mincst, speed))
 	      {
@@ -1941,9 +1947,9 @@ reload_cse_move2add (rtx first)
 			  struct full_rtx_costs oldcst, newcst;
 			  rtx tem = gen_rtx_PLUS (GET_MODE (reg), reg, new_src);
 
-			  get_full_rtx_cost (set, SET, &oldcst);
+			  get_full_set_rtx_cost (set, &oldcst);
 			  SET_SRC (set) = tem;
-			  get_full_rtx_cost (tem, SET, &newcst);
+			  get_full_set_src_cost (tem, &newcst);
 			  SET_SRC (set) = old_src;
 			  costs_add_n_insns (&oldcst, 1);
 
@@ -2293,6 +2299,6 @@ struct rtl_opt_pass pass_postreload_cse =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func                        /* todo_flags_finish */
+  0                                     /* todo_flags_finish */
  }
 };

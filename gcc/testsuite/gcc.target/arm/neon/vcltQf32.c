@@ -17,5 +17,5 @@ void test_vcltQf32 (void)
   out_uint32x4_t = vcltq_f32 (arg0_float32x4_t, arg1_float32x4_t);
 }
 
-/* { dg-final { scan-assembler "vcgt\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcgt\.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

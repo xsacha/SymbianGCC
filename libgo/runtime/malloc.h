@@ -19,7 +19,6 @@
 //		used to manage storage used by the allocator.
 //	MHeap: the malloc heap, managed at page (4096-byte) granularity.
 //	MSpan: a run of pages managed by the MHeap.
-//	MHeapMap: a mapping from page IDs to MSpans.
 //	MCentral: a shared free list for a given size class.
 //	MCache: a per-thread (in Go, per-M) cache for small objects.
 //	MStats: allocation statistics.
@@ -81,10 +80,8 @@
 // This C code was written with an eye toward translating to Go
 // in the future.  Methods have the form Type_Method(Type *t, ...).
 
-typedef struct FixAlloc	FixAlloc;
 typedef struct MCentral	MCentral;
 typedef struct MHeap	MHeap;
-typedef struct MHeapMap	MHeapMap;
 typedef struct MSpan	MSpan;
 typedef struct MStats	MStats;
 typedef struct MLink	MLink;
@@ -99,8 +96,14 @@ typedef	uintptr	PageID;		// address >> PageShift
 
 enum
 {
+	// Computed constant.  The definition of MaxSmallSize and the
+	// algorithm in msize.c produce some number of different allocation
+	// size classes.  NumSizeClasses is that number.  It's needed here
+	// because there are static arrays of this length; when msize runs its
+	// size choosing algorithm it double-checks that NumSizeClasses agrees.
+	NumSizeClasses = 61,
+
 	// Tunable constants.
-	NumSizeClasses = 67,		// Number of size classes (must match msize.c)
 	MaxSmallSize = 32<<10,
 
 	FixAllocChunk = 128<<10,	// Chunk size for FixAlloc
@@ -108,12 +111,30 @@ enum
 	MaxMCacheSize = 2<<20,		// Maximum bytes in one MCache
 	MaxMHeapList = 1<<(20 - PageShift),	// Maximum page length for fixed-size list in MHeap.
 	HeapAllocChunk = 1<<20,		// Chunk size for heap growth
+
+	// Number of bits in page to span calculations (4k pages).
+	// On 64-bit, we limit the arena to 16G, so 22 bits suffices.
+	// On 32-bit, we don't bother limiting anything: 20 bits for 4G.
+#if __SIZEOF_POINTER__ == 8
+	MHeapMap_Bits = 22,
+#else
+	MHeapMap_Bits = 20,
+#endif
+
+	// Max number of threads to run garbage collection.
+	// 2, 3, and 4 are all plausible maximums depending
+	// on the hardware details of the machine.  The garbage
+	// collector scales well to 4 cpus.
+	MaxGcproc = 4,
 };
 
+// Maximum memory allocation size, a hint for callers.
+// This must be a #define instead of an enum because it
+// is so large.
 #if __SIZEOF_POINTER__ == 8
-#include "mheapmap64.h"
+#define	MaxMem	(16ULL<<30)	/* 16 GB */
 #else
-#include "mheapmap32.h"
+#define	MaxMem	((uintptr)-1)
 #endif
 
 // A generic linked list of blocks.  (Typically the block is bigger than sizeof(MLink).)
@@ -124,7 +145,8 @@ struct MLink
 
 // SysAlloc obtains a large chunk of zeroed memory from the
 // operating system, typically on the order of a hundred kilobytes
-// or a megabyte.
+// or a megabyte.  If the pointer argument is non-nil, the caller
+// wants a mapping there or nowhere.
 //
 // SysUnused notifies the operating system that the contents
 // of the memory region are no longer needed and can be reused
@@ -134,11 +156,19 @@ struct MLink
 // SysFree returns it unconditionally; this is only used if
 // an out-of-memory error has been detected midway through
 // an allocation.  It is okay if SysFree is a no-op.
+//
+// SysReserve reserves address space without allocating memory.
+// If the pointer passed to it is non-nil, the caller wants the
+// reservation there, but SysReserve can still choose another
+// location if that one is unavailable.
+//
+// SysMap maps previously reserved address space for use.
 
 void*	runtime_SysAlloc(uintptr nbytes);
 void	runtime_SysFree(void *v, uintptr nbytes);
 void	runtime_SysUnused(void *v, uintptr nbytes);
-void	runtime_SysMemInit(void);
+void	runtime_SysMap(void *v, uintptr nbytes);
+void*	runtime_SysReserve(void *v, uintptr nbytes);
 
 // FixAlloc is a simple free-list allocator for fixed size objects.
 // Malloc uses a FixAlloc wrapped around SysAlloc to manages its
@@ -170,20 +200,21 @@ void	runtime_FixAlloc_Free(FixAlloc *f, void *p);
 // Shared with Go: if you edit this structure, also edit extern.go.
 struct MStats
 {
-	// General statistics.  No locking; approximate.
+	// General statistics.
 	uint64	alloc;		// bytes allocated and still in use
 	uint64	total_alloc;	// bytes allocated (even if freed)
-	uint64	sys;		// bytes obtained from system (should be sum of xxx_sys below)
+	uint64	sys;		// bytes obtained from system (should be sum of xxx_sys below, no locking, approximate)
 	uint64	nlookup;	// number of pointer lookups
 	uint64	nmalloc;	// number of mallocs
 	uint64	nfree;  // number of frees
-	
+
 	// Statistics about malloc heap.
 	// protected by mheap.Lock
 	uint64	heap_alloc;	// bytes allocated and still in use
 	uint64	heap_sys;	// bytes obtained from system
 	uint64	heap_idle;	// bytes in idle spans
 	uint64	heap_inuse;	// bytes in non-idle spans
+	uint64	heap_released;	// bytes released to the OS
 	uint64	heap_objects;	// total number of allocated objects
 
 	// Statistics about allocation of low-level fixed-size structures.
@@ -194,20 +225,19 @@ struct MStats
 	uint64	mspan_sys;
 	uint64	mcache_inuse;	// MCache structures
 	uint64	mcache_sys;
-	uint64	heapmap_sys;	// heap map
 	uint64	buckhash_sys;	// profiling bucket hash table
-	
+
 	// Statistics about garbage collector.
 	// Protected by stopping the world during GC.
 	uint64	next_gc;	// next GC (in heap_alloc time)
+	uint64  last_gc;	// last GC (in absolute time)
 	uint64	pause_total_ns;
 	uint64	pause_ns[256];
 	uint32	numgc;
 	bool	enablegc;
 	bool	debuggc;
-	
+
 	// Statistics about allocation size classes.
-	// No locking; approximate.
 	struct {
 		uint32 size;
 		uint64 nmalloc;
@@ -216,7 +246,7 @@ struct MStats
 };
 
 extern MStats mstats
-  __asm__ ("libgo_runtime.runtime.MemStats");
+  __asm__ ("runtime.VmemStats");
 
 
 // Size classes.  Computed and initialized by InitSizes.
@@ -227,7 +257,7 @@ extern MStats mstats
 //
 // class_to_size[i] = largest size in class i
 // class_to_allocnpages[i] = number of pages to allocate when
-// 	making new objects in class i
+//	making new objects in class i
 // class_to_transfercount[i] = number of objects to move when
 //	taking a bunch of objects out of the central lists
 //	and putting them in the thread free list.
@@ -253,9 +283,20 @@ struct MCache
 {
 	MCacheList list[NumSizeClasses];
 	uint64 size;
+	int64 local_cachealloc;	// bytes allocated (or freed) from cache since last lock of heap
+	int64 local_objects;	// objects allocated (or freed) from cache since last lock of heap
 	int64 local_alloc;	// bytes allocated (or freed) since last lock of heap
-	int64 local_objects;	// objects allocated (or freed) since last lock of heap
+	int64 local_total_alloc;	// bytes allocated (even if freed) since last lock of heap
+	int64 local_nmalloc;	// number of mallocs since last lock of heap
+	int64 local_nfree;	// number of frees since last lock of heap
+	int64 local_nlookup;	// number of pointer lookups since last lock of heap
 	int32 next_sample;	// trigger heap sample after allocating this many bytes
+	// Statistics about allocation size classes since last lock of heap
+	struct {
+		int64 nmalloc;
+		int64 nfree;
+	} local_by_size[NumSizeClasses];
+
 };
 
 void*	runtime_MCache_Alloc(MCache *c, int32 sizeclass, uintptr size, int32 zeroed);
@@ -274,17 +315,16 @@ struct MSpan
 {
 	MSpan	*next;		// in a span linked list
 	MSpan	*prev;		// in a span linked list
-	MSpan	*allnext;		// in the list of all spans
+	MSpan	*allnext;	// in the list of all spans
 	PageID	start;		// starting page number
 	uintptr	npages;		// number of pages in span
 	MLink	*freelist;	// list of free objects
 	uint32	ref;		// number of allocated objects in this span
 	uint32	sizeclass;	// size class
 	uint32	state;		// MSpanInUse etc
-	union {
-		uint32	*gcref;	// sizeclass > 0
-		uint32	gcref0;	// sizeclass == 0
-	};
+	int64   unusedsince;	// First time spotted by GC in MSpanFree state
+	uintptr npreleased;	// number of pages released to the OS
+	byte	*limit;		// end of data in span
 };
 
 void	runtime_MSpan_Init(MSpan *span, PageID start, uintptr npages);
@@ -323,19 +363,22 @@ struct MHeap
 	MSpan *allspans;
 
 	// span lookup
-	MHeapMap map;
+	MSpan *map[1<<MHeapMap_Bits];
 
 	// range of addresses we might see in the heap
-	byte *min;
-	byte *max;
-	
+	byte *bitmap;
+	uintptr bitmap_mapped;
+	byte *arena_start;
+	byte *arena_used;
+	byte *arena_end;
+
 	// central free lists for small size classes.
 	// the union makes sure that the MCentrals are
-	// spaced 64 bytes apart, so that each MCentral.Lock
+	// spaced CacheLineSize bytes apart, so that each MCentral.Lock
 	// gets its own cache line.
 	union {
 		MCentral;
-		byte pad[64];
+		byte pad[CacheLineSize];
 	} central[NumSizeClasses];
 
 	FixAlloc spanalloc;	// allocator for Span*
@@ -346,54 +389,42 @@ extern MHeap runtime_mheap;
 void	runtime_MHeap_Init(MHeap *h, void *(*allocator)(uintptr));
 MSpan*	runtime_MHeap_Alloc(MHeap *h, uintptr npage, int32 sizeclass, int32 acct);
 void	runtime_MHeap_Free(MHeap *h, MSpan *s, int32 acct);
-MSpan*	runtime_MHeap_Lookup(MHeap *h, PageID p);
-MSpan*	runtime_MHeap_LookupMaybe(MHeap *h, PageID p);
-void	runtime_MGetSizeClassInfo(int32 sizeclass, int32 *size, int32 *npages, int32 *nobj);
+MSpan*	runtime_MHeap_Lookup(MHeap *h, void *v);
+MSpan*	runtime_MHeap_LookupMaybe(MHeap *h, void *v);
+void	runtime_MGetSizeClassInfo(int32 sizeclass, uintptr *size, int32 *npages, int32 *nobj);
+void*	runtime_MHeap_SysAlloc(MHeap *h, uintptr n);
+void	runtime_MHeap_MapBits(MHeap *h);
+void	runtime_MHeap_Scavenger(void*);
 
 void*	runtime_mallocgc(uintptr size, uint32 flag, int32 dogc, int32 zeroed);
-int32	runtime_mlookup(void *v, byte **base, uintptr *size, MSpan **s, uint32 **ref);
+int32	runtime_mlookup(void *v, byte **base, uintptr *size, MSpan **s);
 void	runtime_gc(int32 force);
-
-void*	runtime_SysAlloc(uintptr);
-void	runtime_SysUnused(void*, uintptr);
-void	runtime_SysFree(void*, uintptr);
+void	runtime_markallocated(void *v, uintptr n, bool noptr);
+void	runtime_checkallocated(void *v, uintptr n);
+void	runtime_markfreed(void *v, uintptr n);
+void	runtime_checkfreed(void *v, uintptr n);
+int32	runtime_checking;
+void	runtime_markspan(void *v, uintptr size, uintptr n, bool leftover);
+void	runtime_unmarkspan(void *v, uintptr size);
+bool	runtime_blockspecial(void*);
+void	runtime_setblockspecial(void*, bool);
+void	runtime_purgecachedstats(M*);
 
 enum
 {
-	RefcountOverhead = 4,	// one uint32 per object
-
-	RefFree = 0,	// must be zero
-	RefStack,		// stack segment - don't free and don't scan for pointers
-	RefNone,		// no references
-	RefSome,		// some references
-	RefNoPointers = 0x80000000U,	// flag - no pointers here
-	RefHasFinalizer = 0x40000000U,	// flag - has finalizer
-	RefProfiled = 0x20000000U,	// flag - is in profiling table
-	RefNoProfiling = 0x10000000U,	// flag - must not profile
-	RefFlags = 0xFFFF0000U,
+	// flags to malloc
+	FlagNoPointers = 1<<0,	// no pointers here
+	FlagNoProfiling = 1<<1,	// must not profile
+	FlagNoGC = 1<<2,	// must not free or scan for pointers
 };
 
-void	runtime_Mprof_Init(void);
 void	runtime_MProf_Malloc(void*, uintptr);
 void	runtime_MProf_Free(void*, uintptr);
+void	runtime_MProf_GC(void);
 void	runtime_MProf_Mark(void (*scan)(byte *, int64));
+int32	runtime_helpgc(bool*);
+void	runtime_gchelper(void);
 
-// Malloc profiling settings.
-// Must match definition in extern.go.
-enum {
-	MProf_None = 0,
-	MProf_Sample = 1,
-	MProf_All = 2,
-};
-extern int32 runtime_malloc_profile;
-
-typedef struct Finalizer Finalizer;
-struct Finalizer
-{
-	Finalizer *next;	// for use by caller of getfinalizer
-	void (*fn)(void*);
-	void *arg;
-	const struct __go_func_type *ft;
-};
-
-Finalizer*	runtime_getfinalizer(void*, bool);
+struct __go_func_type;
+bool	runtime_getfinalizer(void *p, bool del, void (**fn)(void*), const struct __go_func_type **ft);
+void	runtime_walkfintab(void (*fn)(void*), void (*scan)(byte *, int64));

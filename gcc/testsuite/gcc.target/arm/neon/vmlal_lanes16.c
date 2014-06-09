@@ -18,5 +18,5 @@ void test_vmlal_lanes16 (void)
   out_int32x4_t = vmlal_lane_s16 (arg0_int32x4_t, arg1_int16x4_t, arg2_int16x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vmlal\.s16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vmlal\.s16\[ 	\]+\[qQ\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+\\\[\[0-9\]+\\\]!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

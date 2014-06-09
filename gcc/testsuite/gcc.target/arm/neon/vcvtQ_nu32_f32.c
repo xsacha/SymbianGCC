@@ -16,5 +16,5 @@ void test_vcvtQ_nu32_f32 (void)
   out_uint32x4_t = vcvtq_n_u32_f32 (arg0_float32x4_t, 1);
 }
 
-/* { dg-final { scan-assembler "vcvt\.u32.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcvt\.u32.f32\[ 	\]+\[qQ\]\[0-9\]+, \[qQ\]\[0-9\]+, #\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

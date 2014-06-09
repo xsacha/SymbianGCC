@@ -17,5 +17,5 @@ void test_vcgts32 (void)
   out_uint32x2_t = vcgt_s32 (arg0_int32x2_t, arg1_int32x2_t);
 }
 
-/* { dg-final { scan-assembler "vcgt\.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vcgt\.s32\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */

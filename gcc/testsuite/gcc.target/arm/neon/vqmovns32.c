@@ -16,5 +16,5 @@ void test_vqmovns32 (void)
   out_int16x4_t = vqmovn_s32 (arg0_int32x4_t);
 }
 
-/* { dg-final { scan-assembler "vqmovn\.s32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@.*\)?\n" } } */
+/* { dg-final { scan-assembler "vqmovn\.s32\[ 	\]+\[dD\]\[0-9\]+, \[qQ\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
 /* { dg-final { cleanup-saved-temps } } */
