@@ -1,6 +1,5 @@
 /* __builtin_object_size (ptr, object_size_type) computation
-   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>
 
 This file is part of GCC.
@@ -25,7 +24,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "diagnostic-core.h"
-#include "tree-pretty-print.h"
 #include "gimple-pretty-print.h"
 #include "tree-flow.h"
 #include "tree-pass.h"
@@ -66,7 +64,7 @@ static void check_for_plus_in_loops_1 (struct object_size_info *, tree,
    the subobject (innermost array or field with address taken).
    object_sizes[2] is lower bound for number of bytes till the end of
    the object and object_sizes[3] lower bound for subobject.  */
-static unsigned HOST_WIDE_INT *object_sizes[4];
+static vec<unsigned HOST_WIDE_INT> object_sizes[4];
 
 /* Bitmaps what object sizes have been computed already.  */
 static bitmap computed[4];
@@ -193,12 +191,11 @@ addr_object_size (struct object_size_info *osi, const_tree ptr,
 	}
       if (sz != unknown[object_size_type])
 	{
-	  double_int dsz = double_int_sub (uhwi_to_double_int (sz),
-					   mem_ref_offset (pt_var));
-	  if (double_int_negative_p (dsz))
+	  double_int dsz = double_int::from_uhwi (sz) - mem_ref_offset (pt_var);
+	  if (dsz.is_negative ())
 	    sz = 0;
-	  else if (double_int_fits_in_uhwi_p (dsz))
-	    sz = double_int_to_uhwi (dsz);
+	  else if (dsz.fits_uhwi ())
+	    sz = dsz.to_uhwi ();
 	  else
 	    sz = unknown[object_size_type];
 	}
@@ -496,7 +493,7 @@ compute_builtin_object_size (tree ptr, int object_size_type)
 
   if (TREE_CODE (ptr) == SSA_NAME
       && POINTER_TYPE_P (TREE_TYPE (ptr))
-      && object_sizes[object_size_type] != NULL)
+      && computed[object_size_type] != NULL)
     {
       if (!bitmap_bit_p (computed[object_size_type], SSA_NAME_VERSION (ptr)))
 	{
@@ -504,6 +501,8 @@ compute_builtin_object_size (tree ptr, int object_size_type)
 	  bitmap_iterator bi;
 	  unsigned int i;
 
+	  if (num_ssa_names > object_sizes[object_size_type].length ())
+	    object_sizes[object_size_type].safe_grow (num_ssa_names);
 	  if (dump_file)
 	    {
 	      fprintf (dump_file, "Computing %s %sobject size for ",
@@ -974,14 +973,12 @@ collect_object_sizes_for (struct object_size_info *osi, tree var)
       break;
 
     case GIMPLE_NOP:
-      {
-	tree decl = SSA_NAME_VAR (var);
-
-	if (TREE_CODE (decl) != PARM_DECL && DECL_INITIAL (decl))
-	  expr_object_size (osi, var, DECL_INITIAL (decl));
-	else
-	  expr_object_size (osi, var, decl);
-      }
+      if (SSA_NAME_VAR (var)
+	  && TREE_CODE (SSA_NAME_VAR (var)) == PARM_DECL)
+	expr_object_size (osi, var, SSA_NAME_VAR (var));
+      else
+	/* Uninitialized SSA names point nowhere.  */
+	object_sizes[object_size_type][varno] = unknown[object_size_type];
       break;
 
     case GIMPLE_PHI:
@@ -1167,12 +1164,12 @@ init_object_sizes (void)
 {
   int object_size_type;
 
-  if (object_sizes[0])
+  if (computed[0])
     return;
 
   for (object_size_type = 0; object_size_type <= 3; object_size_type++)
     {
-      object_sizes[object_size_type] = XNEWVEC (unsigned HOST_WIDE_INT, num_ssa_names);
+      object_sizes[object_size_type].safe_grow (num_ssa_names);
       computed[object_size_type] = BITMAP_ALLOC (NULL);
     }
 
@@ -1189,9 +1186,8 @@ fini_object_sizes (void)
 
   for (object_size_type = 0; object_size_type <= 3; object_size_type++)
     {
-      free (object_sizes[object_size_type]);
+      object_sizes[object_size_type].release ();
       BITMAP_FREE (computed[object_size_type]);
-      object_sizes[object_size_type] = NULL;
     }
 }
 
@@ -1207,16 +1203,9 @@ compute_object_sizes (void)
       gimple_stmt_iterator i;
       for (i = gsi_start_bb (bb); !gsi_end_p (i); gsi_next (&i))
 	{
-	  tree callee, result;
+	  tree result;
 	  gimple call = gsi_stmt (i);
-
-          if (gimple_code (call) != GIMPLE_CALL)
-	    continue;
-
-	  callee = gimple_call_fndecl (call);
-	  if (!callee
-	      || DECL_BUILT_IN_CLASS (callee) != BUILT_IN_NORMAL
-	      || DECL_FUNCTION_CODE (callee) != BUILT_IN_OBJECT_SIZE)
+	  if (!gimple_call_builtin_p (call, BUILT_IN_OBJECT_SIZE))
 	    continue;
 
 	  init_object_sizes ();
@@ -1245,20 +1234,32 @@ compute_object_sizes (void)
 		continue;
 	    }
 
+	  gcc_assert (TREE_CODE (result) == INTEGER_CST);
+
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "Simplified\n  ");
 	      print_gimple_stmt (dump_file, call, 0, dump_flags);
+	      fprintf (dump_file, " to ");
+	      print_generic_expr (dump_file, result, 0);
+	      fprintf (dump_file, "\n");
 	    }
 
-	  if (!update_call_from_tree (&i, result))
-	    gcc_unreachable ();
+	  tree lhs = gimple_call_lhs (call);
+	  if (!lhs)
+	    continue;
 
-	  if (dump_file && (dump_flags & TDF_DETAILS))
+	  /* Propagate into all uses and fold those stmts.  */
+	  gimple use_stmt;
+	  imm_use_iterator iter;
+	  FOR_EACH_IMM_USE_STMT (use_stmt, iter, lhs)
 	    {
-	      fprintf (dump_file, "to\n  ");
-	      print_gimple_stmt (dump_file, gsi_stmt (i), 0, dump_flags);
-	      fprintf (dump_file, "\n");
+	      use_operand_p use_p;
+	      FOR_EACH_IMM_USE_ON_STMT (use_p, iter)
+		SET_USE (use_p, result);
+	      gimple_stmt_iterator gsi = gsi_for_stmt (use_stmt);
+	      fold_stmt (&gsi);
+	      update_stmt (gsi_stmt (gsi));
 	    }
 	}
     }
@@ -1272,6 +1273,7 @@ struct gimple_opt_pass pass_object_sizes =
  {
   GIMPLE_PASS,
   "objsz",				/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
   NULL,					/* gate */
   compute_object_sizes,			/* execute */
   NULL,					/* sub */

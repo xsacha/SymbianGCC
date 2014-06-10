@@ -1,5 +1,5 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2006, 2007, 2008, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2006-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -126,6 +126,18 @@ decode_caches_intel (unsigned reg, bool xeon_mp,
       case 0x0c:
 	level1->sizekb = 16; level1->assoc = 4; level1->line = 32;
 	break;
+      case 0x0d:
+	level1->sizekb = 16; level1->assoc = 4; level1->line = 64;
+	break;
+      case 0x0e:
+	level1->sizekb = 24; level1->assoc = 6; level1->line = 64;
+	break;
+      case 0x21:
+	level2->sizekb = 256; level2->assoc = 8; level2->line = 64;
+	break;
+      case 0x24:
+	level2->sizekb = 1024; level2->assoc = 16; level2->line = 64;
+	break;
       case 0x2c:
 	level1->sizekb = 32; level1->assoc = 8; level1->line = 64;
 	break;
@@ -161,6 +173,9 @@ decode_caches_intel (unsigned reg, bool xeon_mp,
 	break;
       case 0x45:
 	level2->sizekb = 2048; level2->assoc = 4; level2->line = 32;
+	break;
+      case 0x48:
+	level2->sizekb = 3072; level2->assoc = 12; level2->line = 64;
 	break;
       case 0x49:
 	if (xeon_mp)
@@ -202,6 +217,9 @@ decode_caches_intel (unsigned reg, bool xeon_mp,
 	break;
       case 0x7f:
 	level2->sizekb = 512; level2->assoc = 2; level2->line = 64;
+	break;
+      case 0x80:
+	level2->sizekb = 512; level2->assoc = 8; level2->line = 64;
 	break;
       case 0x82:
 	level2->sizekb = 256; level2->assoc = 8; level2->line = 32;
@@ -347,17 +365,6 @@ detect_caches_intel (bool xeon_mp, unsigned max_level,
   return describe_cache (level1, level2);
 }
 
-enum vendor_signatures
-{
-  SIG_INTEL =	0x756e6547 /* Genu */,
-  SIG_AMD =	0x68747541 /* Auth */
-};
-
-enum processor_signatures
-{
-  SIG_GEODE =	0x646f6547 /* Geod */
-};
-
 /* This will be called by the spec parser in gcc.c when it sees
    a %:local_cpu_detect(args) construct.  Currently it will be called
    with either "arch" or "tune" as argument depending on if -march=native
@@ -397,8 +404,10 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   unsigned int has_pclmul = 0, has_abm = 0, has_lwp = 0;
   unsigned int has_fma = 0, has_fma4 = 0, has_xop = 0;
   unsigned int has_bmi = 0, has_bmi2 = 0, has_tbm = 0, has_lzcnt = 0;
+  unsigned int has_hle = 0, has_rtm = 0;
   unsigned int has_rdrnd = 0, has_f16c = 0, has_fsgsbase = 0;
-  unsigned int has_osxsave = 0;
+  unsigned int has_rdseed = 0, has_prfchw = 0, has_adx = 0;
+  unsigned int has_osxsave = 0, has_fxsr = 0, has_xsave = 0, has_xsaveopt = 0;
 
   bool arch;
 
@@ -420,7 +429,7 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 
   model = (eax >> 4) & 0x0f;
   family = (eax >> 8) & 0x0f;
-  if (vendor == SIG_INTEL)
+  if (vendor == signature_INTEL_ebx)
     {
       unsigned int extended_model, extended_family;
 
@@ -449,10 +458,12 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   has_fma = ecx & bit_FMA;
   has_f16c = ecx & bit_F16C;
   has_rdrnd = ecx & bit_RDRND;
+  has_xsave = ecx & bit_XSAVE;
 
   has_cmpxchg8b = edx & bit_CMPXCHG8B;
   has_cmov = edx & bit_CMOV;
   has_mmx = edx & bit_MMX;
+  has_fxsr = edx & bit_FXSAVE;
   has_sse = edx & bit_SSE;
   has_sse2 = edx & bit_SSE2;
 
@@ -461,9 +472,42 @@ const char *host_detect_local_cpu (int argc, const char **argv)
       __cpuid_count (7, 0, eax, ebx, ecx, edx);
 
       has_bmi = ebx & bit_BMI;
+      has_hle = ebx & bit_HLE;
+      has_rtm = ebx & bit_RTM;
       has_avx2 = ebx & bit_AVX2;
       has_bmi2 = ebx & bit_BMI2;
       has_fsgsbase = ebx & bit_FSGSBASE;
+      has_rdseed = ebx & bit_RDSEED;
+      has_adx = ebx & bit_ADX;
+    }
+
+  if (max_level >= 13)
+    {
+      __cpuid_count (13, 1, eax, ebx, ecx, edx);
+
+      has_xsaveopt = eax & bit_XSAVEOPT;
+    }
+
+  /* Check cpuid level of extended features.  */
+  __cpuid (0x80000000, ext_level, ebx, ecx, edx);
+
+  if (ext_level > 0x80000000)
+    {
+      __cpuid (0x80000001, eax, ebx, ecx, edx);
+
+      has_lahf_lm = ecx & bit_LAHF_LM;
+      has_sse4a = ecx & bit_SSE4a;
+      has_abm = ecx & bit_ABM;
+      has_lwp = ecx & bit_LWP;
+      has_fma4 = ecx & bit_FMA4;
+      has_xop = ecx & bit_XOP;
+      has_tbm = ecx & bit_TBM;
+      has_lzcnt = ecx & bit_LZCNT;
+      has_prfchw = ecx & bit_PRFCHW;
+
+      has_longmode = edx & bit_LM;
+      has_3dnowp = edx & bit_3DNOWP;
+      has_3dnow = edx & bit_3DNOW;
     }
 
   /* Get XCR_XFEATURE_ENABLED_MASK register with xgetbv.  */
@@ -484,35 +528,20 @@ const char *host_detect_local_cpu (int argc, const char **argv)
       has_avx2 = 0;
       has_fma = 0;
       has_fma4 = 0;
+      has_f16c = 0;
       has_xop = 0;
-    }
-
-  /* Check cpuid level of extended features.  */
-  __cpuid (0x80000000, ext_level, ebx, ecx, edx);
-
-  if (ext_level > 0x80000000)
-    {
-      __cpuid (0x80000001, eax, ebx, ecx, edx);
-
-      has_lahf_lm = ecx & bit_LAHF_LM;
-      has_sse4a = ecx & bit_SSE4a;
-      has_abm = ecx & bit_ABM;
-      has_lwp = ecx & bit_LWP;
-      has_fma4 = ecx & bit_FMA4;
-      has_xop = ecx & bit_XOP;
-      has_tbm = ecx & bit_TBM;
-      has_lzcnt = ecx & bit_LZCNT;
-
-      has_longmode = edx & bit_LM;
-      has_3dnowp = edx & bit_3DNOWP;
-      has_3dnow = edx & bit_3DNOW;
+      has_xsave = 0;
+      has_xsaveopt = 0;
     }
 
   if (!arch)
     {
-      if (vendor == SIG_AMD)
+      if (vendor == signature_AMD_ebx
+	  || vendor == signature_CENTAUR_ebx
+	  || vendor == signature_CYRIX_ebx
+	  || vendor == signature_NSC_ebx)
 	cache = detect_caches_amd (ext_level);
-      else if (vendor == SIG_INTEL)
+      else if (vendor == signature_INTEL_ebx)
 	{
 	  bool xeon_mp = (family == 15 && model == 6);
 	  cache = detect_caches_intel (xeon_mp, max_level,
@@ -520,7 +549,7 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 	}
     }
 
-  if (vendor == SIG_AMD)
+  if (vendor == signature_AMD_ebx)
     {
       unsigned int name;
 
@@ -530,8 +559,12 @@ const char *host_detect_local_cpu (int argc, const char **argv)
       else
 	name = 0;
 
-      if (name == SIG_GEODE)
+      if (name == signature_NSC_ebx)
 	processor = PROCESSOR_GEODE;
+      else if (has_movbe)
+	processor = PROCESSOR_BTVER2;
+      else if (has_xsaveopt)
+        processor = PROCESSOR_BDVER3;
       else if (has_bmi)
         processor = PROCESSOR_BDVER2;
       else if (has_xop)
@@ -548,6 +581,37 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 	processor = PROCESSOR_K6;
       else
 	processor = PROCESSOR_PENTIUM;
+    }
+  else if (vendor == signature_CENTAUR_ebx)
+    {
+      if (arch)
+	{
+	  switch (family)
+	    {
+	    case 6:
+	      if (model > 9)
+		/* Use the default detection procedure.  */
+		processor = PROCESSOR_GENERIC32;
+	      else if (model == 9)
+		cpu = "c3-2";
+	      else if (model >= 6)
+		cpu = "c3";
+	      else
+		processor = PROCESSOR_GENERIC32;
+	      break;
+	    case 5:
+	      if (has_3dnow)
+		cpu = "winchip2";
+	      else if (has_mmx)
+		cpu = "winchip2-c6";
+	      else
+		processor = PROCESSOR_GENERIC32;
+	      break;
+	    default:
+	      /* We have no idea.  */
+	      processor = PROCESSOR_GENERIC32;
+	    }
+	}
     }
   else
     {
@@ -593,13 +657,18 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 	  /* Atom.  */
 	  cpu = "atom";
 	  break;
+	case 0x0f:
+	  /* Merom.  */
+	case 0x17:
+	case 0x1d:
+	  /* Penryn.  */
+	  cpu = "core2";
+	  break;
 	case 0x1a:
 	case 0x1e:
 	case 0x1f:
 	case 0x2e:
 	  /* Nehalem.  */
-	  cpu = "corei7";
-	  break;
 	case 0x25:
 	case 0x2c:
 	case 0x2f:
@@ -611,20 +680,25 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 	  /* Sandy Bridge.  */
 	  cpu = "corei7-avx";
 	  break;
-	case 0x17:
-	case 0x1d:
-	  /* Penryn.  */
-	  cpu = "core2";
+	case 0x3a:
+	case 0x3e:
+	  /* Ivy Bridge.  */
+	  cpu = "core-avx-i";
 	  break;
-	case 0x0f:
-	  /* Merom.  */
-	  cpu = "core2";
+	case 0x3c:
+	case 0x45:
+	case 0x46:
+	  /* Haswell.  */
+	  cpu = "core-avx2";
 	  break;
 	default:
 	  if (arch)
 	    {
 	      /* This is unknown family 0x6 CPU.  */
-	      if (has_avx)
+	      if (has_avx2)
+		/* Assume Haswell.  */
+		cpu = "core-avx2";
+	      else if (has_avx)
 		/* Assume Sandy Bridge.  */
 		cpu = "corei7-avx";
 	      else if (has_sse4_2)
@@ -702,8 +776,14 @@ const char *host_detect_local_cpu (int argc, const char **argv)
     case PROCESSOR_BDVER2:
       cpu = "bdver2";
       break;
+    case PROCESSOR_BDVER3:
+      cpu = "bdver3";
+      break;
     case PROCESSOR_BTVER1:
       cpu = "btver1";
+      break;
+    case PROCESSOR_BTVER2:
+      cpu = "btver2";
       break;
 
     default:
@@ -753,14 +833,23 @@ const char *host_detect_local_cpu (int argc, const char **argv)
       const char *sse4_2 = has_sse4_2 ? " -msse4.2" : " -mno-sse4.2";
       const char *sse4_1 = has_sse4_1 ? " -msse4.1" : " -mno-sse4.1";
       const char *lzcnt = has_lzcnt ? " -mlzcnt" : " -mno-lzcnt";
+      const char *hle = has_hle ? " -mhle" : " -mno-hle";
+      const char *rtm = has_rtm ? " -mrtm" : " -mno-rtm";
       const char *rdrnd = has_rdrnd ? " -mrdrnd" : " -mno-rdrnd";
       const char *f16c = has_f16c ? " -mf16c" : " -mno-f16c";
       const char *fsgsbase = has_fsgsbase ? " -mfsgsbase" : " -mno-fsgsbase";
+      const char *rdseed = has_rdseed ? " -mrdseed" : " -mno-rdseed";
+      const char *prfchw = has_prfchw ? " -mprfchw" : " -mno-prfchw";
+      const char *adx = has_adx ? " -madx" : " -mno-adx";
+      const char *fxsr = has_fxsr ? " -mfxsr" : " -mno-fxsr";
+      const char *xsave = has_xsave ? " -mxsave" : " -mno-xsave";
+      const char *xsaveopt = has_xsaveopt ? " -mxsaveopt" : " -mno-xsaveopt";
 
       options = concat (options, cx16, sahf, movbe, ase, pclmul,
 			popcnt, abm, lwp, fma, fma4, xop, bmi, bmi2,
-			tbm, avx, avx2, sse4_2, sse4_1, lzcnt, rdrnd,
-			f16c, fsgsbase, NULL);
+			tbm, avx, avx2, sse4_2, sse4_1, lzcnt, rtm,
+			hle, rdrnd, f16c, fsgsbase, rdseed, prfchw, adx,
+			fxsr, xsave, xsaveopt, NULL);
     }
 
 done:

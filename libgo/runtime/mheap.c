@@ -27,11 +27,26 @@ RecordSpan(void *vh, byte *p)
 {
 	MHeap *h;
 	MSpan *s;
+	MSpan **all;
+	uint32 cap;
 
 	h = vh;
 	s = (MSpan*)p;
-	s->allnext = h->allspans;
-	h->allspans = s;
+	if(h->nspan >= h->nspancap) {
+		cap = 64*1024/sizeof(all[0]);
+		if(cap < h->nspancap*3/2)
+			cap = h->nspancap*3/2;
+		all = (MSpan**)runtime_SysAlloc(cap*sizeof(all[0]));
+		if(all == nil)
+			runtime_throw("runtime: cannot allocate memory");
+		if(h->allspans) {
+			runtime_memmove(all, h->allspans, h->nspancap*sizeof(all[0]));
+			runtime_SysFree(h->allspans, h->nspancap*sizeof(all[0]));
+		}
+		h->allspans = all;
+		h->nspancap = cap;
+	}
+	h->allspans[h->nspan++] = s;
 }
 
 // Initialize the heap; fetch memory using alloc.
@@ -53,12 +68,12 @@ runtime_MHeap_Init(MHeap *h, void *(*alloc)(uintptr))
 // Allocate a new span of npage pages from the heap
 // and record its size class in the HeapMap and HeapMapCache.
 MSpan*
-runtime_MHeap_Alloc(MHeap *h, uintptr npage, int32 sizeclass, int32 acct)
+runtime_MHeap_Alloc(MHeap *h, uintptr npage, int32 sizeclass, int32 acct, int32 zeroed)
 {
 	MSpan *s;
 
 	runtime_lock(h);
-	runtime_purgecachedstats(runtime_m());
+	runtime_purgecachedstats(runtime_m()->mcache);
 	s = MHeap_AllocLocked(h, npage, sizeclass);
 	if(s != nil) {
 		mstats.heap_inuse += npage<<PageShift;
@@ -68,6 +83,8 @@ runtime_MHeap_Alloc(MHeap *h, uintptr npage, int32 sizeclass, int32 acct)
 		}
 	}
 	runtime_unlock(h);
+	if(s != nil && *(uintptr*)(s->start<<PageShift) != 0 && zeroed)
+		runtime_memclr((byte*)(s->start<<PageShift), s->npages<<PageShift);
 	return s;
 }
 
@@ -104,6 +121,25 @@ HaveSpan:
 	s->state = MSpanInUse;
 	mstats.heap_idle -= s->npages<<PageShift;
 	mstats.heap_released -= s->npreleased<<PageShift;
+	if(s->npreleased > 0) {
+		// We have called runtime_SysUnused with these pages, and on
+		// Unix systems it called madvise.  At this point at least
+		// some BSD-based kernels will return these pages either as
+		// zeros or with the old data.  For our caller, the first word
+		// in the page indicates whether the span contains zeros or
+		// not (this word was set when the span was freed by
+		// MCentral_Free or runtime_MCentral_FreeSpan).  If the first
+		// page in the span is returned as zeros, and some subsequent
+		// page is returned with the old data, then we will be
+		// returning a span that is assumed to be all zeros, but the
+		// actual data will not be all zeros.  Avoid that problem by
+		// explicitly marking the span as not being zeroed, just in
+		// case.  The beadbead constant we use here means nothing, it
+		// is just a unique constant not seen elsewhere in the
+		// runtime, as a clue in case it turns up unexpectedly in
+		// memory or in a stack trace.
+		*(uintptr*)(s->start<<PageShift) = (uintptr)0xbeadbeadbeadbeadULL;
+	}
 	s->npreleased = 0;
 
 	if(s->npages > npage) {
@@ -114,8 +150,7 @@ HaveSpan:
 		runtime_MSpan_Init(t, s->start + npage, s->npages - npage);
 		s->npages = npage;
 		p = t->start;
-		if(sizeof(void*) == 8)
-			p -= ((uintptr)h->arena_start>>PageShift);
+		p -= ((uintptr)h->arena_start>>PageShift);
 		if(p > 0)
 			h->map[p-1] = s;
 		h->map[p] = t;
@@ -123,17 +158,17 @@ HaveSpan:
 		*(uintptr*)(t->start<<PageShift) = *(uintptr*)(s->start<<PageShift);  // copy "needs zeroing" mark
 		t->state = MSpanInUse;
 		MHeap_FreeLocked(h, t);
+		t->unusedsince = s->unusedsince; // preserve age
 	}
-
-	if(*(uintptr*)(s->start<<PageShift) != 0)
-		runtime_memclr((byte*)(s->start<<PageShift), s->npages<<PageShift);
+	s->unusedsince = 0;
 
 	// Record span info, because gc needs to be
 	// able to map interior pointer to containing span.
 	s->sizeclass = sizeclass;
+	s->elemsize = (sizeclass==0 ? s->npages<<PageShift : (uintptr)runtime_class_to_size[sizeclass]);
+	s->types.compression = MTypes_Empty;
 	p = s->start;
-	if(sizeof(void*) == 8)
-		p -= ((uintptr)h->arena_start>>PageShift);
+	p -= ((uintptr)h->arena_start>>PageShift);
 	for(n=0; n<npage; n++)
 		h->map[p+n] = s;
 	return s;
@@ -204,8 +239,7 @@ MHeap_Grow(MHeap *h, uintptr npage)
 	mstats.mspan_sys = h->spanalloc.sys;
 	runtime_MSpan_Init(s, (uintptr)v>>PageShift, ask>>PageShift);
 	p = s->start;
-	if(sizeof(void*) == 8)
-		p -= ((uintptr)h->arena_start>>PageShift);
+	p -= ((uintptr)h->arena_start>>PageShift);
 	h->map[p] = s;
 	h->map[p + s->npages - 1] = s;
 	s->state = MSpanInUse;
@@ -222,8 +256,7 @@ runtime_MHeap_Lookup(MHeap *h, void *v)
 	uintptr p;
 	
 	p = (uintptr)v;
-	if(sizeof(void*) == 8)
-		p -= (uintptr)h->arena_start;
+	p -= (uintptr)h->arena_start;
 	return h->map[p >> PageShift];
 }
 
@@ -244,8 +277,7 @@ runtime_MHeap_LookupMaybe(MHeap *h, void *v)
 		return nil;
 	p = (uintptr)v>>PageShift;
 	q = p;
-	if(sizeof(void*) == 8)
-		q -= (uintptr)h->arena_start >> PageShift;
+	q -= (uintptr)h->arena_start >> PageShift;
 	s = h->map[q];
 	if(s == nil || p < s->start || p - s->start >= s->npages)
 		return nil;
@@ -259,7 +291,7 @@ void
 runtime_MHeap_Free(MHeap *h, MSpan *s, int32 acct)
 {
 	runtime_lock(h);
-	runtime_purgecachedstats(runtime_m());
+	runtime_purgecachedstats(runtime_m()->mcache);
 	mstats.heap_inuse -= s->npages<<PageShift;
 	if(acct) {
 		mstats.heap_alloc -= s->npages<<PageShift;
@@ -276,21 +308,26 @@ MHeap_FreeLocked(MHeap *h, MSpan *s)
 	MSpan *t;
 	PageID p;
 
+	if(s->types.sysalloc)
+		runtime_settype_sysfree(s);
+	s->types.compression = MTypes_Empty;
+
 	if(s->state != MSpanInUse || s->ref != 0) {
 		runtime_printf("MHeap_FreeLocked - span %p ptr %p state %d ref %d\n", s, s->start<<PageShift, s->state, s->ref);
 		runtime_throw("MHeap_FreeLocked - invalid free");
 	}
 	mstats.heap_idle += s->npages<<PageShift;
 	s->state = MSpanFree;
-	s->unusedsince = 0;
-	s->npreleased = 0;
 	runtime_MSpanList_Remove(s);
 	sp = (uintptr*)(s->start<<PageShift);
+	// Stamp newly unused spans. The scavenger will use that
+	// info to potentially give back some pages to the OS.
+	s->unusedsince = runtime_nanotime();
+	s->npreleased = 0;
 
 	// Coalesce with earlier, later spans.
 	p = s->start;
-	if(sizeof(void*) == 8)
-		p -= (uintptr)h->arena_start >> PageShift;
+	p -= (uintptr)h->arena_start >> PageShift;
 	if(p > 0 && (t = h->map[p-1]) != nil && t->state != MSpanInUse) {
 		tp = (uintptr*)(t->start<<PageShift);
 		*tp |= *sp;	// propagate "needs zeroing" mark
@@ -325,22 +362,72 @@ MHeap_FreeLocked(MHeap *h, MSpan *s)
 		runtime_MSpanList_Insert(&h->large, s);
 }
 
+static void
+forcegchelper(void *vnote)
+{
+	Note *note = (Note*)vnote;
+
+	runtime_gc(1);
+	runtime_notewakeup(note);
+}
+
+static uintptr
+scavengelist(MSpan *list, uint64 now, uint64 limit)
+{
+	uintptr released, sumreleased;
+	MSpan *s;
+
+	if(runtime_MSpanList_IsEmpty(list))
+		return 0;
+
+	sumreleased = 0;
+	for(s=list->next; s != list; s=s->next) {
+		if((now - s->unusedsince) > limit) {
+			released = (s->npages - s->npreleased) << PageShift;
+			mstats.heap_released += released;
+			sumreleased += released;
+			s->npreleased = s->npages;
+			runtime_SysUnused((void*)(s->start << PageShift), s->npages << PageShift);
+		}
+	}
+	return sumreleased;
+}
+
+static uintptr
+scavenge(uint64 now, uint64 limit)
+{
+	uint32 i;
+	uintptr sumreleased;
+	MHeap *h;
+	
+	h = runtime_mheap;
+	sumreleased = 0;
+	for(i=0; i < nelem(h->free); i++)
+		sumreleased += scavengelist(&h->free[i], now, limit);
+	sumreleased += scavengelist(&h->large, now, limit);
+	return sumreleased;
+}
+
 // Release (part of) unused memory to OS.
 // Goroutine created at startup.
 // Loop forever.
 void
 runtime_MHeap_Scavenger(void* dummy)
 {
+	G *g;
 	MHeap *h;
-	MSpan *s, *list;
 	uint64 tick, now, forcegc, limit;
-	uint32 k, i;
-	uintptr released, sumreleased;
+	uint32 k;
+	uintptr sumreleased;
 	const byte *env;
 	bool trace;
-	Note note;
+	Note note, *notep;
 
 	USED(dummy);
+
+	g = runtime_g();
+	g->issystem = true;
+	g->isbackground = true;
 
 	// If we go two minutes without a garbage collection, force one to run.
 	forcegc = 2*60*1e9;
@@ -358,10 +445,10 @@ runtime_MHeap_Scavenger(void* dummy)
 	if(env != nil)
 		trace = runtime_atoi(env) > 0;
 
-	h = &runtime_mheap;
+	h = runtime_mheap;
 	for(k=0;; k++) {
 		runtime_noteclear(&note);
-		runtime_entersyscall();
+		runtime_entersyscallblock();
 		runtime_notetsleep(&note, tick);
 		runtime_exitsyscall();
 
@@ -369,30 +456,21 @@ runtime_MHeap_Scavenger(void* dummy)
 		now = runtime_nanotime();
 		if(now - mstats.last_gc > forcegc) {
 			runtime_unlock(h);
-			runtime_gc(1);
+			// The scavenger can not block other goroutines,
+			// otherwise deadlock detector can fire spuriously.
+			// GC blocks other goroutines via the runtime_worldsema.
+			runtime_noteclear(&note);
+			notep = &note;
+			__go_go(forcegchelper, (void*)notep);
+			runtime_entersyscallblock();
+			runtime_notesleep(&note);
+			runtime_exitsyscall();
+			if(trace)
+				runtime_printf("scvg%d: GC forced\n", k);
 			runtime_lock(h);
 			now = runtime_nanotime();
-			if (trace)
-				runtime_printf("scvg%d: GC forced\n", k);
 		}
-		sumreleased = 0;
-		for(i=0; i < nelem(h->free)+1; i++) {
-			if(i < nelem(h->free))
-				list = &h->free[i];
-			else
-				list = &h->large;
-			if(runtime_MSpanList_IsEmpty(list))
-				continue;
-			for(s=list->next; s != list; s=s->next) {
-				if(s->unusedsince != 0 && (now - s->unusedsince) > limit) {
-					released = (s->npages - s->npreleased) << PageShift;
-					mstats.heap_released += released;
-					sumreleased += released;
-					s->npreleased = s->npages;
-					runtime_SysUnused((void*)(s->start << PageShift), s->npages << PageShift);
-				}
-			}
-		}
+		sumreleased = scavenge(now, limit);
 		runtime_unlock(h);
 
 		if(trace) {
@@ -403,6 +481,17 @@ runtime_MHeap_Scavenger(void* dummy)
 				mstats.heap_released>>20, (mstats.heap_sys - mstats.heap_released)>>20);
 		}
 	}
+}
+
+void runtime_debug_freeOSMemory(void) __asm__("runtime_debug.freeOSMemory");
+
+void
+runtime_debug_freeOSMemory(void)
+{
+	runtime_gc(1);
+	runtime_lock(runtime_mheap);
+	scavenge(~(uintptr)0, 0);
+	runtime_unlock(runtime_mheap);
 }
 
 // Initialize a new span with the given start and npages.
@@ -416,9 +505,11 @@ runtime_MSpan_Init(MSpan *span, PageID start, uintptr npages)
 	span->freelist = nil;
 	span->ref = 0;
 	span->sizeclass = 0;
+	span->elemsize = 0;
 	span->state = 0;
 	span->unusedsince = 0;
 	span->npreleased = 0;
+	span->types.compression = MTypes_Empty;
 }
 
 // Initialize an empty doubly-linked list.

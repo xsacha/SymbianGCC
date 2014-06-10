@@ -1087,7 +1087,7 @@ pushenvvar STRIP_FOR_TARGET arm-none-symbianelf-strip
 rm -rf /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 mkdir -p /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 pushd /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/gcc-4.6-2012.03/configure --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --target=arm-none-symbianelf --enable-threads --disable-libmudflap --disable-libssp --disable-libstdcxx-pch --with-gnu-as --with-gnu-ld '--with-specs=%{save-temps: -fverbose-asm} -D__CS_SOURCERYGXX_MAJ__=2012 -D__CS_SOURCERYGXX_MIN__=3 -D__CS_SOURCERYGXX_REV__=42' --enable-languages=c,c++ --enable-shared --disable-hosted-libstdcxx '--with-pkgversion=Sacha GCC 4.7.3' --with-bugurl=http://github.com/xsacha/SymbianGCC --disable-nls --prefix=/opt/codesourcery --with-gmp=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpfr=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpc=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-ppl=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr '--with-host-libstdcxx=-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-cloog=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-libelf=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-libgomp --with-build-time-tools=/scratch/nsidwell/nokia/install/arm-none-symbianelf/bin --with-build-time-tools=/scratch/nsidwell/nokia/install/arm-none-symbianelf/bin
+/scratch/nsidwell/nokia/src/gcc-4.6-2012.03/configure --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --target=arm-none-symbianelf --enable-threads --disable-libmudflap --disable-libssp --disable-libstdcxx-pch --with-gnu-as --with-gnu-ld '--with-specs=%{save-temps: -fverbose-asm} -D__CS_SOURCERYGXX_MAJ__=2012 -D__CS_SOURCERYGXX_MIN__=3 -D__CS_SOURCERYGXX_REV__=42' --enable-languages=c,c++ --enable-shared --disable-hosted-libstdcxx '--with-pkgversion=Sacha GCC 4.8.3' --with-bugurl=http://github.com/xsacha/SymbianGCC --disable-nls --prefix=/opt/codesourcery --with-gmp=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpfr=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpc=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-ppl=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr '--with-host-libstdcxx=-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-cloog=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-libelf=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-libgomp --with-build-time-tools=/scratch/nsidwell/nokia/install/arm-none-symbianelf/bin --with-build-time-tools=/scratch/nsidwell/nokia/install/arm-none-symbianelf/bin
 popd
 popenv
 popenv
@@ -1261,7 +1261,7 @@ pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
 prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/include-fixed
+pushd /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/include-fixed
 popd
 popenv
 
@@ -1298,7 +1298,7 @@ strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-cpp
 strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-elfedit
 strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-g++
 strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcc
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcc-4.7.3
+strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcc-4.8.3
 strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcov
 strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gprof
 strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-ld
@@ -1321,12 +1321,12 @@ strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/objcopy
 strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/objdump
 strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/ranlib
 strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/strip
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.7.3/cc1
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.7.3/collect2
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.7.3/install-tools/fixincl
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.7.3/cc1plus
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.7.3/lto-wrapper
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.7.3/lto1
+strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/cc1
+strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/collect2
+strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/install-tools/fixincl
+strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/cc1plus
+strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/lto-wrapper
+strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/lto1
 popenv
 
 echo Task: [72/74] /x86_64-pc-linux-gnu/strip_target_objects
@@ -1341,12 +1341,12 @@ arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_arange
 arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/libgcc_s.dll || true
 arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/softfp/libsupc++.a || true
 arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/softfp/libgcc_s.dll || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/libgcc.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/libgcov.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/softfp/libgcc.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/softfp/libgcov.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/softfp/libgcc_eh.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.7.3/libgcc_eh.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/libgcc.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/libgcov.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/softfp/libgcc.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/softfp/libgcov.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/softfp/libgcc_eh.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/libgcc_eh.a || true
 popenv
 
 echo Task: [73/74] /x86_64-pc-linux-gnu/package_tbz2

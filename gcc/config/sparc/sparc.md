@@ -1,7 +1,5 @@
 ;; Machine description for SPARC chip for GCC
-;;  Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-;;  1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
-;;  2011 Free Software Foundation, Inc.
+;;  Copyright (C) 1987-2013 Free Software Foundation, Inc.
 ;;  Contributed by Michael Tiemann (tiemann@cygnus.com)
 ;;  64-bit SPARC-V9 support by Michael Tiemann, Jim Wilson, and Doug Evans,
 ;;  at Cygnus Support.
@@ -208,7 +206,7 @@
 ;; 'f' for all DF/TFmode values, including those that are specific to the v8.
 
 ;; Attribute for cpu type.
-;; These must match the values for enum processor_type in sparc.h.
+;; These must match the values of the enum processor_type in sparc-opts.h.
 (define_attr "cpu"
   "v7,
    cypress,
@@ -216,6 +214,7 @@
    supersparc,
    hypersparc,
    leon,
+   leon3,
    sparclite,
    f930,
    f934,
@@ -257,6 +256,7 @@
   "ialu,compare,shift,
    load,sload,store,
    uncond_branch,branch,call,sibcall,call_no_delay_slot,return,
+   cbcond,uncond_cbcond,
    imul,idiv,
    fpload,fpstore,
    fp,fpmove,
@@ -264,7 +264,7 @@
    fpcmp,
    fpmul,fpdivs,fpdivd,
    fpsqrts,fpsqrtd,
-   fga,fgm_pack,fgm_mul,fgm_pdist,fgm_cmp,edge,edgen,gsr,array,
+   fga,visl,vismv,fgm_pack,fgm_mul,pdist,pdistn,edge,edgen,gsr,array,
    cmove,
    ialuX,
    multi,savew,flushw,iflush,trap"
@@ -275,11 +275,18 @@
   (symbol_ref "(empty_delay_slot (insn)
 		? EMPTY_DELAY_SLOT_TRUE : EMPTY_DELAY_SLOT_FALSE)"))
 
+;; True if we are making use of compare-and-branch instructions.
+;; True if we should emit a nop after a cbcond instruction
+(define_attr "emit_cbcond_nop" "false,true"
+  (symbol_ref "(emit_cbcond_nop (insn)
+                ? EMIT_CBCOND_NOP_TRUE : EMIT_CBCOND_NOP_FALSE)"))
+
 (define_attr "branch_type" "none,icc,fcc,reg"
   (const_string "none"))
 
 (define_attr "pic" "false,true"
-  (symbol_ref "(flag_pic != 0 ? PIC_TRUE : PIC_FALSE)"))
+  (symbol_ref "(flag_pic != 0
+		? PIC_TRUE : PIC_FALSE)"))
 
 (define_attr "calls_alloca" "false,true"
   (symbol_ref "(cfun->calls_alloca != 0
@@ -290,7 +297,7 @@
 		 ? CALLS_EH_RETURN_TRUE : CALLS_EH_RETURN_FALSE)"))
 
 (define_attr "leaf_function" "false,true"
-  (symbol_ref "(current_function_uses_only_leaf_regs != 0
+  (symbol_ref "(crtl->uses_only_leaf_regs != 0
 		? LEAF_FUNCTION_TRUE : LEAF_FUNCTION_FALSE)"))
 
 (define_attr "delayed_branch" "false,true"
@@ -300,6 +307,10 @@
 (define_attr "flat" "false,true"
   (symbol_ref "(TARGET_FLAT != 0
 		? FLAT_TRUE : FLAT_FALSE)"))
+
+(define_attr "fix_ut699" "false,true"
+   (symbol_ref "(sparc_fix_ut699 != 0
+		 ? FIX_UT699_TRUE : FIX_UT699_FALSE)"))
 
 ;; Length (in # of insns).
 ;; Beware that setting a length greater or equal to 3 for conditional branches
@@ -377,11 +388,39 @@
 	       (if_then_else (eq_attr "empty_delay_slot" "true")
 		 (const_int 4)
 		 (const_int 3))))
+         (eq_attr "type" "cbcond")
+	   (if_then_else (lt (pc) (match_dup 3))
+	     (if_then_else (lt (minus (match_dup 3) (pc)) (const_int 500))
+               (if_then_else (eq_attr "emit_cbcond_nop" "true")
+                 (const_int 2)
+                 (const_int 1))
+               (const_int 4))
+	     (if_then_else (lt (minus (pc) (match_dup 3)) (const_int 500))
+               (if_then_else (eq_attr "emit_cbcond_nop" "true")
+                 (const_int 2)
+                 (const_int 1))
+               (const_int 4)))
+         (eq_attr "type" "uncond_cbcond")
+	   (if_then_else (lt (pc) (match_dup 0))
+	     (if_then_else (lt (minus (match_dup 0) (pc)) (const_int 500))
+               (if_then_else (eq_attr "emit_cbcond_nop" "true")
+                 (const_int 2)
+                 (const_int 1))
+               (const_int 1))
+	     (if_then_else (lt (minus (pc) (match_dup 0)) (const_int 500))
+               (if_then_else (eq_attr "emit_cbcond_nop" "true")
+                 (const_int 2)
+                 (const_int 1))
+               (const_int 1)))
 	 ] (const_int 1)))
 
 ;; FP precision.
 (define_attr "fptype" "single,double"
   (const_string "single"))
+
+;; FP precision specific to the UT699.
+(define_attr "fptype_ut699" "none,single"
+  (const_string "none"))
 
 ;; UltraSPARC-III integer load type.
 (define_attr "us3load_type" "2cycle,3cycle"
@@ -391,32 +430,18 @@
   [(set_attr "length" "2")
    (set_attr "type" "multi")])
 
-;; Attributes for instruction and branch scheduling
-(define_attr "tls_call_delay" "false,true"
-  (symbol_ref "(tls_call_delay (insn)
-		? TLS_CALL_DELAY_TRUE : TLS_CALL_DELAY_FALSE)"))
-
+;; Attributes for branch scheduling
 (define_attr "in_call_delay" "false,true"
-  (cond [(eq_attr "type" "uncond_branch,branch,call,sibcall,call_no_delay_slot,multi")
-		(const_string "false")
-	 (eq_attr "type" "load,fpload,store,fpstore")
-		(if_then_else (eq_attr "length" "1")
-			      (const_string "true")
-			      (const_string "false"))]
-	 (if_then_else (and (eq_attr "length" "1")
-			    (eq_attr "tls_call_delay" "true"))
-		       (const_string "true")
-		       (const_string "false"))))
+  (symbol_ref "(eligible_for_call_delay (insn)
+		? IN_CALL_DELAY_TRUE : IN_CALL_DELAY_FALSE)"))
 
-(define_attr "eligible_for_sibcall_delay" "false,true"
+(define_attr "in_sibcall_delay" "false,true"
   (symbol_ref "(eligible_for_sibcall_delay (insn)
-		? ELIGIBLE_FOR_SIBCALL_DELAY_TRUE
-		: ELIGIBLE_FOR_SIBCALL_DELAY_FALSE)"))
+		? IN_SIBCALL_DELAY_TRUE : IN_SIBCALL_DELAY_FALSE)"))
 
-(define_attr "eligible_for_return_delay" "false,true"
+(define_attr "in_return_delay" "false,true"
   (symbol_ref "(eligible_for_return_delay (insn)
-		? ELIGIBLE_FOR_RETURN_DELAY_TRUE
-		: ELIGIBLE_FOR_RETURN_DELAY_FALSE)"))
+		? IN_RETURN_DELAY_TRUE : IN_RETURN_DELAY_FALSE)"))
 
 ;; ??? !v9: Should implement the notion of predelay slots for floating-point
 ;; branches.  This would allow us to remove the nop always inserted before
@@ -431,39 +456,33 @@
 ;; because it prevents us from moving back the final store of inner loops.
 
 (define_attr "in_branch_delay" "false,true"
-  (if_then_else (and (eq_attr "type" "!uncond_branch,branch,call,sibcall,call_no_delay_slot,multi")
-		     (eq_attr "length" "1"))
-		(const_string "true")
-		(const_string "false")))
-
-(define_attr "in_uncond_branch_delay" "false,true"
-  (if_then_else (and (eq_attr "type" "!uncond_branch,branch,call,sibcall,call_no_delay_slot,multi")
-		     (eq_attr "length" "1"))
-		(const_string "true")
-		(const_string "false")))
-
-(define_attr "in_annul_branch_delay" "false,true"
-  (if_then_else (and (eq_attr "type" "!uncond_branch,branch,call,sibcall,call_no_delay_slot,multi")
-		     (eq_attr "length" "1"))
-		(const_string "true")
-		(const_string "false")))
+  (cond [(eq_attr "type" "uncond_branch,branch,cbcond,uncond_cbcond,call,sibcall,call_no_delay_slot,multi")
+	   (const_string "false")
+	 (and (eq_attr "fix_ut699" "true") (eq_attr "type" "load,sload"))
+	   (const_string "false")
+	 (and (eq_attr "fix_ut699" "true")
+	      (and (eq_attr "type" "fpload,fp,fpmove,fpmul,fpdivs,fpsqrts")
+		   (ior (eq_attr "fptype" "single")
+		        (eq_attr "fptype_ut699" "single"))))
+	   (const_string "false")
+	 (eq_attr "length" "1")
+	   (const_string "true")
+	] (const_string "false")))
 
 (define_delay (eq_attr "type" "call")
   [(eq_attr "in_call_delay" "true") (nil) (nil)])
 
 (define_delay (eq_attr "type" "sibcall")
-  [(eq_attr "eligible_for_sibcall_delay" "true") (nil) (nil)])
-
-(define_delay (eq_attr "type" "branch")
-  [(eq_attr "in_branch_delay" "true")
-   (nil) (eq_attr "in_annul_branch_delay" "true")])
-
-(define_delay (eq_attr "type" "uncond_branch")
-  [(eq_attr "in_uncond_branch_delay" "true")
-   (nil) (nil)])
+  [(eq_attr "in_sibcall_delay" "true") (nil) (nil)])
 
 (define_delay (eq_attr "type" "return")
-  [(eq_attr "eligible_for_return_delay" "true") (nil) (nil)])
+  [(eq_attr "in_return_delay" "true") (nil) (nil)])
+
+(define_delay (eq_attr "type" "branch")
+  [(eq_attr "in_branch_delay" "true") (nil) (eq_attr "in_branch_delay" "true")])
+
+(define_delay (eq_attr "type" "uncond_branch")
+  [(eq_attr "in_branch_delay" "true") (nil) (nil)])
 
 
 ;; Include SPARC DFA schedulers
@@ -477,6 +496,7 @@
 (include "ultra3.md")
 (include "niagara.md")
 (include "niagara2.md")
+(include "niagara4.md")
 
 
 ;; Operand and operator predicates and constraints
@@ -1312,6 +1332,32 @@
 ;; SPARC V9-specific jump insns.  None of these are guaranteed to be
 ;; in the architecture.
 
+(define_insn "*cbcond_sp32"
+  [(set (pc)
+        (if_then_else (match_operator 0 "noov_compare_operator"
+                       [(match_operand:SI 1 "register_operand" "r")
+                        (match_operand:SI 2 "arith5_operand" "rA")])
+                      (label_ref (match_operand 3 "" ""))
+                      (pc)))]
+  "TARGET_CBCOND"
+{
+  return output_cbcond (operands[0], operands[3], insn);
+}
+  [(set_attr "type" "cbcond")])
+
+(define_insn "*cbcond_sp64"
+  [(set (pc)
+        (if_then_else (match_operator 0 "noov_compare_operator"
+                       [(match_operand:DI 1 "register_operand" "r")
+                        (match_operand:DI 2 "arith5_operand" "rA")])
+                      (label_ref (match_operand 3 "" ""))
+                      (pc)))]
+  "TARGET_ARCH64 && TARGET_CBCOND"
+{
+  return output_cbcond (operands[0], operands[3], insn);
+}
+  [(set_attr "type" "cbcond")])
+
 ;; There are no 32 bit brreg insns.
 
 ;; XXX
@@ -1456,7 +1502,7 @@
    st\t%1, %0
    fzeros\t%0
    fones\t%0"
-  [(set_attr "type" "*,*,load,store,*,*,fpmove,fpload,fpstore,fga,fga")
+  [(set_attr "type" "*,*,load,store,vismv,vismv,fpmove,fpload,fpstore,visl,visl")
    (set_attr "cpu_feature" "*,*,*,*,vis3,vis3,*,*,*,vis,vis")])
 
 (define_insn "*movsi_lo_sum"
@@ -1621,7 +1667,7 @@
    std\t%1, %0
    fzero\t%0
    fone\t%0"
-  [(set_attr "type" "store,store,store,load,*,*,*,*,fpstore,fpload,*,*,fpmove,*,*,*,fpload,fpstore,fga,fga")
+  [(set_attr "type" "store,store,store,load,*,*,*,*,fpstore,fpload,*,*,fpmove,*,*,*,fpload,fpstore,visl,visl")
    (set_attr "length" "*,2,*,*,2,2,2,2,*,*,2,2,*,2,2,2,*,*,*,*")
    (set_attr "fptype" "*,*,*,*,*,*,*,*,*,*,*,*,double,*,*,*,*,*,double,double")
    (set_attr "cpu_feature" "v9,*,*,*,*,*,*,*,fpu,fpu,fpu,fpu,v9,fpunotv9,vis3,vis3,fpu,fpu,vis,vis")])
@@ -1644,7 +1690,7 @@
    std\t%1, %0
    fzero\t%0
    fone\t%0"
-  [(set_attr "type" "*,*,load,store,*,*,fpmove,fpload,fpstore,fga,fga")
+  [(set_attr "type" "*,*,load,store,vismv,vismv,fpmove,fpload,fpstore,visl,visl")
    (set_attr "fptype" "*,*,*,*,*,*,double,*,*,double,double")
    (set_attr "cpu_feature" "*,*,*,*,vis3,vis3,*,*,*,vis,vis")])
 
@@ -2033,6 +2079,164 @@
   DONE;
 })
 
+(define_expand "movti"
+  [(set (match_operand:TI 0 "nonimmediate_operand" "")
+	(match_operand:TI 1 "general_operand" ""))]
+  "TARGET_ARCH64"
+{
+  if (sparc_expand_move (TImode, operands))
+    DONE;
+})
+
+;; We need to prevent reload from splitting TImode moves, because it
+;; might decide to overwrite a pointer with the value it points to.
+;; In that case we have to do the loads in the appropriate order so
+;; that the pointer is not destroyed too early.
+
+(define_insn "*movti_insn_sp64"
+  [(set (match_operand:TI 0 "nonimmediate_operand" "=r , o,?*e,?o,b")
+        (match_operand:TI 1 "input_operand"        "roJ,rJ, eo, e,J"))]
+  "TARGET_ARCH64
+   && ! TARGET_HARD_QUAD
+   && (register_operand (operands[0], TImode)
+       || register_or_zero_operand (operands[1], TImode))"
+  "#"
+  [(set_attr "length" "2,2,2,2,2")
+   (set_attr "cpu_feature" "*,*,fpu,fpu,vis")])
+
+(define_insn "*movti_insn_sp64_hq"
+  [(set (match_operand:TI 0 "nonimmediate_operand" "=r , o,?*e,?*e,?m,b")
+        (match_operand:TI 1 "input_operand"        "roJ,rJ,  e,  m, e,J"))]
+  "TARGET_ARCH64
+   && TARGET_HARD_QUAD
+   && (register_operand (operands[0], TImode)
+       || register_or_zero_operand (operands[1], TImode))"
+  "@
+  #
+  #
+  fmovq\t%1, %0
+  ldq\t%1, %0
+  stq\t%1, %0
+  #"
+  [(set_attr "type" "*,*,fpmove,fpload,fpstore,*")
+   (set_attr "length" "2,2,*,*,*,2")])
+
+;; Now all the splits to handle multi-insn TI mode moves.
+(define_split
+  [(set (match_operand:TI 0 "register_operand" "")
+        (match_operand:TI 1 "register_operand" ""))]
+  "reload_completed
+   && ((TARGET_FPU
+        && ! TARGET_HARD_QUAD)
+       || (! fp_register_operand (operands[0], TImode)
+           && ! fp_register_operand (operands[1], TImode)))"
+  [(clobber (const_int 0))]
+{
+  rtx set_dest = operands[0];
+  rtx set_src = operands[1];
+  rtx dest1, dest2;
+  rtx src1, src2;
+
+  dest1 = gen_highpart (DImode, set_dest);
+  dest2 = gen_lowpart (DImode, set_dest);
+  src1 = gen_highpart (DImode, set_src);
+  src2 = gen_lowpart (DImode, set_src);
+
+  /* Now emit using the real source and destination we found, swapping
+     the order if we detect overlap.  */
+  if (reg_overlap_mentioned_p (dest1, src2))
+    {
+      emit_insn (gen_movdi (dest2, src2));
+      emit_insn (gen_movdi (dest1, src1));
+    }
+  else
+    {
+      emit_insn (gen_movdi (dest1, src1));
+      emit_insn (gen_movdi (dest2, src2));
+    }
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:TI 0 "nonimmediate_operand" "")
+        (match_operand:TI 1 "const_zero_operand" ""))]
+  "reload_completed"
+  [(clobber (const_int 0))]
+{
+  rtx set_dest = operands[0];
+  rtx dest1, dest2;
+
+  switch (GET_CODE (set_dest))
+    {
+    case REG:
+      dest1 = gen_highpart (DImode, set_dest);
+      dest2 = gen_lowpart (DImode, set_dest);
+      break;
+    case MEM:
+      dest1 = adjust_address (set_dest, DImode, 0);
+      dest2 = adjust_address (set_dest, DImode, 8);
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  emit_insn (gen_movdi (dest1, const0_rtx));
+  emit_insn (gen_movdi (dest2, const0_rtx));
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:TI 0 "register_operand" "")
+        (match_operand:TI 1 "memory_operand" ""))]
+  "reload_completed
+   && offsettable_memref_p (operands[1])
+   && (! TARGET_HARD_QUAD
+       || ! fp_register_operand (operands[0], TImode))"
+  [(clobber (const_int 0))]
+{
+  rtx word0 = adjust_address (operands[1], DImode, 0);
+  rtx word1 = adjust_address (operands[1], DImode, 8);
+  rtx set_dest, dest1, dest2;
+
+  set_dest = operands[0];
+
+  dest1 = gen_highpart (DImode, set_dest);
+  dest2 = gen_lowpart (DImode, set_dest);
+
+  /* Now output, ordering such that we don't clobber any registers
+     mentioned in the address.  */
+  if (reg_overlap_mentioned_p (dest1, word1))
+
+    {
+      emit_insn (gen_movdi (dest2, word1));
+      emit_insn (gen_movdi (dest1, word0));
+    }
+  else
+   {
+      emit_insn (gen_movdi (dest1, word0));
+      emit_insn (gen_movdi (dest2, word1));
+   }
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:TI 0 "memory_operand" "")
+	(match_operand:TI 1 "register_operand" ""))]
+  "reload_completed
+   && offsettable_memref_p (operands[0])
+   && (! TARGET_HARD_QUAD
+       || ! fp_register_operand (operands[1], TImode))"
+  [(clobber (const_int 0))]
+{
+  rtx set_src = operands[1];
+
+  emit_insn (gen_movdi (adjust_address (operands[0], DImode, 0),
+			gen_highpart (DImode, set_src)));
+  emit_insn (gen_movdi (adjust_address (operands[0], DImode, 8),
+			gen_lowpart (DImode, set_src)));
+  DONE;
+})
+
 
 ;; Floating point move instructions
 
@@ -2092,7 +2296,7 @@
       gcc_unreachable ();
     }
 }
-  [(set_attr "type" "fga,fga,fpmove,*,*,*,*,*,fpload,load,fpstore,store")
+  [(set_attr "type" "visl,visl,fpmove,*,*,*,vismv,vismv,fpload,load,fpstore,store")
    (set_attr "cpu_feature" "vis,vis,fpu,*,*,*,vis3,vis3,fpu,*,fpu,*")])
 
 ;; The following 3 patterns build SFmode constants in integer registers.
@@ -2164,7 +2368,7 @@
   #
   #
   #"
-  [(set_attr "type" "fga,fga,fpmove,*,*,*,fpload,store,fpstore,load,store,*,*,*,*")
+  [(set_attr "type" "visl,visl,fpmove,*,*,*,fpload,store,fpstore,load,store,*,*,*,*")
    (set_attr "length" "*,*,*,2,2,2,*,*,*,*,*,2,2,2,2")
    (set_attr "fptype" "double,double,double,*,*,*,*,*,*,*,*,*,*,*,*")
    (set_attr "cpu_feature" "vis,vis,v9,fpunotv9,vis3,vis3,fpu,v9,fpu,*,*,fpu,*,*,fpu")])
@@ -2187,7 +2391,7 @@
   ldx\t%1, %0
   stx\t%r1, %0
   #"
-  [(set_attr "type" "fga,fga,fpmove,*,*,load,store,*,load,store,*")
+  [(set_attr "type" "visl,visl,fpmove,vismv,vismv,load,store,*,load,store,*")
    (set_attr "length" "*,*,*,*,*,*,*,*,*,*,2")
    (set_attr "fptype" "double,double,double,double,double,*,*,*,*,*,*")
    (set_attr "cpu_feature" "vis,vis,fpu,vis3,vis3,fpu,fpu,*,*,*,*")])
@@ -2476,7 +2680,7 @@
       dest2 = adjust_address (set_dest, DFmode, 8);
       break;
     default:
-      gcc_unreachable ();      
+      gcc_unreachable ();
     }
 
   emit_insn (gen_movdf (dest1, CONST0_RTX (DFmode)));
@@ -3299,7 +3503,8 @@
   "TARGET_FPU"
   "fdtos\t%1, %0"
   [(set_attr "type" "fp")
-   (set_attr "fptype" "double")])
+   (set_attr "fptype" "double")
+   (set_attr "fptype_ut699" "single")])
 
 (define_expand "trunctfsf2"
   [(set (match_operand:SF 0 "register_operand" "")
@@ -3340,7 +3545,7 @@
   "TARGET_FPU"
   "fitos\t%1, %0"
   [(set_attr "type" "fp")
-   (set_attr "fptype" "double")])
+   (set_attr "fptype" "single")])
 
 (define_insn "floatsidf2"
   [(set (match_operand:DF 0 "register_operand" "=e")
@@ -3427,7 +3632,7 @@
   "TARGET_FPU"
   "fstoi\t%1, %0"
   [(set_attr "type" "fp")
-   (set_attr "fptype" "double")])
+   (set_attr "fptype" "single")])
 
 (define_insn "fix_truncdfsi2"
   [(set (match_operand:SI 0 "register_operand" "=f")
@@ -3435,7 +3640,8 @@
   "TARGET_FPU"
   "fdtoi\t%1, %0"
   [(set_attr "type" "fp")
-   (set_attr "fptype" "double")])
+   (set_attr "fptype" "double")
+   (set_attr "fptype_ut699" "single")])
 
 (define_expand "fix_trunctfsi2"
   [(set (match_operand:SI 0 "register_operand" "")
@@ -5334,7 +5540,7 @@
   [(set (match_operand:DF 0 "register_operand" "=e")
 	(mult:DF (float_extend:DF (match_operand:SF 1 "register_operand" "f"))
 		 (float_extend:DF (match_operand:SF 2 "register_operand" "f"))))]
-  "(TARGET_V8 || TARGET_V9) && TARGET_FPU"
+  "(TARGET_V8 || TARGET_V9) && TARGET_FPU && !sparc_fix_ut699"
   "fsmuld\t%1, %2, %0"
   [(set_attr "type" "fpmul")
    (set_attr "fptype" "double")])
@@ -5361,73 +5567,89 @@
 		(match_operand:TF 2 "register_operand" "e")))]
   "TARGET_FPU && TARGET_HARD_QUAD"
   "fdivq\t%1, %2, %0"
-  [(set_attr "type" "fpdivd")])
+  [(set_attr "type" "fpdivs")])
 
-(define_insn "divdf3"
+(define_expand "divdf3"
   [(set (match_operand:DF 0 "register_operand" "=e")
 	(div:DF (match_operand:DF 1 "register_operand" "e")
 		(match_operand:DF 2 "register_operand" "e")))]
   "TARGET_FPU"
+  "")
+
+(define_insn "*divdf3_nofix"
+  [(set (match_operand:DF 0 "register_operand" "=e")
+	(div:DF (match_operand:DF 1 "register_operand" "e")
+		(match_operand:DF 2 "register_operand" "e")))]
+  "TARGET_FPU && !sparc_fix_ut699"
   "fdivd\t%1, %2, %0"
   [(set_attr "type" "fpdivd")
    (set_attr "fptype" "double")])
+
+(define_insn "*divdf3_fix"
+  [(set (match_operand:DF 0 "register_operand" "=e")
+	(div:DF (match_operand:DF 1 "register_operand" "e")
+		(match_operand:DF 2 "register_operand" "e")))]
+  "TARGET_FPU && sparc_fix_ut699"
+  "fdivd\t%1, %2, %0\n\tstd\t%0, [%%sp-8]"
+  [(set_attr "type" "fpdivd")
+   (set_attr "fptype" "double")
+   (set_attr "length" "2")])
 
 (define_insn "divsf3"
   [(set (match_operand:SF 0 "register_operand" "=f")
 	(div:SF (match_operand:SF 1 "register_operand" "f")
 		(match_operand:SF 2 "register_operand" "f")))]
-  "TARGET_FPU"
+  "TARGET_FPU && !sparc_fix_ut699"
   "fdivs\t%1, %2, %0"
   [(set_attr "type" "fpdivs")])
 
 (define_expand "negtf2"
-  [(set (match_operand:TF 0 "register_operand" "=e,e")
-	(neg:TF (match_operand:TF 1 "register_operand" "0,e")))]
+  [(set (match_operand:TF 0 "register_operand" "")
+	(neg:TF (match_operand:TF 1 "register_operand" "")))]
   "TARGET_FPU"
   "")
 
-(define_insn_and_split "*negtf2_notv9"
-  [(set (match_operand:TF 0 "register_operand" "=e,e")
-	(neg:TF (match_operand:TF 1 "register_operand" "0,e")))]
-  ; We don't use quad float insns here so we don't need TARGET_HARD_QUAD.
-  "TARGET_FPU
-   && ! TARGET_V9"
-  "@
-  fnegs\t%0, %0
-  #"
-  "&& reload_completed
-   && sparc_absnegfloat_split_legitimate (operands[0], operands[1])"
-  [(set (match_dup 2) (neg:SF (match_dup 3)))
-   (set (match_dup 4) (match_dup 5))
-   (set (match_dup 6) (match_dup 7))]
-  "operands[2] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]));
-   operands[3] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]));
-   operands[4] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]) + 1);
-   operands[5] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]) + 1);
-   operands[6] = gen_rtx_raw_REG (DFmode, REGNO (operands[0]) + 2);
-   operands[7] = gen_rtx_raw_REG (DFmode, REGNO (operands[1]) + 2);"
-  [(set_attr "type" "fpmove,*")
-   (set_attr "length" "*,2")])
+(define_insn "*negtf2_hq"
+  [(set (match_operand:TF 0 "register_operand" "=e")
+	(neg:TF (match_operand:TF 1 "register_operand" "e")))]
+  "TARGET_FPU && TARGET_HARD_QUAD"
+  "fnegq\t%1, %0"
+  [(set_attr "type" "fpmove")])
 
-(define_insn_and_split "*negtf2_v9"
-  [(set (match_operand:TF 0 "register_operand" "=e,e")
-	(neg:TF (match_operand:TF 1 "register_operand" "0,e")))]
-  ; We don't use quad float insns here so we don't need TARGET_HARD_QUAD.
-  "TARGET_FPU && TARGET_V9"
-  "@
-  fnegd\t%0, %0
-  #"
-  "&& reload_completed
-   && sparc_absnegfloat_split_legitimate (operands[0], operands[1])"
-  [(set (match_dup 2) (neg:DF (match_dup 3)))
-   (set (match_dup 4) (match_dup 5))]
-  "operands[2] = gen_rtx_raw_REG (DFmode, REGNO (operands[0]));
-   operands[3] = gen_rtx_raw_REG (DFmode, REGNO (operands[1]));
-   operands[4] = gen_rtx_raw_REG (DFmode, REGNO (operands[0]) + 2);
-   operands[5] = gen_rtx_raw_REG (DFmode, REGNO (operands[1]) + 2);"
-  [(set_attr "type" "fpmove,*")
-   (set_attr "length" "*,2")
-   (set_attr "fptype" "double")])
+(define_insn_and_split "*negtf2"
+  [(set (match_operand:TF 0 "register_operand" "=e")
+	(neg:TF (match_operand:TF 1 "register_operand" "e")))]
+  "TARGET_FPU && !TARGET_HARD_QUAD"
+  "#"
+  "&& reload_completed"
+  [(clobber (const_int 0))]
+{
+  rtx set_dest = operands[0];
+  rtx set_src = operands[1];
+  rtx dest1, dest2;
+  rtx src1, src2;
+
+  dest1 = gen_df_reg (set_dest, 0);
+  dest2 = gen_df_reg (set_dest, 1);
+  src1 = gen_df_reg (set_src, 0);
+  src2 = gen_df_reg (set_src, 1);
+
+  /* Now emit using the real source and destination we found, swapping
+     the order if we detect overlap.  */
+  if (reg_overlap_mentioned_p (dest1, src2))
+    {
+      emit_insn (gen_movdf (dest2, src2));
+      emit_insn (gen_negdf2 (dest1, src1));
+    }
+  else
+    {
+      emit_insn (gen_negdf2 (dest1, src1));
+      if (REGNO (dest2) != REGNO (src2))
+	emit_insn (gen_movdf (dest2, src2));
+    }
+  DONE;
+}
+  [(set_attr "length" "2")])
 
 (define_expand "negdf2"
   [(set (match_operand:DF 0 "register_operand" "")
@@ -5436,22 +5658,39 @@
   "")
 
 (define_insn_and_split "*negdf2_notv9"
-  [(set (match_operand:DF 0 "register_operand" "=e,e")
-	(neg:DF (match_operand:DF 1 "register_operand" "0,e")))]
-  "TARGET_FPU && ! TARGET_V9"
-  "@
-  fnegs\t%0, %0
-  #"
-  "&& reload_completed
-   && sparc_absnegfloat_split_legitimate (operands[0], operands[1])"
-  [(set (match_dup 2) (neg:SF (match_dup 3)))
-   (set (match_dup 4) (match_dup 5))]
-  "operands[2] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]));
-   operands[3] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]));
-   operands[4] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]) + 1);
-   operands[5] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]) + 1);"
-  [(set_attr "type" "fpmove,*")
-   (set_attr "length" "*,2")])
+  [(set (match_operand:DF 0 "register_operand" "=e")
+	(neg:DF (match_operand:DF 1 "register_operand" "e")))]
+  "TARGET_FPU && !TARGET_V9"
+  "#"
+  "&& reload_completed"
+  [(clobber (const_int 0))]
+{
+  rtx set_dest = operands[0];
+  rtx set_src = operands[1];
+  rtx dest1, dest2;
+  rtx src1, src2;
+
+  dest1 = gen_highpart (SFmode, set_dest);
+  dest2 = gen_lowpart (SFmode, set_dest);
+  src1 = gen_highpart (SFmode, set_src);
+  src2 = gen_lowpart (SFmode, set_src);
+
+  /* Now emit using the real source and destination we found, swapping
+     the order if we detect overlap.  */
+  if (reg_overlap_mentioned_p (dest1, src2))
+    {
+      emit_insn (gen_movsf (dest2, src2));
+      emit_insn (gen_negsf2 (dest1, src1));
+    }
+  else
+    {
+      emit_insn (gen_negsf2 (dest1, src1));
+      if (REGNO (dest2) != REGNO (src2))
+	emit_insn (gen_movsf (dest2, src2));
+    }
+  DONE;
+}
+  [(set_attr "length" "2")])
 
 (define_insn "*negdf2_v9"
   [(set (match_operand:DF 0 "register_operand" "=e")
@@ -5474,56 +5713,47 @@
   "TARGET_FPU"
   "")
 
-(define_insn_and_split "*abstf2_notv9"
-  [(set (match_operand:TF 0 "register_operand" "=e,e")
-	(abs:TF (match_operand:TF 1 "register_operand" "0,e")))]
-  ; We don't use quad float insns here so we don't need TARGET_HARD_QUAD.
-  "TARGET_FPU && ! TARGET_V9"
-  "@
-  fabss\t%0, %0
-  #"
-  "&& reload_completed
-   && sparc_absnegfloat_split_legitimate (operands[0], operands[1])"
-  [(set (match_dup 2) (abs:SF (match_dup 3)))
-   (set (match_dup 4) (match_dup 5))
-   (set (match_dup 6) (match_dup 7))]
-  "operands[2] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]));
-   operands[3] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]));
-   operands[4] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]) + 1);
-   operands[5] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]) + 1);
-   operands[6] = gen_rtx_raw_REG (DFmode, REGNO (operands[0]) + 2);
-   operands[7] = gen_rtx_raw_REG (DFmode, REGNO (operands[1]) + 2);"
-  [(set_attr "type" "fpmove,*")
-   (set_attr "length" "*,2")])
+(define_insn "*abstf2_hq"
+  [(set (match_operand:TF 0 "register_operand" "=e")
+	(abs:TF (match_operand:TF 1 "register_operand" "e")))]
+  "TARGET_FPU && TARGET_HARD_QUAD"
+  "fabsq\t%1, %0"
+  [(set_attr "type" "fpmove")])
 
-(define_insn "*abstf2_hq_v9"
-  [(set (match_operand:TF 0 "register_operand" "=e,e")
-	(abs:TF (match_operand:TF 1 "register_operand" "0,e")))]
-  "TARGET_FPU && TARGET_V9 && TARGET_HARD_QUAD"
-  "@
-  fabsd\t%0, %0
-  fabsq\t%1, %0"
-  [(set_attr "type" "fpmove")
-   (set_attr "fptype" "double,*")])
+(define_insn_and_split "*abstf2"
+  [(set (match_operand:TF 0 "register_operand" "=e")
+	(abs:TF (match_operand:TF 1 "register_operand" "e")))]
+  "TARGET_FPU && !TARGET_HARD_QUAD"
+  "#"
+  "&& reload_completed"
+  [(clobber (const_int 0))]
+{
+  rtx set_dest = operands[0];
+  rtx set_src = operands[1];
+  rtx dest1, dest2;
+  rtx src1, src2;
 
-(define_insn_and_split "*abstf2_v9"
-  [(set (match_operand:TF 0 "register_operand" "=e,e")
-	(abs:TF (match_operand:TF 1 "register_operand" "0,e")))]
-  "TARGET_FPU && TARGET_V9 && !TARGET_HARD_QUAD"
-  "@
-  fabsd\t%0, %0
-  #"
-  "&& reload_completed
-   && sparc_absnegfloat_split_legitimate (operands[0], operands[1])"
-  [(set (match_dup 2) (abs:DF (match_dup 3)))
-   (set (match_dup 4) (match_dup 5))]
-  "operands[2] = gen_rtx_raw_REG (DFmode, REGNO (operands[0]));
-   operands[3] = gen_rtx_raw_REG (DFmode, REGNO (operands[1]));
-   operands[4] = gen_rtx_raw_REG (DFmode, REGNO (operands[0]) + 2);
-   operands[5] = gen_rtx_raw_REG (DFmode, REGNO (operands[1]) + 2);"
-  [(set_attr "type" "fpmove,*")
-   (set_attr "length" "*,2")
-   (set_attr "fptype" "double,*")])
+  dest1 = gen_df_reg (set_dest, 0);
+  dest2 = gen_df_reg (set_dest, 1);
+  src1 = gen_df_reg (set_src, 0);
+  src2 = gen_df_reg (set_src, 1);
+
+  /* Now emit using the real source and destination we found, swapping
+     the order if we detect overlap.  */
+  if (reg_overlap_mentioned_p (dest1, src2))
+    {
+      emit_insn (gen_movdf (dest2, src2));
+      emit_insn (gen_absdf2 (dest1, src1));
+    }
+  else
+    {
+      emit_insn (gen_absdf2 (dest1, src1));
+      if (REGNO (dest2) != REGNO (src2))
+	emit_insn (gen_movdf (dest2, src2));
+    }
+  DONE;
+}
+  [(set_attr "length" "2")])
 
 (define_expand "absdf2"
   [(set (match_operand:DF 0 "register_operand" "")
@@ -5532,22 +5762,39 @@
   "")
 
 (define_insn_and_split "*absdf2_notv9"
-  [(set (match_operand:DF 0 "register_operand" "=e,e")
-	(abs:DF (match_operand:DF 1 "register_operand" "0,e")))]
-  "TARGET_FPU && ! TARGET_V9"
-  "@
-  fabss\t%0, %0
-  #"
-  "&& reload_completed
-   && sparc_absnegfloat_split_legitimate (operands[0], operands[1])"
-  [(set (match_dup 2) (abs:SF (match_dup 3)))
-   (set (match_dup 4) (match_dup 5))]
-  "operands[2] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]));
-   operands[3] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]));
-   operands[4] = gen_rtx_raw_REG (SFmode, REGNO (operands[0]) + 1);
-   operands[5] = gen_rtx_raw_REG (SFmode, REGNO (operands[1]) + 1);"
-  [(set_attr "type" "fpmove,*")
-   (set_attr "length" "*,2")])
+  [(set (match_operand:DF 0 "register_operand" "=e")
+	(abs:DF (match_operand:DF 1 "register_operand" "e")))]
+  "TARGET_FPU && !TARGET_V9"
+  "#"
+  "&& reload_completed"
+  [(clobber (const_int 0))]
+{
+  rtx set_dest = operands[0];
+  rtx set_src = operands[1];
+  rtx dest1, dest2;
+  rtx src1, src2;
+
+  dest1 = gen_highpart (SFmode, set_dest);
+  dest2 = gen_lowpart (SFmode, set_dest);
+  src1 = gen_highpart (SFmode, set_src);
+  src2 = gen_lowpart (SFmode, set_src);
+
+  /* Now emit using the real source and destination we found, swapping
+     the order if we detect overlap.  */
+  if (reg_overlap_mentioned_p (dest1, src2))
+    {
+      emit_insn (gen_movsf (dest2, src2));
+      emit_insn (gen_abssf2 (dest1, src1));
+    }
+  else
+    {
+      emit_insn (gen_abssf2 (dest1, src1));
+      if (REGNO (dest2) != REGNO (src2))
+	emit_insn (gen_movsf (dest2, src2));
+    }
+  DONE;
+}
+  [(set_attr "length" "2")])
 
 (define_insn "*absdf2_v9"
   [(set (match_operand:DF 0 "register_operand" "=e")
@@ -5575,20 +5822,35 @@
 	(sqrt:TF (match_operand:TF 1 "register_operand" "e")))]
   "TARGET_FPU && TARGET_HARD_QUAD"
   "fsqrtq\t%1, %0"
-  [(set_attr "type" "fpsqrtd")])
+  [(set_attr "type" "fpsqrts")])
 
-(define_insn "sqrtdf2"
+(define_expand "sqrtdf2"
   [(set (match_operand:DF 0 "register_operand" "=e")
 	(sqrt:DF (match_operand:DF 1 "register_operand" "e")))]
   "TARGET_FPU"
+  "")
+
+(define_insn "*sqrtdf2_nofix"
+  [(set (match_operand:DF 0 "register_operand" "=e")
+	(sqrt:DF (match_operand:DF 1 "register_operand" "e")))]
+  "TARGET_FPU && !sparc_fix_ut699"
   "fsqrtd\t%1, %0"
   [(set_attr "type" "fpsqrtd")
    (set_attr "fptype" "double")])
 
+(define_insn "*sqrtdf2_fix"
+  [(set (match_operand:DF 0 "register_operand" "=e")
+	(sqrt:DF (match_operand:DF 1 "register_operand" "e")))]
+  "TARGET_FPU && sparc_fix_ut699"
+  "fsqrtd\t%1, %0\n\tstd\t%0, [%%sp-8]"
+  [(set_attr "type" "fpsqrtd")
+   (set_attr "fptype" "double")
+   (set_attr "length" "2")])
+
 (define_insn "sqrtsf2"
   [(set (match_operand:SF 0 "register_operand" "=f")
 	(sqrt:SF (match_operand:SF 1 "register_operand" "f")))]
-  "TARGET_FPU"
+  "TARGET_FPU && !sparc_fix_ut699"
   "fsqrts\t%1, %0"
   [(set_attr "type" "fpsqrts")])
 
@@ -5600,19 +5862,6 @@
 	(ashift:SI (match_operand:SI 1 "register_operand" "r")
 		   (match_operand:SI 2 "arith_operand" "rI")))]
   ""
-{
-  if (GET_CODE (operands[2]) == CONST_INT)
-    operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "sll\t%1, %2, %0";
-}
-  [(set_attr "type" "shift")])
-
-(define_insn "*ashlsi3_extend"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(zero_extend:DI
-	  (ashift:SI (match_operand:SI 1 "register_operand" "r")
-		     (match_operand:SI 2 "arith_operand" "rI"))))]
-  "TARGET_ARCH64"
 {
   if (GET_CODE (operands[2]) == CONST_INT)
     operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
@@ -5917,11 +6166,21 @@
 
 ;; Unconditional and other jump instructions.
 
-(define_insn "jump"
+(define_expand "jump"
   [(set (pc) (label_ref (match_operand 0 "" "")))]
-  ""
-  "* return output_ubranch (operands[0], 0, insn);"
+  "")
+
+(define_insn "*jump_ubranch"
+  [(set (pc) (label_ref (match_operand 0 "" "")))]
+  "! TARGET_CBCOND"
+  "* return output_ubranch (operands[0], insn);"
   [(set_attr "type" "uncond_branch")])
+
+(define_insn "*jump_cbcond"
+  [(set (pc) (label_ref (match_operand 0 "" "")))]
+  "TARGET_CBCOND"
+  "* return output_ubranch (operands[0], insn);"
+  [(set_attr "type" "uncond_cbcond")])
 
 (define_expand "tablejump"
   [(parallel [(set (pc) (match_operand 0 "register_operand" "r"))
@@ -6435,7 +6694,7 @@
 	 instruction (the most significant 10 bits will be zero).  If so,
 	 update the return address to skip the unimp instruction.  */
       emit_move_insn (value,
-		      gen_rtx_MEM (SImode, plus_constant (rtnreg, 8)));
+		      gen_rtx_MEM (SImode, plus_constant (SImode, rtnreg, 8)));
       emit_insn (gen_lshrsi3 (value, value, GEN_INT (22)));
       emit_insn (gen_update_return (rtnreg, value));
     }
@@ -7717,7 +7976,7 @@
   "@
   fzeros\t%0
   fones\t%0
-  fsrc1s\t%1, %0
+  fsrc2s\t%1, %0
   ld\t%1, %0
   st\t%1, %0
   st\t%r1, %0
@@ -7726,7 +7985,7 @@
   mov\t%1, %0
   movstouw\t%1, %0
   movwtos\t%1, %0"
-  [(set_attr "type" "fga,fga,fga,fpload,fpstore,store,load,store,*,*,*")
+  [(set_attr "type" "visl,visl,vismv,fpload,fpstore,store,load,store,*,vismv,vismv")
    (set_attr "cpu_feature" "vis,vis,vis,*,*,*,*,*,*,vis3,vis3")])
 
 (define_insn "*mov<VM64:mode>_insn_sp64"
@@ -7739,7 +7998,7 @@
   "@
   fzero\t%0
   fone\t%0
-  fsrc1\t%1, %0
+  fsrc2\t%1, %0
   ldd\t%1, %0
   std\t%1, %0
   stx\t%r1, %0
@@ -7748,7 +8007,7 @@
   movdtox\t%1, %0
   movxtod\t%1, %0
   mov\t%1, %0"
-  [(set_attr "type" "fga,fga,fga,fpload,fpstore,store,load,store,*,*,*")
+  [(set_attr "type" "visl,visl,vismv,fpload,fpstore,store,load,store,vismv,vismv,*")
    (set_attr "cpu_feature" "vis,vis,vis,*,*,*,*,*,vis3,vis3,*")])
 
 (define_insn "*mov<VM64:mode>_insn_sp32"
@@ -7761,7 +8020,7 @@
   "@
   fzero\t%0
   fone\t%0
-  fsrc1\t%1, %0
+  fsrc2\t%1, %0
   #
   #
   ldd\t%1, %0
@@ -7771,7 +8030,7 @@
   std\t%1, %0
   #
   #"
-  [(set_attr "type" "fga,fga,fga,*,*,fpload,fpstore,store,load,store,*,*")
+  [(set_attr "type" "visl,visl,vismv,*,*,fpload,fpstore,store,load,store,*,*")
    (set_attr "length" "*,*,*,2,2,*,*,*,*,*,2,2")
    (set_attr "cpu_feature" "vis,vis,vis,vis3,vis3,*,*,*,*,*,*,*")])
 
@@ -7866,7 +8125,7 @@
 		 (match_operand:VL 2 "register_operand" "<vconstr>")))]
   "TARGET_VIS"
   "f<vlinsn><vlsuf>\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "<vfptype>")])
 
 (define_insn "*not_<code><mode>3"
@@ -7875,7 +8134,7 @@
 			 (match_operand:VL 2 "register_operand" "<vconstr>"))))]
   "TARGET_VIS"
   "f<vlninsn><vlsuf>\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "<vfptype>")])
 
 ;; (ior (not (op1)) (not (op2))) is the canonical form of NAND.
@@ -7885,7 +8144,7 @@
 		(not:VL (match_operand:VL 2 "register_operand" "<vconstr>"))))]
   "TARGET_VIS"
   "fnand<vlsuf>\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "<vfptype>")])
 
 (define_code_iterator vlnotop [ior and])
@@ -7896,7 +8155,7 @@
 		    (match_operand:VL 2 "register_operand" "<vconstr>")))]
   "TARGET_VIS"
   "f<vlinsn>not1<vlsuf>\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "<vfptype>")])
 
 (define_insn "*<code>_not2<mode>_vis"
@@ -7905,7 +8164,7 @@
 		    (not:VL (match_operand:VL 2 "register_operand" "<vconstr>"))))]
   "TARGET_VIS"
   "f<vlinsn>not2<vlsuf>\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "<vfptype>")])
 
 (define_insn "one_cmpl<mode>2"
@@ -7913,7 +8172,7 @@
 	(not:VL (match_operand:VL 1 "register_operand" "<vconstr>")))]
   "TARGET_VIS"
   "fnot1<vlsuf>\t%1, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "<vfptype>")])
 
 ;; Hard to generate VIS instructions.  We have builtins for these.
@@ -7925,7 +8184,7 @@
 		      UNSPEC_FPACK16))]
   "TARGET_VIS"
   "fpack16\t%1, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "fgm_pack")
    (set_attr "fptype" "double")])
 
 (define_insn "fpackfix_vis"
@@ -7935,7 +8194,7 @@
 		      UNSPEC_FPACKFIX))]
   "TARGET_VIS"
   "fpackfix\t%1, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "fgm_pack")
    (set_attr "fptype" "double")])
 
 (define_insn "fpack32_vis"
@@ -7946,7 +8205,7 @@
                      UNSPEC_FPACK32))]
   "TARGET_VIS"
   "fpack32\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "fgm_pack")
    (set_attr "fptype" "double")])
 
 (define_insn "fexpand_vis"
@@ -8008,7 +8267,7 @@
          UNSPEC_MUL8))]
   "TARGET_VIS"
   "fmul8x16\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_insn "fmul8x16au_vis"
@@ -8018,7 +8277,7 @@
          UNSPEC_MUL16AU))]
   "TARGET_VIS"
   "fmul8x16au\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_insn "fmul8x16al_vis"
@@ -8028,7 +8287,7 @@
          UNSPEC_MUL16AL))]
   "TARGET_VIS"
   "fmul8x16al\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_insn "fmul8sux16_vis"
@@ -8038,7 +8297,7 @@
          UNSPEC_MUL8SU))]
   "TARGET_VIS"
   "fmul8sux16\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_insn "fmul8ulx16_vis"
@@ -8048,7 +8307,7 @@
          UNSPEC_MUL8UL))]
   "TARGET_VIS"
   "fmul8ulx16\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_insn "fmuld8sux16_vis"
@@ -8058,7 +8317,7 @@
          UNSPEC_MULDSU))]
   "TARGET_VIS"
   "fmuld8sux16\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_insn "fmuld8ulx16_vis"
@@ -8068,7 +8327,7 @@
          UNSPEC_MULDUL))]
   "TARGET_VIS"
   "fmuld8ulx16\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "fgm_mul")
    (set_attr "fptype" "double")])
 
 (define_expand "wrgsr_vis"
@@ -8149,7 +8408,8 @@
    (set (zero_extract:DI (reg:DI GSR_REG) (const_int 3) (const_int 0))
         (zero_extend:DI (plus:SI (match_dup 1) (match_dup 2))))]
   "TARGET_VIS"
-  "alignaddr\t%r1, %r2, %0")
+  "alignaddr\t%r1, %r2, %0"
+  [(set_attr "type" "gsr")])
 
 (define_insn "alignaddrdi_vis"
   [(set (match_operand:DI 0 "register_operand" "=r")
@@ -8158,7 +8418,8 @@
    (set (zero_extract:DI (reg:DI GSR_REG) (const_int 3) (const_int 0))
         (plus:DI (match_dup 1) (match_dup 2)))]
   "TARGET_VIS"
-  "alignaddr\t%r1, %r2, %0")
+  "alignaddr\t%r1, %r2, %0"
+  [(set_attr "type" "gsr")])
 
 (define_insn "alignaddrlsi_vis"
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -8168,7 +8429,8 @@
         (xor:DI (zero_extend:DI (plus:SI (match_dup 1) (match_dup 2)))
                 (const_int 7)))]
   "TARGET_VIS"
-  "alignaddrl\t%r1, %r2, %0")
+  "alignaddrl\t%r1, %r2, %0"
+  [(set_attr "type" "gsr")])
 
 (define_insn "alignaddrldi_vis"
   [(set (match_operand:DI 0 "register_operand" "=r")
@@ -8178,7 +8440,8 @@
         (xor:DI (plus:DI (match_dup 1) (match_dup 2))
                 (const_int 7)))]
   "TARGET_VIS"
-  "alignaddrl\t%r1, %r2, %0")
+  "alignaddrl\t%r1, %r2, %0"
+  [(set_attr "type" "gsr")])
 
 (define_insn "pdist_vis"
   [(set (match_operand:DI 0 "register_operand" "=e")
@@ -8188,7 +8451,7 @@
          UNSPEC_PDIST))]
   "TARGET_VIS"
   "pdist\t%1, %2, %0"
-  [(set_attr "type" "fga")
+  [(set_attr "type" "pdist")
    (set_attr "fptype" "double")])
 
 ;; Edge instructions produce condition codes equivalent to a 'subcc'
@@ -8270,7 +8533,7 @@
 	 UNSPEC_FCMP))]
   "TARGET_VIS"
   "fcmp<code><GCM:gcm_name>\t%1, %2, %0"
-  [(set_attr "type" "fpmul")
+  [(set_attr "type" "visl")
    (set_attr "fptype" "double")])
 
 (define_expand "vcond<mode><mode>"
@@ -8460,7 +8723,8 @@
 	            (reg:DI GSR_REG)]
                    UNSPEC_CMASK8))]
   "TARGET_VIS3"
-  "cmask8\t%r0")
+  "cmask8\t%r0"
+  [(set_attr "type" "fga")])
 
 (define_insn "cmask16<P:mode>_vis"
   [(set (reg:DI GSR_REG)
@@ -8468,7 +8732,8 @@
 	            (reg:DI GSR_REG)]
                    UNSPEC_CMASK16))]
   "TARGET_VIS3"
-  "cmask16\t%r0")
+  "cmask16\t%r0"
+  [(set_attr "type" "fga")])
 
 (define_insn "cmask32<P:mode>_vis"
   [(set (reg:DI GSR_REG)
@@ -8476,7 +8741,8 @@
 	            (reg:DI GSR_REG)]
                    UNSPEC_CMASK32))]
   "TARGET_VIS3"
-  "cmask32\t%r0")
+  "cmask32\t%r0"
+  [(set_attr "type" "fga")])
 
 (define_insn "fchksm16_vis"
   [(set (match_operand:V4HI 0 "register_operand" "=e")
@@ -8484,7 +8750,8 @@
                       (match_operand:V4HI 2 "register_operand" "e")]
                      UNSPEC_FCHKSM16))]
   "TARGET_VIS3"
-  "fchksm16\t%1, %2, %0")
+  "fchksm16\t%1, %2, %0"
+  [(set_attr "type" "fga")])
 
 (define_code_iterator vis3_shift [ashift ss_ashift lshiftrt ashiftrt])
 (define_code_attr vis3_shift_insn
@@ -8497,7 +8764,8 @@
 	(vis3_shift:GCM (match_operand:GCM 1 "register_operand" "<vconstr>")
 			(match_operand:GCM 2 "register_operand" "<vconstr>")))]
   "TARGET_VIS3"
-  "<vis3_shift_insn><vbits>\t%1, %2, %0")
+  "<vis3_shift_insn><vbits>\t%1, %2, %0"
+  [(set_attr "type" "fga")])
 
 (define_insn "pdistn<mode>_vis"
   [(set (match_operand:P 0 "register_operand" "=r")
@@ -8505,7 +8773,9 @@
                    (match_operand:V8QI 2 "register_operand" "e")]
          UNSPEC_PDISTN))]
   "TARGET_VIS3"
-  "pdistn\t%1, %2, %0")
+  "pdistn\t%1, %2, %0"
+  [(set_attr "type" "pdistn")
+   (set_attr "fptype" "double")])
 
 (define_insn "fmean16_vis"
   [(set (match_operand:V4HI 0 "register_operand" "=e")
@@ -8521,14 +8791,16 @@
                                   (const_int 1) (const_int 1)]))
           (const_int 1))))]
   "TARGET_VIS3"
-  "fmean16\t%1, %2, %0")
+  "fmean16\t%1, %2, %0"
+  [(set_attr "type" "fga")])
 
 (define_insn "fp<plusminus_insn>64_vis"
   [(set (match_operand:V1DI 0 "register_operand" "=e")
 	(plusminus:V1DI (match_operand:V1DI 1 "register_operand" "e")
 			(match_operand:V1DI 2 "register_operand" "e")))]
   "TARGET_VIS3"
-  "fp<plusminus_insn>64\t%1, %2, %0")
+  "fp<plusminus_insn>64\t%1, %2, %0"
+  [(set_attr "type" "fga")])
 
 (define_mode_iterator VASS [V4HI V2SI V2HI V1SI])
 (define_code_iterator vis3_addsub_ss [ss_plus ss_minus])
@@ -8542,7 +8814,8 @@
         (vis3_addsub_ss:VASS (match_operand:VASS 1 "register_operand" "<vconstr>")
                              (match_operand:VASS 2 "register_operand" "<vconstr>")))]
   "TARGET_VIS3"
-  "<vis3_addsub_ss_insn><vbits>\t%1, %2, %0")
+  "<vis3_addsub_ss_insn><vbits>\t%1, %2, %0"
+  [(set_attr "type" "fga")])
 
 (define_insn "fucmp<code>8<P:mode>_vis"
   [(set (match_operand:P 0 "register_operand" "=r")
@@ -8550,7 +8823,8 @@
 		               (match_operand:V8QI 2 "register_operand" "e"))]
 	 UNSPEC_FUCMP))]
   "TARGET_VIS3"
-  "fucmp<code>8\t%1, %2, %0")
+  "fucmp<code>8\t%1, %2, %0"
+  [(set_attr "type" "visl")])
 
 (define_insn "*naddsf3"
   [(set (match_operand:SF 0 "register_operand" "=f")

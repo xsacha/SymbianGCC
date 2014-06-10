@@ -39,7 +39,8 @@ ACLOCAL_AMFLAGS = -I ./config -I ../config
 
 AM_CFLAGS = -fexceptions -fplan9-extensions $(SPLIT_STACK) $(WARN_CFLAGS) \
 	$(STRINGOPS_FLAG) $(OSCFLAGS) \
-	-I $(srcdir)/../libgcc -I $(MULTIBUILDTOP)../../gcc/include
+	-I $(srcdir)/../libgcc -I $(srcdir)/../libbacktrace \
+	-I $(MULTIBUILDTOP)../../gcc/include
 
 if USING_SPLIT_STACK
 AM_LDFLAGS = -XCClinker $(SPLIT_STACK)
@@ -210,24 +211,11 @@ toolexeclibgoencoding_DATA = \
 	encoding/pem.gox \
 	encoding/xml.gox
 
-if LIBGO_IS_LINUX
-# exp_inotify_gox = exp/inotify.gox
-exp_inotify_gox =
-else
-exp_inotify_gox =
-endif
-
 toolexeclibgoexpdir = $(toolexeclibgodir)/exp
 
 toolexeclibgoexp_DATA = \
-	exp/ebnf.gox \
-	exp/html.gox \
-	$(exp_inotify_gox) \
-	exp/norm.gox \
 	exp/proxy.gox \
-	exp/terminal.gox \
-	exp/types.gox \
-	exp/utf8string.gox
+	exp/terminal.gox
 
 toolexeclibgogodir = $(toolexeclibgodir)/go
 
@@ -235,6 +223,7 @@ toolexeclibgogo_DATA = \
 	go/ast.gox \
 	go/build.gox \
 	go/doc.gox \
+	go/format.gox \
 	go/parser.gox \
 	go/printer.gox \
 	go/scanner.gox \
@@ -303,6 +292,7 @@ toolexeclibgonethttpdir = $(toolexeclibgonetdir)/http
 
 toolexeclibgonethttp_DATA = \
 	net/http/cgi.gox \
+	net/http/cookiejar.gox \
 	net/http/fcgi.gox \
 	net/http/httptest.gox \
 	net/http/httputil.gox \
@@ -316,7 +306,6 @@ toolexeclibgonetrpc_DATA = \
 toolexeclibgoolddir = $(toolexeclibgodir)/old
 
 toolexeclibgoold_DATA = \
-	old/netchan.gox \
 	old/regexp.gox \
 	old/template.gox
 
@@ -390,6 +379,42 @@ else
 runtime_lock_files = runtime/lock_sema.c runtime/thread-sema.c
 endif
 
+if LIBGO_IS_LINUX
+runtime_getncpu_file = runtime/getncpu-linux.c
+else
+if LIBGO_IS_DARWIN
+runtime_getncpu_file = runtime/getncpu-bsd.c
+else
+if LIBGO_IS_IRIX
+runtime_getncpu_file = runtime/getncpu-irix.c
+else
+if LIBGO_IS_SOLARIS
+runtime_getncpu_file = runtime/getncpu-solaris.c
+else
+if LIBGO_IS_FREEBSD
+runtime_getncpu_file = runtime/getncpu-bsd.c
+else
+if LIBGO_IS_NETBSD
+runtime_getncpu_file = runtime/getncpu-bsd.c
+else
+runtime_getncpu_file = runtime/getncpu-none.c
+endif
+endif
+endif
+endif
+endif
+endif
+
+if LIBGO_IS_LINUX
+runtime_netpoll_files = netpoll.c runtime/netpoll_epoll.c
+else
+if LIBGO_IS_DARWIN
+runtime_netpoll_files = netpoll.c runtime/netpoll_kqueue.c
+else
+runtime_netpoll_files = runtime/netpoll_stub.c
+endif
+endif
+
 runtime_files = \
 	runtime/go-append.c \
 	runtime/go-assert.c \
@@ -399,6 +424,7 @@ runtime_files = \
 	runtime/go-caller.c \
 	runtime/go-callers.c \
 	runtime/go-can-convert-interface.c \
+	runtime/go-cdiv.c \
 	runtime/go-cgo.c \
 	runtime/go-check-interface.c \
 	runtime/go-construct-map.c \
@@ -408,6 +434,7 @@ runtime_files = \
 	runtime/go-deferred-recover.c \
 	runtime/go-eface-compare.c \
 	runtime/go-eface-val-compare.c \
+	runtime/go-fieldtrack.c \
 	runtime/go-getgoroot.c \
 	runtime/go-int-array-to-string.c \
 	runtime/go-int-to-string.c \
@@ -420,6 +447,7 @@ runtime_files = \
 	runtime/go-map-len.c \
 	runtime/go-map-range.c \
 	runtime/go-matherr.c \
+	runtime/go-memcmp.c \
 	runtime/go-nanotime.c \
 	runtime/go-now.c \
 	runtime/go-new-map.c \
@@ -440,7 +468,6 @@ runtime_files = \
 	runtime/go-strplus.c \
 	runtime/go-strslice.c \
 	runtime/go-traceback.c \
-	runtime/go-trampoline.c \
 	runtime/go-type-complex.c \
 	runtime/go-type-eface.c \
 	runtime/go-type-error.c \
@@ -456,6 +483,8 @@ runtime_files = \
 	runtime/go-unwind.c \
 	runtime/chan.c \
 	runtime/cpuprof.c \
+	runtime/env_posix.c \
+	runtime/lfstack.c \
 	$(runtime_lock_files) \
 	runtime/mcache.c \
 	runtime/mcentral.c \
@@ -465,6 +494,9 @@ runtime_files = \
 	runtime/mgc0.c \
 	runtime/mheap.c \
 	runtime/msize.c \
+	$(runtime_netpoll_files) \
+	runtime/panic.c \
+	runtime/parfor.c \
 	runtime/print.c \
 	runtime/proc.c \
 	runtime/runtime.c \
@@ -481,7 +513,8 @@ runtime_files = \
 	sema.c \
 	sigqueue.c \
 	string.c \
-	time.c
+	time.c \
+	$(runtime_getncpu_file)
 
 goc2c.$(OBJEXT): runtime/goc2c.c
 	$(CC_FOR_BUILD) -c $(CFLAGS_FOR_BUILD) $<
@@ -490,39 +523,44 @@ goc2c: goc2c.$(OBJEXT)
 	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(LDFLAGS_FOR_BUILD) -o $@ $<
 
 malloc.c: $(srcdir)/runtime/malloc.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 mprof.c: $(srcdir)/runtime/mprof.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
+	mv -f $@.tmp $@
+
+netpoll.c: $(srcdir)/runtime/netpoll.goc goc2c
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 reflect.c: $(srcdir)/runtime/reflect.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 runtime1.c: $(srcdir)/runtime/runtime1.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 sema.c: $(srcdir)/runtime/sema.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 sigqueue.c: $(srcdir)/runtime/sigqueue.goc goc2c
-	./goc2c --gcc --go-pkgpath os_signal $< > $@.tmp
+	./goc2c --go-pkgpath os_signal $< > $@.tmp
 	mv -f $@.tmp $@
 
 time.c: $(srcdir)/runtime/time.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 %.c: $(srcdir)/runtime/%.goc goc2c
-	./goc2c --gcc $< > $@.tmp
+	./goc2c $< > $@.tmp
 	mv -f $@.tmp $@
 
 go_bufio_files = \
-	go/bufio/bufio.go
+	go/bufio/bufio.go \
+	go/bufio/scan.go
 
 go_bytes_files = \
 	go/bytes/buffer.go \
@@ -627,17 +665,17 @@ go_net_fd_os_file = go/net/fd_select.go
 go_net_newpollserver_file = go/net/newpollserver_rtems.go
 else # !LIBGO_IS_RTEMS
 if LIBGO_IS_LINUX
-go_net_fd_os_file = go/net/fd_linux.go
-go_net_newpollserver_file = go/net/newpollserver.go
+go_net_fd_os_file =
+go_net_newpollserver_file =
 else # !LIBGO_IS_LINUX && !LIBGO_IS_RTEMS
 if LIBGO_IS_NETBSD
-go_net_fd_os_file = go/net/fd_netbsd.go
-go_net_newpollserver_file = go/net/newpollserver.go
+go_net_fd_os_file = go/net/fd_bsd.go
+go_net_newpollserver_file =
 else # !LIBGO_IS_NETBSD && !LIBGO_IS_LINUX && !LIBGO_IS_RTEMS
 # By default use select with pipes.  Most systems should have
 # something better.
 go_net_fd_os_file = go/net/fd_select.go
-go_net_newpollserver_file = go/net/newpollserver.go
+go_net_newpollserver_file =
 endif # !LIBGO_IS_NETBSD
 endif # !LIBGO_IS_LINUX
 endif # !LIBGO_IS_RTEMS
@@ -646,30 +684,37 @@ if LIBGO_IS_LINUX
 go_net_cgo_file = go/net/cgo_linux.go
 go_net_sock_file = go/net/sock_linux.go
 go_net_sockopt_file = go/net/sockopt_linux.go
-go_net_sockoptip_file = go/net/sockoptip_linux.go
+go_net_sockoptip_file = go/net/sockoptip_linux.go go/net/sockoptip_posix.go
 else
 if LIBGO_IS_IRIX
 go_net_cgo_file = go/net/cgo_linux.go
 go_net_sock_file = go/net/sock_linux.go
 go_net_sockopt_file = go/net/sockopt_linux.go
-go_net_sockoptip_file = go/net/sockoptip_linux.go
+go_net_sockoptip_file = go/net/sockoptip_linux.go go/net/sockoptip_posix.go
 else
 if LIBGO_IS_SOLARIS
 go_net_cgo_file = go/net/cgo_linux.go
 go_net_sock_file = go/net/sock_solaris.go
 go_net_sockopt_file = go/net/sockopt_bsd.go
-go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_solaris.go
+go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_posix.go
 else
 if LIBGO_IS_FREEBSD
 go_net_cgo_file = go/net/cgo_bsd.go
 go_net_sock_file = go/net/sock_bsd.go
 go_net_sockopt_file = go/net/sockopt_bsd.go
-go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_freebsd.go
+go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_posix.go
+else
+if LIBGO_IS_NETBSD
+go_net_cgo_file = go/net/cgo_netbsd.go
+go_net_sock_file = go/net/sock_bsd.go
+go_net_sockopt_file = go/net/sockopt_bsd.go
+go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_posix.go
 else
 go_net_cgo_file = go/net/cgo_bsd.go
 go_net_sock_file = go/net/sock_bsd.go
 go_net_sockopt_file = go/net/sockopt_bsd.go
-go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_netbsd.go
+go_net_sockoptip_file = go/net/sockoptip_bsd.go go/net/sockoptip_posix.go
+endif
 endif
 endif
 endif
@@ -678,7 +723,11 @@ endif
 if LIBGO_IS_LINUX
 go_net_sendfile_file = go/net/sendfile_linux.go
 else
+if LIBGO_IS_FREEBSD
+go_net_sendfile_file = go/net/sendfile_freebsd.go
+else
 go_net_sendfile_file = go/net/sendfile_stub.go
+endif
 endif
 
 if LIBGO_IS_LINUX
@@ -691,19 +740,35 @@ go_net_interface_file = go/net/interface_stub.go
 endif
 endif
 
+if LIBGO_IS_LINUX
+go_net_cloexec_file = go/net/sock_cloexec.go
+else
+go_net_cloexec_file = go/net/sys_cloexec.go
+endif
+
+if LIBGO_IS_LINUX
+go_net_poll_file = go/net/fd_poll_runtime.go
+else
+if LIBGO_IS_DARWIN
+go_net_poll_file = go/net/fd_poll_runtime.go
+else
+go_net_poll_file = go/net/fd_poll_unix.go
+endif
+endif
+
 go_net_files = \
 	go/net/cgo_unix.go \
 	$(go_net_cgo_file) \
+	$(go_net_cloexec_file) \
 	go/net/dial.go \
 	go/net/dnsclient.go \
 	go/net/dnsclient_unix.go \
-	go/net/dnsconfig.go \
+	go/net/dnsconfig_unix.go \
 	go/net/dnsmsg.go \
-	go/net/doc.go \
 	$(go_net_newpollserver_file) \
-	go/net/fd.go \
+	go/net/fd_unix.go \
 	$(go_net_fd_os_file) \
-	go/net/file.go \
+	go/net/file_unix.go \
 	go/net/hosts.go \
 	go/net/interface.go \
 	$(go_net_interface_file) \
@@ -712,19 +777,21 @@ go_net_files = \
 	go/net/iprawsock_posix.go \
 	go/net/ipsock.go \
 	go/net/ipsock_posix.go \
+	go/net/lookup.go \
 	go/net/lookup_unix.go \
 	go/net/mac.go \
 	go/net/net.go \
-	go/net/net_posix.go \
 	go/net/parse.go \
 	go/net/pipe.go \
+	$(go_net_poll_file) \
 	go/net/port.go \
+	go/net/port_unix.go \
 	$(go_net_sendfile_file) \
-	go/net/sock.go \
+	go/net/sock_posix.go \
+	go/net/sock_unix.go \
 	$(go_net_sock_file) \
-	go/net/sockopt.go \
+	go/net/sockopt_posix.go \
 	$(go_net_sockopt_file) \
-	go/net/sockoptip.go \
 	$(go_net_sockoptip_file) \
 	go/net/tcpsock.go \
 	go/net/tcpsock_posix.go \
@@ -772,7 +839,33 @@ endif
 if LIBGO_IS_SOLARIS
 go_os_stat_file = go/os/stat_solaris.go
 else
+if LIBGO_IS_LINUX
+go_os_stat_file = go/os/stat_atim.go
+else
+if LIBGO_IS_OPENBSD
+go_os_stat_file = go/os/stat_atim.go
+else
+if LIBGO_IS_DARWIN
+go_os_stat_file = go/os/stat_atimespec.go
+else
+if LIBGO_IS_FREEBSD
+go_os_stat_file = go/os/stat_atimespec.go
+else
+if LIBGO_IS_NETBSD
+go_os_stat_file = go/os/stat_atimespec.go
+else
 go_os_stat_file = go/os/stat.go
+endif
+endif
+endif
+endif
+endif
+endif
+
+if LIBGO_IS_LINUX
+go_os_pipe_file = go/os/pipe_linux.go
+else
+go_os_pipe_file = go/os/pipe_bsd.go
 endif
 
 go_os_files = \
@@ -791,18 +884,40 @@ go_os_files = \
 	go/os/getwd.go \
 	go/os/path.go \
 	go/os/path_unix.go \
+	$(go_os_pipe_file) \
 	go/os/proc.go \
 	$(go_os_stat_file) \
 	go/os/str.go \
 	$(go_os_sys_file) \
-	go/os/types.go
+	go/os/types.go \
+	go/os/types_notwin.go
 
 go_path_files = \
 	go/path/match.go \
 	go/path/path.go
 
+if LIBGO_IS_X86_64
+go_reflect_makefunc_file = \
+	go/reflect/makefuncgo_amd64.go
+go_reflect_makefunc_s_file = \
+	go/reflect/makefunc_amd64.S
+else
+if LIBGO_IS_386
+go_reflect_makefunc_file = \
+	go/reflect/makefuncgo_386.go
+go_reflect_makefunc_s_file = \
+	go/reflect/makefunc_386.S
+else
+go_reflect_makefunc_file =
+go_reflect_makefunc_s_file = \
+	go/reflect/makefunc_dummy.c
+endif
+endif
+
 go_reflect_files = \
 	go/reflect/deepequal.go \
+	go/reflect/makefunc.go \
+	$(go_reflect_makefunc_file) \
 	go/reflect/type.go \
 	go/reflect/value.go
 
@@ -854,12 +969,14 @@ go_strconv_files = \
 go_strings_files = \
 	go/strings/reader.go \
 	go/strings/replace.go \
+	go/strings/search.go \
 	go/strings/strings.go
 
 go_sync_files = \
 	go/sync/cond.go \
 	go/sync/mutex.go \
 	go/sync/once.go \
+	go/sync/race0.go \
 	go/sync/runtime.go \
 	go/sync/rwmutex.go \
 	go/sync/waitgroup.go
@@ -881,6 +998,7 @@ go_syslog_c_files = \
 	go/log/syslog/syslog_c.c
 
 go_testing_files = \
+	go/testing/allocs.go \
 	go/testing/benchmark.go \
 	go/testing/example.go \
 	go/testing/testing.go
@@ -902,11 +1020,31 @@ go_unicode_files = \
 	go/unicode/letter.go \
 	go/unicode/tables.go
 
+if LIBGO_IS_LINUX
+archive_tar_atim_file = go/archive/tar/stat_atim.go
+endif
+if LIBGO_IS_OPENBSD
+archive_tar_atim_file = go/archive/tar/stat_atim.go
+endif
+if LIBGO_IS_SOLARIS
+archive_tar_atim_file = go/archive/tar/stat_atim.go
+endif
+if LIBGO_IS_DARWIN
+archive_tar_atim_file = go/archive/tar/stat_atimespec.go
+endif
+if LIBGO_IS_FREEBSD
+archive_tar_atim_file = go/archive/tar/stat_atimespec.go
+endif
+if LIBGO_IS_NETBSD
+archive_tar_atim_file = go/archive/tar/stat_atimespec.go
+endif
 
 go_archive_tar_files = \
 	go/archive/tar/common.go \
 	go/archive/tar/reader.go \
-	go/archive/tar/writer.go
+	go/archive/tar/stat_unix.go \
+	go/archive/tar/writer.go \
+	$(archive_tar_atim_file)
 
 go_archive_zip_files = \
 	go/archive/zip/reader.go \
@@ -920,7 +1058,9 @@ go_compress_bzip2_files = \
 	go/compress/bzip2/move_to_front.go
 
 go_compress_flate_files = \
+	go/compress/flate/copy.go \
 	go/compress/flate/deflate.go \
+	go/compress/flate/fixedhuff.go \
 	go/compress/flate/huffman_bit_writer.go \
 	go/compress/flate/huffman_code.go \
 	go/compress/flate/inflate.go \
@@ -951,6 +1091,7 @@ go_container_ring_files = \
 go_crypto_aes_files = \
 	go/crypto/aes/block.go \
 	go/crypto/aes/cipher.go \
+	go/crypto/aes/cipher_generic.go \
 	go/crypto/aes/const.go
 go_crypto_cipher_files = \
 	go/crypto/cipher/cbc.go \
@@ -980,7 +1121,8 @@ go_crypto_rand_files = \
 	go/crypto/rand/rand_unix.go \
 	go/crypto/rand/util.go
 go_crypto_rc4_files = \
-	go/crypto/rc4/rc4.go
+	go/crypto/rc4/rc4.go \
+	go/crypto/rc4/rc4_ref.go
 go_crypto_rsa_files = \
 	go/crypto/rsa/pkcs1v15.go \
 	go/crypto/rsa/rsa.go
@@ -1005,13 +1147,16 @@ go_crypto_tls_files = \
 	go/crypto/tls/handshake_server.go \
 	go/crypto/tls/key_agreement.go \
 	go/crypto/tls/prf.go \
+	go/crypto/tls/ticket.go \
 	go/crypto/tls/tls.go
 go_crypto_x509_files = \
 	go/crypto/x509/cert_pool.go \
+	go/crypto/x509/pem_decrypt.go \
 	go/crypto/x509/pkcs1.go \
 	go/crypto/x509/pkcs8.go \
 	go/crypto/x509/root.go \
 	go/crypto/x509/root_unix.go \
+	go/crypto/x509/sec1.go \
 	go/crypto/x509/verify.go \
 	go/crypto/x509/x509.go
 
@@ -1036,8 +1181,7 @@ go_debug_dwarf_files = \
 	go/debug/dwarf/unit.go
 go_debug_elf_files = \
 	go/debug/elf/elf.go \
-	go/debug/elf/file.go \
-	go/debug/elf/runtime.go
+	go/debug/elf/file.go
 go_debug_gosym_files = \
 	go/debug/gosym/pclntab.go \
 	go/debug/gosym/symtab.go
@@ -1089,31 +1233,6 @@ go_encoding_xml_files = \
 	go/encoding/xml/typeinfo.go \
 	go/encoding/xml/xml.go
 
-go_exp_ebnf_files = \
-	go/exp/ebnf/ebnf.go \
-	go/exp/ebnf/parser.go
-go_exp_html_files = \
-	go/exp/html/const.go \
-	go/exp/html/doc.go \
-	go/exp/html/doctype.go \
-	go/exp/html/entity.go \
-	go/exp/html/escape.go \
-	go/exp/html/foreign.go \
-	go/exp/html/node.go \
-	go/exp/html/parse.go \
-	go/exp/html/render.go \
-	go/exp/html/token.go
-go_exp_inotify_files = \
-	go/exp/inotify/inotify_linux.go
-go_exp_norm_files = \
-	go/exp/norm/composition.go \
-	go/exp/norm/forminfo.go \
-	go/exp/norm/input.go \
-	go/exp/norm/iter.go \
-	go/exp/norm/normalize.go \
-	go/exp/norm/readwriter.go \
-	go/exp/norm/tables.go \
-	go/exp/norm/trie.go
 go_exp_proxy_files = \
 	go/exp/proxy/direct.go \
 	go/exp/proxy/per_host.go \
@@ -1122,18 +1241,10 @@ go_exp_proxy_files = \
 go_exp_terminal_files = \
 	go/exp/terminal/terminal.go \
 	go/exp/terminal/util.go
-go_exp_types_files = \
-	go/exp/types/check.go \
-	go/exp/types/const.go \
-	go/exp/types/exportdata.go \
-	go/exp/types/gcimporter.go \
-	go/exp/types/types.go \
-	go/exp/types/universe.go
-go_exp_utf8string_files = \
-	go/exp/utf8string/string.go
 
 go_go_ast_files = \
 	go/go/ast/ast.go \
+	go/go/ast/commentmap.go \
 	go/go/ast/filter.go \
 	go/go/ast/import.go \
 	go/go/ast/print.go \
@@ -1143,7 +1254,8 @@ go_go_ast_files = \
 go_go_build_files = \
 	go/go/build/build.go \
 	go/go/build/doc.go \
-	syslist.go
+	go/go/build/read.go \
+	go/go/build/syslist.go
 go_go_doc_files = \
 	go/go/doc/comment.go \
 	go/go/doc/doc.go \
@@ -1152,6 +1264,8 @@ go_go_doc_files = \
 	go/go/doc/filter.go \
 	go/go/doc/reader.go \
 	go/go/doc/synopsis.go
+go_go_format_files = \
+	go/go/format/format.go
 go_go_parser_files = \
 	go/go/parser/interface.go \
 	go/go/parser/parser.go
@@ -1205,9 +1319,11 @@ go_image_jpeg_files = \
 	go/image/jpeg/huffman.go \
 	go/image/jpeg/idct.go \
 	go/image/jpeg/reader.go \
+	go/image/jpeg/scan.go \
 	go/image/jpeg/writer.go
 
 go_image_png_files = \
+	go/image/png/paeth.go \
 	go/image/png/reader.go \
 	go/image/png/writer.go
 
@@ -1216,6 +1332,7 @@ go_index_suffixarray_files = \
 	go/index/suffixarray/suffixarray.go
 
 go_io_ioutil_files = \
+	go/io/ioutil/blackhole.go \
 	go/io/ioutil/ioutil.go \
 	go/io/ioutil/tempfile.go
 
@@ -1249,6 +1366,7 @@ go_math_rand_files = \
 go_mime_multipart_files = \
 	go/mime/multipart/formdata.go \
 	go/mime/multipart/multipart.go \
+	go/mime/multipart/quotedprintable.go \
 	go/mime/multipart/writer.go
 
 go_net_http_files = \
@@ -1284,6 +1402,9 @@ go_net_url_files = \
 go_net_http_cgi_files = \
 	go/net/http/cgi/child.go \
 	go/net/http/cgi/host.go
+go_net_http_cookiejar_files = \
+	go/net/http/cookiejar/jar.go \
+	go/net/http/cookiejar/punycode.go
 go_net_http_fcgi_files = \
 	go/net/http/fcgi/child.go \
 	go/net/http/fcgi/fcgi.go
@@ -1299,10 +1420,6 @@ go_net_http_httputil_files = \
 	go/net/http/httputil/reverseproxy.go
 
 
-go_old_netchan_files = \
-	go/old/netchan/common.go \
-	go/old/netchan/export.go \
-	go/old/netchan/import.go
 go_old_regexp_files = \
 	go/old/regexp/regexp.go
 go_old_template_files = \
@@ -1321,6 +1438,7 @@ go_os_signal_files = \
 
 go_os_user_files = \
 	go/os/user/user.go \
+	go/os/user/lookup.go \
 	go/os/user/lookup_unix.go
 
 go_path_filepath_files = \
@@ -1331,6 +1449,7 @@ go_path_filepath_files = \
 
 go_regexp_syntax_files = \
 	go/regexp/syntax/compile.go \
+	go/regexp/syntax/doc.go \
 	go/regexp/syntax/parse.go \
 	go/regexp/syntax/perl_groups.go \
 	go/regexp/syntax/prog.go \
@@ -1342,6 +1461,7 @@ go_net_rpc_jsonrpc_files = \
 	go/net/rpc/jsonrpc/server.go
 
 go_runtime_debug_files = \
+	go/runtime/debug/garbage.go \
 	go/runtime/debug/stack.go
 go_runtime_pprof_files = \
 	go/runtime/pprof/pprof.go
@@ -1479,6 +1599,13 @@ endif
 endif
 endif
 
+# Define socket functions.
+if LIBGO_IS_SOLARIS
+syscall_socket_os_file = go/syscall/socket_xnet.go
+else
+syscall_socket_os_file = go/syscall/socket_posix.go
+endif
+
 # Support for uname.
 if LIBGO_IS_SOLARIS
 if LIBGO_IS_386
@@ -1512,11 +1639,26 @@ else
 syscall_lsf_file =
 endif
 
+# GNU/Linux specific utimesnano support.
+if LIBGO_IS_LINUX
+syscall_utimesnano_file = go/syscall/libcall_linux_utimesnano.go
+else
+syscall_utimesnano_file = go/syscall/libcall_posix_utimesnano.go
+endif
+
+# Test files.
+if LIBGO_IS_LINUX
+syscall_creds_test_file = go/syscall/creds_test.go
+else
+syscall_creds_test_file =
+endif
+
 go_base_syscall_files = \
 	go/syscall/env_unix.go \
 	go/syscall/syscall_errno.go \
 	go/syscall/libcall_support.go \
 	go/syscall/libcall_posix.go \
+	go/syscall/race0.go \
 	go/syscall/socket.go \
 	go/syscall/sockcmsg_unix.go \
 	go/syscall/str.go \
@@ -1530,9 +1672,11 @@ go_base_syscall_files = \
 	$(syscall_errstr_file) \
 	$(syscall_size_file) \
 	$(syscall_socket_file) \
+	$(syscall_socket_os_file) \
 	$(syscall_uname_file) \
 	$(syscall_netlink_file) \
 	$(syscall_lsf_file) \
+	$(syscall_utimesnano_file) \
 	$(GO_LIBCALL_OS_FILE) \
 	$(GO_LIBCALL_OS_ARCH_FILE) \
 	$(GO_SYSCALL_OS_FILE) \
@@ -1548,12 +1692,23 @@ go_syscall_c_files = \
 	go/syscall/signame.c \
 	$(syscall_wait_c_file)
 
+go_syscall_test_files = \
+	$(syscall_creds_test_file) \
+	go/syscall/passfd_test.go
+
 libcalls.go: s-libcalls; @true
-s-libcalls: Makefile go/syscall/mksyscall.awk $(go_base_syscall_files)
+s-libcalls: libcalls-list go/syscall/mksyscall.awk $(go_base_syscall_files)
 	rm -f libcalls.go.tmp
-	files=`echo $^ | sed -e 's/Makefile//' -e 's|[^ ]*go/syscall/mksyscall.awk||'`; \
+	files=`echo $^ | sed -e 's/libcalls-list//' -e 's|[^ ]*go/syscall/mksyscall.awk||'`; \
 	$(AWK) -f $(srcdir)/go/syscall/mksyscall.awk $${files} > libcalls.go.tmp
 	$(SHELL) $(srcdir)/../move-if-change libcalls.go.tmp libcalls.go
+	$(STAMP) $@
+
+libcalls-list: s-libcalls-list; @true
+s-libcalls-list: Makefile
+	rm -f libcalls-list.tmp
+	echo $(go_base_syscall_files) > libcalls-list.tmp
+	$(SHELL) $(srcdir)/../move-if-change libcalls-list.tmp libcalls-list
 	$(STAMP) $@
 
 syscall_arch.go: s-syscall_arch; @true
@@ -1626,6 +1781,7 @@ libgo_go_objs = \
 	os.lo \
 	path.lo \
 	reflect-go.lo \
+	reflect/makefunc.lo \
 	regexp.lo \
 	runtime-go.lo \
 	sort.lo \
@@ -1685,17 +1841,13 @@ libgo_go_objs = \
 	encoding/json.lo \
 	encoding/pem.lo \
 	encoding/xml.lo \
-	exp/ebnf.lo \
-	exp/html.lo \
-	exp/norm.lo \
 	exp/proxy.lo \
 	exp/terminal.lo \
-	exp/types.lo \
-	exp/utf8string.lo \
 	html/template.lo \
 	go/ast.lo \
 	go/build.lo \
 	go/doc.lo \
+	go/format.lo \
 	go/parser.lo \
 	go/printer.lo \
 	go/scanner.lo \
@@ -1705,6 +1857,7 @@ libgo_go_objs = \
 	hash/crc64.lo \
 	hash/fnv.lo \
 	net/http/cgi.lo \
+	net/http/cookiejar.lo \
 	net/http/fcgi.lo \
 	net/http/httptest.lo \
 	net/http/httputil.lo \
@@ -1728,7 +1881,6 @@ libgo_go_objs = \
 	net/smtp.lo \
 	net/textproto.lo \
 	net/url.lo \
-	old/netchan.lo \
 	old/regexp.lo \
 	old/template.lo \
 	os/exec.lo \
@@ -1753,10 +1905,13 @@ libgo_go_objs = \
 
 libgo_la_SOURCES = $(runtime_files)
 
-libgo_la_LDFLAGS = $(PTHREAD_CFLAGS) $(AM_LDFLAGS)
+libgo_la_LDFLAGS = \
+	-version-info $(libtool_VERSION) $(PTHREAD_CFLAGS) $(AM_LDFLAGS)
 
 libgo_la_LIBADD = \
-	$(libgo_go_objs) $(LIBFFI) $(PTHREAD_LIBS) $(MATH_LIBS) $(NET_LIBS)
+	$(libgo_go_objs) ../libbacktrace/libbacktrace.la \
+	../libatomic/libatomic_convenience.la \
+	$(LIBFFI) $(PTHREAD_LIBS) $(MATH_LIBS) $(NET_LIBS)
 
 libgobegin_a_SOURCES = \
 	runtime/go-main.c
@@ -1785,19 +1940,13 @@ BUILDPACKAGE = \
 	files=`echo $^ | sed -e 's/[^ ]*\.gox//g'`; \
 	$(LTGOCOMPILE) -I . -c -fgo-pkgpath=`echo $@ | sed -e 's/.lo$$//' -e 's/-go$$//'` -o $@ $$files
 
-if LIBGO_IS_RTEMS
-use_dejagnu = yes
-else
-use_dejagnu = no
-endif
-
 GOTESTFLAGS =
 
 # Check a package.
 CHECK = \
 	GC="$(GOC) $(GOCFLAGS) $($(subst /,_,$@)_GOCFLAGS) -L `${PWD_COMMAND}` -L `${PWD_COMMAND}`/.libs"; \
 	export GC; \
-	GOLIBS="$(MATH_LIBS) $(NET_LIBS)"; \
+	GOLIBS="$(MATH_LIBS) $(NET_LIBS) $(LIBS)"; \
 	export GOLIBS; \
 	RUNTESTFLAGS="$(RUNTESTFLAGS)"; \
 	export RUNTESTFLAGS; \
@@ -1809,10 +1958,10 @@ CHECK = \
 	export LD_LIBRARY_PATH; \
 	$(MKDIR_P) $(@D); \
 	rm -f $@-testsum $@-testlog; \
-	if test "$(use_dejagnu)" = "yes"; then \
-	  $(SHELL) $(srcdir)/testsuite/gotest --dejagnu=yes --basedir=$(srcdir) --srcdir=$(srcdir)/go/$(@D) --pkgpath="$(@D)" --pkgfiles="$(go_$(subst /,_,$(@D))_files)" --testname="$(@D)" --goarch="$(GOARCH)" $(GOTESTFLAGS); \
+	if test "$(USE_DEJAGNU)" = "yes"; then \
+	  $(SHELL) $(srcdir)/testsuite/gotest --dejagnu=yes --basedir=$(srcdir) --srcdir=$(srcdir)/go/$(@D) --pkgpath="$(@D)" --pkgfiles="$(go_$(subst /,_,$(@D))_files)" --testname="$(@D)" --goarch="$(GOARCH)" $(GOTESTFLAGS) $(go_$(subst /,_,$(@D))_test_files); \
 	else \
-	  if $(SHELL) $(srcdir)/testsuite/gotest --basedir=$(srcdir) --srcdir=$(srcdir)/go/$(@D) --pkgpath="$(@D)" --pkgfiles="$(go_$(subst /,_,$(@D))_files)" --goarch="$(GOARCH)" $(GOTESTFLAGS) >>$@-testlog 2>&1; then \
+	  if $(SHELL) $(srcdir)/testsuite/gotest --basedir=$(srcdir) --srcdir=$(srcdir)/go/$(@D) --pkgpath="$(@D)" --pkgfiles="$(go_$(subst /,_,$(@D))_files)" --goarch="$(GOARCH)" $(GOTESTFLAGS) $(go_$(subst /,_,$(@D))_test_files) >>$@-testlog 2>&1; then \
 	    echo "PASS: $(@D)" >> $@-testlog; \
 	    echo "PASS: $(@D)"; \
 	    echo "PASS: $(@D)" > $@-testsum; \
@@ -2019,6 +2168,9 @@ reflect-go.lo: $(go_reflect_files)
 	$(BUILDPACKAGE)
 reflect/check: $(CHECK_DEPS)
 	@$(CHECK)
+reflect/makefunc.lo: $(go_reflect_makefunc_s_file)
+	@$(MKDIR_P) reflect
+	$(LTCOMPILE) -c -o $@ $<
 .PHONY: reflect/check
 
 @go_include@ regexp.lo.dep
@@ -2516,33 +2668,6 @@ encoding/xml/check: $(CHECK_DEPS)
 	@$(CHECK)
 .PHONY: encoding/xml/check
 
-@go_include@ exp/ebnf.lo.dep
-exp/ebnf.lo.dep: $(go_exp_ebnf_files)
-	$(BUILDDEPS)
-exp/ebnf.lo: $(go_exp_ebnf_files)
-	$(BUILDPACKAGE)
-exp/ebnf/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: exp/ebnf/check
-
-@go_include@ exp/html.lo.dep
-exp/html.lo.dep: $(go_exp_html_files)
-	$(BUILDDEPS)
-exp/html.lo: $(go_exp_html_files)
-	$(BUILDPACKAGE)
-exp/html/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: exp/html/check
-
-@go_include@ exp/norm.lo.dep
-exp/norm.lo.dep: $(go_exp_norm_files)
-	$(BUILDDEPS)
-exp/norm.lo: $(go_exp_norm_files)
-	$(BUILDPACKAGE)
-exp/norm/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: exp/norm/check
-
 @go_include@ exp/proxy.lo.dep
 exp/proxy.lo.dep: $(go_exp_proxy_files)
 	$(BUILDDEPS)
@@ -2560,33 +2685,6 @@ exp/terminal.lo: $(go_exp_terminal_files)
 exp/terminal/check: $(CHECK_DEPS)
 	@$(CHECK)
 .PHONY: exp/terminal/check
-
-@go_include@ exp/types.lo.dep
-exp/types.lo.dep: $(go_exp_types_files)
-	$(BUILDDEPS)
-exp/types.lo: $(go_exp_types_files)
-	$(BUILDPACKAGE)
-exp/types/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: exp/types/check
-
-@go_include@ exp/utf8string.lo.dep
-exp/utf8string.lo.dep: $(go_exp_utf8string_files)
-	$(BUILDDEPS)
-exp/utf8string.lo: $(go_exp_utf8string_files)
-	$(BUILDPACKAGE)
-exp/utf8string/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: exp/utf8string/check
-
-@go_include@ exp/inotify.lo.dep
-exp/inotify.lo.dep: $(go_exp_inotify_files)
-	$(BUILDDEPS)
-exp/inotify.lo: $(go_exp_inotify_files)
-	$(BUILDPACKAGE)
-exp/inotify/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: exp/inotify/check
 
 @go_include@ html/template.lo.dep
 html/template.lo.dep: $(go_html_template_files)
@@ -2615,15 +2713,6 @@ go/build/check: $(CHECK_DEPS)
 	@$(CHECK)
 .PHONY: go/build/check
 
-syslist.go: s-syslist; @true
-s-syslist: Makefile
-	echo '// Generated automatically by make.' >syslist.go.tmp
-	echo 'package build' >>syslist.go.tmp
-	echo 'const goosList = "$(GOOS)"' >>syslist.go.tmp
-	echo 'const goarchList = "$(GOARCH)"' >>syslist.go.tmp
-	$(SHELL) $(srcdir)/../move-if-change syslist.go.tmp syslist.go
-	$(STAMP) $@
-
 @go_include@ go/doc.lo.dep
 go/doc.lo.dep: $(go_go_doc_files)
 	$(BUILDDEPS)
@@ -2632,6 +2721,15 @@ go/doc.lo: $(go_go_doc_files)
 go/doc/check: $(CHECK_DEPS)
 	@$(CHECK)
 .PHONY: go/doc/check
+
+@go_include@ go/format.lo.dep
+go/format.lo.dep: $(go_go_format_files)
+	$(BUILDDEPS)
+go/format.lo: $(go_go_format_files)
+	$(BUILDPACKAGE)
+go/format/check: $(CHECK_DEPS)
+	@$(CHECK)
+.PHONY: go/format/check
 
 @go_include@ go/parser.lo.dep
 go/parser.lo.dep: $(go_go_parser_files)
@@ -2879,6 +2977,15 @@ net/http/cgi/check: $(CHECK_DEPS)
 	@$(CHECK)
 .PHONY: net/http/cgi/check
 
+@go_include@ net/http/cookiejar.lo.dep
+net/http/cookiejar.lo.dep: $(go_net_http_cookiejar_files)
+	$(BUILDDEPS)
+net/http/cookiejar.lo: $(go_net_http_cookiejar_files)
+	$(BUILDPACKAGE)
+net/http/cookiejar/check: $(CHECK_DEPS)
+	@$(CHECK)
+.PHONY: net/http/cookiejar/check
+
 @go_include@ net/http/fcgi.lo.dep
 net/http/fcgi.lo.dep: $(go_net_http_fcgi_files)
 	$(BUILDDEPS)
@@ -2923,15 +3030,6 @@ net/rpc/jsonrpc.lo: $(go_net_rpc_jsonrpc_files)
 net/rpc/jsonrpc/check: $(CHECK_DEPS)
 	@$(CHECK)
 .PHONY: net/rpc/jsonrpc/check
-
-@go_include@ old/netchan.lo.dep
-old/netchan.lo.dep: $(go_old_netchan_files)
-	$(BUILDDEPS)
-old/netchan.lo: $(go_old_netchan_files)
-	$(BUILDPACKAGE)
-old/netchan/check: $(CHECK_DEPS)
-	@$(CHECK)
-.PHONY: old/netchan/check
 
 @go_include@ old/regexp.lo.dep
 old/regexp.lo.dep: $(go_old_regexp_files)
@@ -3114,6 +3212,9 @@ syscall/signame.lo: go/syscall/signame.c
 syscall/wait.lo: go/syscall/wait.c
 	@$(MKDIR_P) syscall
 	$(LTCOMPILE) -c -o $@ $<
+syscall/check: $(CHECK_DEPS)
+	@$(CHECK)
+.PHONY: syscall/check
 
 # How to build a .gox file from a .lo file.
 BUILDGOX = \
@@ -3278,21 +3379,9 @@ encoding/pem.gox: encoding/pem.lo
 encoding/xml.gox: encoding/xml.lo
 	$(BUILDGOX)
 
-exp/ebnf.gox: exp/ebnf.lo
-	$(BUILDGOX)
-exp/html.gox: exp/html.lo
-	$(BUILDGOX)
-exp/inotify.gox: exp/inotify.lo
-	$(BUILDGOX)
-exp/norm.gox: exp/norm.lo
-	$(BUILDGOX)
 exp/proxy.gox: exp/proxy.lo
 	$(BUILDGOX)
 exp/terminal.gox: exp/terminal.lo
-	$(BUILDGOX)
-exp/types.gox: exp/types.lo
-	$(BUILDGOX)
-exp/utf8string.gox: exp/utf8string.lo	
 	$(BUILDGOX)
 
 html/template.gox: html/template.lo
@@ -3303,6 +3392,8 @@ go/ast.gox: go/ast.lo
 go/build.gox: go/build.lo
 	$(BUILDGOX)
 go/doc.gox: go/doc.lo
+	$(BUILDGOX)
+go/format.gox: go/format.lo
 	$(BUILDGOX)
 go/parser.gox: go/parser.lo
 	$(BUILDGOX)
@@ -3367,6 +3458,8 @@ net/url.gox: net/url.lo
 
 net/http/cgi.gox: net/http/cgi.lo
 	$(BUILDGOX)
+net/http/cookiejar.gox: net/http/cookiejar.lo
+	$(BUILDGOX)
 net/http/fcgi.gox: net/http/fcgi.lo
 	$(BUILDGOX)
 net/http/httptest.gox: net/http/httptest.lo
@@ -3379,8 +3472,6 @@ net/http/pprof.gox: net/http/pprof.lo
 net/rpc/jsonrpc.gox: net/rpc/jsonrpc.lo
 	$(BUILDGOX)
 
-old/netchan.gox: old/netchan.lo
-	$(BUILDGOX)
 old/regexp.gox: old/regexp.lo
 	$(BUILDGOX)
 old/template.gox: old/template.lo
@@ -3426,13 +3517,6 @@ unicode/utf16.gox: unicode/utf16.lo
 unicode/utf8.gox: unicode/utf8.lo
 	$(BUILDGOX)
 
-if LIBGO_IS_LINUX
-# exp_inotify_check = exp/inotify/check
-exp_inotify_check =
-else
-exp_inotify_check =
-endif
-
 TEST_PACKAGES = \
 	bufio/check \
 	bytes/check \
@@ -3456,6 +3540,7 @@ TEST_PACKAGES = \
 	strconv/check \
 	strings/check \
 	sync/check \
+	syscall/check \
 	time/check \
 	unicode/check \
 	archive/tar/check \
@@ -3502,22 +3587,17 @@ TEST_PACKAGES = \
 	encoding/json/check \
 	encoding/pem/check \
 	encoding/xml/check \
-	exp/ebnf/check \
-	exp/html/check \
-	$(exp_inotify_check) \
-	exp/norm/check \
 	exp/proxy/check \
 	exp/terminal/check \
-	exp/utf8string/check \
 	html/template/check \
 	go/ast/check \
 	$(go_build_check_omitted_since_it_calls_6g) \
 	go/doc/check \
+	go/format/check \
 	go/parser/check \
 	go/printer/check \
 	go/scanner/check \
 	go/token/check \
-	$(go_types_check_omitted_since_it_calls_6g) \
 	hash/adler32/check \
 	hash/crc32/check \
 	hash/crc64/check \
@@ -3535,6 +3615,7 @@ TEST_PACKAGES = \
 	mime/multipart/check \
 	net/http/check \
 	net/http/cgi/check \
+	net/http/cookiejar/check \
 	net/http/fcgi/check \
 	net/http/httptest/check \
 	net/http/httputil/check \
@@ -3544,7 +3625,6 @@ TEST_PACKAGES = \
 	net/textproto/check \
 	net/url/check \
 	net/rpc/jsonrpc/check \
-	old/netchan/check \
 	old/regexp/check \
 	old/template/check \
 	os/exec/check \
@@ -3573,7 +3653,10 @@ check-head:
 	@echo >> libgo.head
 
 check-tail: check-recursive check-multi
-	@lib=`${PWD_COMMAND} | sed -e 's,^.*/\([^/][^/]*\)$$,\1,'`; \
+	@if test "$(USE_DEJAGNU)" = "yes"; then \
+	  exit 0; \
+	fi; \
+	lib=`${PWD_COMMAND} | sed -e 's,^.*/\([^/][^/]*\)$$,\1,'`; \
 	for dir in . $(MULTIDIRS); do \
 	  mv ../$${dir}/$${lib}/libgo.sum ../$${dir}/$${lib}/libgo.sum.sep; \
 	  mv ../$${dir}/$${lib}/libgo.log ../$${dir}/$${lib}/libgo.log.sep; \

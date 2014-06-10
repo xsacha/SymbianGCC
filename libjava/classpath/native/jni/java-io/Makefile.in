@@ -40,9 +40,6 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/../../config/depstand.m4 \
 	$(top_srcdir)/../../config/lead-dot.m4 \
-	$(top_srcdir)/../../config/lib-ld.m4 \
-	$(top_srcdir)/../../config/lib-link.m4 \
-	$(top_srcdir)/../../config/lib-prefix.m4 \
 	$(top_srcdir)/../../config/multi.m4 \
 	$(top_srcdir)/../../config/no-executables.m4 \
 	$(top_srcdir)/../../config/override.m4 \
@@ -61,7 +58,9 @@ am__aclocal_m4_deps = $(top_srcdir)/../../config/depstand.m4 \
 	$(top_srcdir)/m4/ax_create_stdint_h.m4 \
 	$(top_srcdir)/m4/ax_func_which_gethostbyname_r.m4 \
 	$(top_srcdir)/m4/gcc_attribute.m4 $(top_srcdir)/m4/iconv.m4 \
-	$(top_srcdir)/m4/pkg.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/pkg.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(SHELL) $(top_srcdir)/../../mkinstalldirs
@@ -94,7 +93,7 @@ LTLIBRARIES = $(nativeexeclib_LTLIBRARIES)
 libjavaio_la_DEPENDENCIES =  \
 	$(top_builddir)/native/jni/classpath/jcl.lo \
 	$(top_builddir)/native/jni/native-lib/libclasspathnative.la
-am_libjavaio_la_OBJECTS = java_io_VMFile.lo \
+am_libjavaio_la_OBJECTS = java_io_VMConsole.lo java_io_VMFile.lo \
 	java_io_VMObjectInputStream.lo java_io_VMObjectStreamClass.lo
 libjavaio_la_OBJECTS = $(am_libjavaio_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/include
@@ -211,6 +210,7 @@ MAKEINFO = @MAKEINFO@
 MKDIR = @MKDIR@
 MKDIR_P = @MKDIR_P@
 MOC = @MOC@
+MOC4 = @MOC4@
 MOZILLA_CFLAGS = @MOZILLA_CFLAGS@
 MOZILLA_LIBS = @MOZILLA_LIBS@
 NM = @NM@
@@ -324,7 +324,8 @@ top_srcdir = @top_srcdir@
 uudecode = @uudecode@
 vm_classes = @vm_classes@
 nativeexeclib_LTLIBRARIES = libjavaio.la 
-libjavaio_la_SOURCES = java_io_VMFile.c \
+libjavaio_la_SOURCES = java_io_VMConsole.c \
+			java_io_VMFile.c \
 			java_io_VMObjectInputStream.c \
 			java_io_VMObjectStreamClass.c
 
@@ -410,6 +411,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/java_io_VMConsole.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/java_io_VMFile.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/java_io_VMObjectInputStream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/java_io_VMObjectStreamClass.Plo@am__quote@

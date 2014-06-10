@@ -1,5 +1,5 @@
 /* PR tree-optimization/46309 */
-/* { dg-do compile } */
+/* { dg-do compile { target { ! { cris*-*-* } } } } */
 /* { dg-options "-O2 -fdump-tree-reassoc-details" } */
 /* The transformation depends on BRANCH_COST being greater than 1
    (see the notes in the PR), so try to force that.  */
@@ -65,6 +65,6 @@ f6 (unsigned int a)
 /* { dg-final { scan-tree-dump-times "Optimizing range tests a_\[0-9\]*.D. -.1, 1. and -.2, 2.\[\n\r\]* into" 1 "reassoc1" } } */
 /* { dg-final { scan-tree-dump-times "Optimizing range tests a_\[0-9\]*.D. -.0, 31. and -.64, 95.\[\n\r\]* into" 2 "reassoc1" } } */
 /* { dg-final { scan-tree-dump-times "Optimizing range tests a_\[0-9\]*.D. -.128, 159. and -.192, 223.\[\n\r\]* into" 1 "reassoc1" } } */
-/* { dg-final { scan-tree-dump-times "Optimizing range tests D.\[0-9\]*_\[0-9\]* -.0, 31. and -.128, 159.\[\n\r\]* into" 1 "reassoc2" } } */
+/* { dg-final { scan-tree-dump-times "Optimizing range tests \[^\r\n\]*_\[0-9\]* -.0, 31. and -.128, 159.\[\n\r\]* into" 1 "reassoc2" } } */
 /* { dg-final { cleanup-tree-dump "reassoc1" } } */
 /* { dg-final { cleanup-tree-dump "reassoc2" } } */

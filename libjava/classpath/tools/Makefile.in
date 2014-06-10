@@ -54,9 +54,6 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/../../config/depstand.m4 \
 	$(top_srcdir)/../../config/lead-dot.m4 \
-	$(top_srcdir)/../../config/lib-ld.m4 \
-	$(top_srcdir)/../../config/lib-link.m4 \
-	$(top_srcdir)/../../config/lib-prefix.m4 \
 	$(top_srcdir)/../../config/multi.m4 \
 	$(top_srcdir)/../../config/no-executables.m4 \
 	$(top_srcdir)/../../config/override.m4 \
@@ -75,7 +72,9 @@ am__aclocal_m4_deps = $(top_srcdir)/../../config/depstand.m4 \
 	$(top_srcdir)/m4/ax_create_stdint_h.m4 \
 	$(top_srcdir)/m4/ax_func_which_gethostbyname_r.m4 \
 	$(top_srcdir)/m4/gcc_attribute.m4 $(top_srcdir)/m4/iconv.m4 \
-	$(top_srcdir)/m4/pkg.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/pkg.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(SHELL) $(top_srcdir)/../../mkinstalldirs
@@ -323,6 +322,7 @@ MAKEINFO = @MAKEINFO@
 MKDIR = @MKDIR@
 MKDIR_P = @MKDIR_P@
 MOC = @MOC@
+MOC4 = @MOC4@
 MOZILLA_CFLAGS = @MOZILLA_CFLAGS@
 MOZILLA_LIBS = @MOZILLA_LIBS@
 NM = @NM@
@@ -530,7 +530,7 @@ EXTRA_DIST = toolwrapper.c gappletviewer.in gjarsigner.in gkeytool.in \
 
 
 # All our example java source files
-TOOLS_JAVA_FILES = $(srcdir)/gnu/classpath/tools/*/*.java \
+TOOLS_JAVA_FILES = \
 	$(srcdir)/gnu/classpath/tools/*.java \
 	$(srcdir)/gnu/classpath/tools/*/*.java \
 	$(srcdir)/gnu/classpath/tools/*/*/*.java \
@@ -564,8 +564,8 @@ PROPERTY_FILES = $(srcdir)/external/asm/org/objectweb/asm/optimizer/shrink.prope
 	$(srcdir)/resource/gnu/classpath/tools/keytool/messages.properties \
 	$(srcdir)/resource/gnu/classpath/tools/native2ascii/messages.properties \
 	$(srcdir)/resource/gnu/classpath/tools/appletviewer/messages.properties \
-	$(srcdir)/resource/gnu/classpath/tools/common/Messages.properties \
-	$(srcdir)/resource/gnu/classpath/tools/getopt/Messages.properties \
+	$(srcdir)/resource/gnu/classpath/tools/common/messages.properties \
+	$(srcdir)/resource/gnu/classpath/tools/getopt/messages.properties \
 	$(srcdir)/resource/gnu/classpath/tools/tnameserv/messages.properties \
 	$(srcdir)/resource/gnu/classpath/tools/jarsigner/messages.properties \
 	$(srcdir)/resource/gnu/classpath/tools/rmiregistry/messages.properties \
@@ -1327,7 +1327,9 @@ dist-hook:
 	    $(mkinstalldirs) $(distdir)/$$fdir; \
 	  fi; \
 	  echo "cp -p $$file $(distdir)/$$f"; \
-	  cp -p $$file $(distdir)/$$f; \
+	  if ! cp -p $$file $(distdir)/$$f; then \
+	    exit -1 ; \
+	  fi ; \
 	done
 
 # To generate the example zip just depend on the sources and ignore

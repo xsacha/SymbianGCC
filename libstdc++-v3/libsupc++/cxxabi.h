@@ -1,7 +1,6 @@
 // ABI Support -*- C++ -*-
 
-// Copyright (C) 2000, 2002, 2003, 2004, 2006, 2007, 2009, 2010, 2011
-// Free Software Foundation, Inc.
+// Copyright (C) 2000-2013 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -133,6 +132,10 @@ namespace __cxxabiv1
 
   int
   __cxa_finalize(void*);
+
+  // TLS destruction.
+  int
+  __cxa_thread_atexit(void (*)(void*), void*, void *) _GLIBCXX_NOTHROW;
 
   // Pure virtual functions.
   void
@@ -352,7 +355,11 @@ namespace __cxxabiv1
   {
   public:
     const __class_type_info* 	__base_type;  // Base class type.
+#ifdef _GLIBCXX_LLP64
+    long long			__offset_flags;  // Offset and info.
+#else
     long 			__offset_flags;  // Offset and info.
+#endif
 
     enum __offset_flags_masks
       {
@@ -686,6 +693,83 @@ namespace __gnu_cxx
     virtual ~recursive_init_error() throw ();
   };
 }
+
+#if defined(__arm__) && defined(__ARM_EABI__)
+
+// Also include the ARM specific routines.  This ensures they have
+// the correct visibility attributes.
+
+namespace __aeabiv1
+{
+  extern "C" void *
+  __aeabi_vec_ctor_nocookie_nodtor (void *array_address,
+				    abi::__cxa_cdtor_type constructor,
+				    size_t element_size,
+				    size_t element_count);
+  extern "C" void *
+  __aeabi_vec_ctor_cookie_nodtor (void *array_address,
+				  abi::__cxa_cdtor_type constructor,
+				  size_t element_size,
+				  size_t element_count);
+  
+  extern "C" void *
+  __aeabi_vec_cctor_nocookie_nodtor (void *dest_array,
+				     void *src_array, 
+				     size_t element_size, 
+				     size_t element_count,
+				     void *(*constructor) (void *, void *));
+
+  extern "C" void *
+  __aeabi_vec_new_cookie_noctor (size_t element_size, 
+				 size_t element_count);
+
+  extern "C" void *
+  __aeabi_vec_new_nocookie (size_t element_size, 
+			    size_t element_count,
+			    abi::__cxa_cdtor_type constructor);
+
+  extern "C" void *
+  __aeabi_vec_new_cookie_nodtor (size_t element_size, 
+				 size_t element_count,
+				 abi::__cxa_cdtor_type constructor);
+
+  extern "C" void *
+  __aeabi_vec_new_cookie(size_t element_size, 
+			 size_t element_count,
+			 abi::__cxa_cdtor_type constructor,
+			 abi::__cxa_cdtor_type destructor);
+  
+  extern "C" void *
+  __aeabi_vec_dtor (void *array_address, 
+		    abi::__cxa_cdtor_type destructor,
+		    size_t element_size, 
+		    size_t element_count);
+
+  extern "C" void *
+  __aeabi_vec_dtor_cookie (void *array_address, 
+			   abi::__cxa_cdtor_type destructor);
+  
+  extern "C" void
+  __aeabi_vec_delete (void *array_address, 
+		      abi::__cxa_cdtor_type destructor);
+
+  extern "C" void
+  __aeabi_vec_delete3 (void *array_address, 
+		       abi::__cxa_cdtor_type destructor,
+		       void (*dealloc) (void *, size_t));
+
+  extern "C" void
+  __aeabi_vec_delete3_nodtor (void *array_address,
+			      void (*dealloc) (void *, size_t));
+
+  extern "C" int
+  __aeabi_atexit (void *object, 
+		  void (*destructor) (void *),
+		  void *dso_handle) throw ();
+} // namespace __aeabiv1
+
+#endif // defined(__arm__) && defined(__ARM_EABI__)
+
 #endif // __cplusplus
 
 #pragma GCC visibility pop

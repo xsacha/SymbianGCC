@@ -121,16 +121,18 @@ static uintptr eod[3] = {0, 1, 0};
 // LostProfileData is a no-op function used in profiles
 // to mark the number of profiling stack traces that were
 // discarded due to slow data writers.
-static void LostProfileData(void) {
+static void
+LostProfileData(void)
+{
 }
 
-extern void runtime_SetCPUProfileRate(int32)
-     __asm__("runtime.SetCPUProfileRate");
+extern void runtime_SetCPUProfileRate(intgo)
+     __asm__ (GOSYM_PREFIX "runtime.SetCPUProfileRate");
 
 // SetCPUProfileRate sets the CPU profiling rate.
 // The user documentation is in debug.go.
 void
-runtime_SetCPUProfileRate(int32 hz)
+runtime_SetCPUProfileRate(intgo hz)
 {
 	uintptr *p;
 	uintptr n;
@@ -365,7 +367,7 @@ getprofile(Profile *p)
 		return ret;
 
 	// Wait for new log.
-	runtime_entersyscall();
+	runtime_entersyscallblock();
 	runtime_notesleep(&p->wait);
 	runtime_exitsyscall();
 	runtime_noteclear(&p->wait);
@@ -436,7 +438,7 @@ breakflush:
 }
 
 extern Slice runtime_CPUProfile(void)
-     __asm__("runtime.CPUProfile");
+     __asm__ (GOSYM_PREFIX "runtime.CPUProfile");
 
 // CPUProfile returns the next cpu profile block as a []byte.
 // The user documentation is in debug.go.

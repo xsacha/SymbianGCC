@@ -179,6 +179,12 @@ class Method
     this->stub_ = no;
   }
 
+  // Return true if this method should not participate in any
+  // interfaces.
+  bool
+  nointerface() const
+  { return this->do_nointerface(); }
+
  protected:
   // These objects are only built by the child classes.
   Method(const Field_indexes* field_indexes, unsigned int depth,
@@ -203,6 +209,10 @@ class Method
   // Bind a method to an object.
   virtual Expression*
   do_bind_method(Expression* expr, Location location) const = 0;
+
+  // Return whether this method should not participate in interfaces.
+  virtual bool
+  do_nointerface() const = 0;
 
  private:
   // The sequence of field indexes used for this method.  If this is
@@ -254,6 +264,10 @@ class Named_method : public Method
   Expression*
   do_bind_method(Expression* expr, Location location) const;
 
+  // Return whether this method should not participate in interfaces.
+  bool
+  do_nointerface() const;
+
  private:
   // The method itself.  For a method which needs a stub, this starts
   // out as the underlying method, and is later replaced with the stub
@@ -294,6 +308,11 @@ class Interface_method : public Method
   // Bind a method to an object.
   Expression*
   do_bind_method(Expression* expr, Location location) const;
+
+  // Return whether this method should not participate in interfaces.
+  bool
+  do_nointerface() const
+  { return false; }
 
  private:
   // The name of the interface method to call.
@@ -503,6 +522,14 @@ class Type
 
   static Type*
   make_forward_declaration(Named_object*);
+
+  // Make a builtin struct type from a list of fields.
+  static Struct_type*
+  make_builtin_struct_type(int nfields, ...);
+
+  // Make a builtin named type.
+  static Named_type*
+  make_builtin_named_type(const char* name, Type* type);
 
   // Traverse a type.
   static int
@@ -1016,14 +1043,6 @@ class Type
   type_descriptor_constructor(Gogo*, int runtime_type_kind, Named_type*,
 			      const Methods*, bool only_value_methods);
 
-  // Make a builtin struct type from a list of fields.
-  static Struct_type*
-  make_builtin_struct_type(int nfields, ...);
-
-  // Make a builtin named type.
-  static Named_type*
-  make_builtin_named_type(const char* name, Type* type);
-
   // For the benefit of child class reflection string generation.
   void
   append_reflection(const Type* type, Gogo* gogo, std::string* ret) const
@@ -1118,6 +1137,13 @@ class Type
   specific_type_functions(Gogo*, Named_type*, Function_type* hash_fntype,
 			  Function_type* equal_fntype, Named_object** hash_fn,
 			  Named_object** equal_fn);
+
+  void
+  write_named_hash(Gogo*, Named_type*, Function_type* hash_fntype,
+		   Function_type* equal_fntype);
+
+  void
+  write_named_equal(Gogo*, Named_type*);
 
   // Build a composite literal for the uncommon type information.
   Expression*
@@ -1698,7 +1724,8 @@ class Function_type : public Type
 		Typed_identifier_list* results, Location location)
     : Type(TYPE_FUNCTION),
       receiver_(receiver), parameters_(parameters), results_(results),
-      location_(location), is_varargs_(false), is_builtin_(false)
+      location_(location), is_varargs_(false), is_builtin_(false),
+      fnbtype_(NULL)
   { }
 
   // Get the receiver.
@@ -1770,14 +1797,31 @@ class Function_type : public Type
   Function_type*
   copy_with_receiver(Type*) const;
 
+  // Return a copy of this type with the receiver treated as the first
+  // parameter.  If WANT_POINTER_RECEIVER is true, the receiver is
+  // forced to be a pointer.
+  Function_type*
+  copy_with_receiver_as_param(bool want_pointer_receiver) const;
+
+  // Return a copy of this type ignoring any receiver and using dummy
+  // names for all parameters.  This is used for thunks for method
+  // values.
+  Function_type*
+  copy_with_names() const;
+
   static Type*
   make_function_type_descriptor_type();
+
+  // Return the backend representation of this function type. This is used
+  // as the real type of a backend function declaration or defintion.
+  Btype*
+  get_backend_fntype(Gogo*);
 
  protected:
   int
   do_traverse(Traverse*);
 
-  // A trampoline function has a pointer which matters for GC.
+  // A function descriptor may be allocated on the heap.
   bool
   do_has_pointer() const
   { return true; }
@@ -1826,6 +1870,9 @@ class Function_type : public Type
   // Whether this is a special builtin function which can not simply
   // be called.  This is used for len, cap, etc.
   bool is_builtin_;
+  // The backend representation of this type for backend function
+  // declarations and definitions.
+  Btype* fnbtype_;
 };
 
 // The type of a pointer.
@@ -1890,7 +1937,7 @@ class Struct_field
 {
  public:
   explicit Struct_field(const Typed_identifier& typed_identifier)
-    : typed_identifier_(typed_identifier), tag_(NULL)
+    : typed_identifier_(typed_identifier), tag_(NULL), is_imported_(false)
   { }
 
   // The field name.
@@ -1900,6 +1947,14 @@ class Struct_field
   // Return whether this struct field is named NAME.
   bool
   is_field_name(const std::string& name) const;
+
+  // Return whether this struct field is an unexported field named NAME.
+  bool
+  is_unexported_field_name(Gogo*, const std::string& name) const;
+
+  // Return whether this struct field is an embedded built-in type.
+  bool
+  is_embedded_builtin(Gogo*) const;
 
   // The field type.
   Type*
@@ -1934,6 +1989,11 @@ class Struct_field
   set_tag(const std::string& tag)
   { this->tag_ = new std::string(tag); }
 
+  // Record that this field is defined in an imported struct.
+  void
+  set_is_imported()
+  { this->is_imported_ = true; }
+
   // Set the type.  This is only used in error cases.
   void
   set_type(Type* type)
@@ -1944,6 +2004,8 @@ class Struct_field
   Typed_identifier typed_identifier_;
   // The field tag.  This is NULL if the field has no tag.
   std::string* tag_;
+  // Whether this field is defined in an imported struct.
+  bool is_imported_;
 };
 
 // A list of struct fields.
@@ -2012,8 +2074,7 @@ class Struct_type : public Type
  public:
   Struct_type(Struct_field_list* fields, Location location)
     : Type(TYPE_STRUCT),
-      fields_(fields), location_(location), all_methods_(NULL),
-      interface_method_tables_(NULL), pointer_interface_method_tables_(NULL)
+      fields_(fields), location_(location), all_methods_(NULL)
   { }
 
   // Return the field NAME.  This only looks at local fields, not at
@@ -2165,6 +2226,22 @@ class Struct_type : public Type
   do_export(Export*) const;
 
  private:
+  // Used to merge method sets of identical unnamed structs.
+  typedef Unordered_map_hash(Struct_type*, Struct_type*, Type_hash_identical,
+			     Type_identical) Identical_structs;
+
+  static Identical_structs identical_structs;
+
+  // Used to manage method tables for identical unnamed structs.
+  typedef std::pair<Interface_method_tables*, Interface_method_tables*>
+    Struct_method_table_pair;
+
+  typedef Unordered_map_hash(Struct_type*, Struct_method_table_pair*,
+			     Type_hash_identical, Type_identical)
+    Struct_method_tables;
+
+  static Struct_method_tables struct_method_tables;
+
   // Used to avoid infinite loops in field_reference_depth.
   struct Saw_named_type
   {
@@ -2183,13 +2260,6 @@ class Struct_type : public Type
   Location location_;
   // If this struct is unnamed, a list of methods.
   Methods* all_methods_;
-  // A mapping from interfaces to the associated interface method
-  // tables for this type.  Only used if this struct is unnamed.
-  Interface_method_tables* interface_method_tables_;
-  // A mapping from interfaces to the associated interface method
-  // tables for pointers to this type.  Only used if this struct is
-  // unnamed.
-  Interface_method_tables* pointer_interface_method_tables_;
 };
 
 // The type of an array.
@@ -2515,19 +2585,11 @@ class Interface_type : public Type
   // Return the list of methods.  This will return NULL for an empty
   // interface.
   const Typed_identifier_list*
-  methods() const
-  {
-    go_assert(this->methods_are_finalized_);
-    return this->all_methods_;
-  }
+  methods() const;
 
   // Return the number of methods.
   size_t
-  method_count() const
-  {
-    go_assert(this->methods_are_finalized_);
-    return this->all_methods_ == NULL ? 0 : this->all_methods_->size();
-  }
+  method_count() const;
 
   // Return the method NAME, or NULL.
   const Typed_identifier*
@@ -3003,6 +3065,9 @@ class Forward_declaration_type : public Type
  protected:
   int
   do_traverse(Traverse* traverse);
+
+  bool
+  do_verify();
 
   bool
   do_has_pointer() const

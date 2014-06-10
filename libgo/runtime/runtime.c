@@ -2,109 +2,44 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+#include <signal.h>
 #include <unistd.h>
+
+#include "config.h"
 
 #include "runtime.h"
 #include "array.h"
 #include "go-panic.h"
-#include "go-string.h"
 
-uint32	runtime_panicking;
-
+// The GOTRACEBACK environment variable controls the
+// behavior of a Go program that is crashing and exiting.
+//	GOTRACEBACK=0   suppress all tracebacks
+//	GOTRACEBACK=1   default behavior - show tracebacks but exclude runtime frames
+//	GOTRACEBACK=2   show tracebacks including runtime frames
+//	GOTRACEBACK=crash   show tracebacks including runtime frames, then crash (core dump etc)
 int32
-runtime_gotraceback(void)
+runtime_gotraceback(bool *crash)
 {
 	const byte *p;
 
+	if(crash != nil)
+		*crash = false;
 	p = runtime_getenv("GOTRACEBACK");
 	if(p == nil || p[0] == '\0')
 		return 1;	// default is on
+	if(runtime_strcmp((const char *)p, "crash") == 0) {
+		if(crash != nil)
+			*crash = true;
+		return 2;	// extra information
+	}
 	return runtime_atoi(p);
-}
-
-static Lock paniclk;
-
-void
-runtime_startpanic(void)
-{
-	M *m;
-
-	m = runtime_m();
-	if(m->dying) {
-		runtime_printf("panic during panic\n");
-		runtime_exit(3);
-	}
-	m->dying = 1;
-	runtime_xadd(&runtime_panicking, 1);
-	runtime_lock(&paniclk);
-}
-
-void
-runtime_dopanic(int32 unused __attribute__ ((unused)))
-{
-	G* g;
-	static bool didothers;
-
-	g = runtime_g();
-	if(g->sig != 0)
-		runtime_printf("[signal %x code=%p addr=%p]\n",
-			g->sig, (void*)(g->sigcode0), (void*)(g->sigcode1));
-
-	if(runtime_gotraceback()){
-		if(g != runtime_m()->g0) {
-			runtime_printf("\n");
-			runtime_goroutineheader(g);
-			runtime_traceback();
-			runtime_goroutinetrailer(g);
-		}
-		if(!didothers) {
-			didothers = true;
-			runtime_tracebackothers(g);
-		}
-	}
-
-	runtime_unlock(&paniclk);
-	if(runtime_xadd(&runtime_panicking, -1) != 0) {
-		// Some other m is panicking too.
-		// Let it print what it needs to print.
-		// Wait forever without chewing up cpu.
-		// It will exit when it's done.
-		static Lock deadlock;
-		runtime_lock(&deadlock);
-		runtime_lock(&deadlock);
-	}
-
-	runtime_exit(2);
-}
-
-void
-runtime_throw(const char *s)
-{
-	runtime_startpanic();
-	runtime_printf("throw: %s\n", s);
-	runtime_dopanic(0);
-	*(int32*)0 = 0;	// not reached
-	runtime_exit(1);	// even more not reached
-}
-
-void
-runtime_panicstring(const char *s)
-{
-	Eface err;
-
-	if(runtime_m()->gcing) {
-		runtime_printf("panic: %s\n", s);
-		runtime_throw("panic during gc");
-	}
-	runtime_newErrorString(runtime_gostringnocopy((const byte*)s), &err);
-	runtime_panic(err);
 }
 
 static int32	argc;
 static byte**	argv;
 
-extern Slice os_Args asm ("os.Args");
-extern Slice syscall_Envs asm ("syscall.Envs");
+extern Slice os_Args __asm__ (GOSYM_PREFIX "os.Args");
+extern Slice syscall_Envs __asm__ (GOSYM_PREFIX "syscall.Envs");
 
 void (*runtime_sysargs)(int32, uint8**);
 
@@ -116,6 +51,17 @@ runtime_args(int32 c, byte **v)
 	if(runtime_sysargs != nil)
 		runtime_sysargs(c, v);
 }
+
+byte*
+runtime_progname()
+{
+  return argc == 0 ? nil : argv[0];
+}
+
+// Information about what cpu features are available.
+// Set on startup in asm_{x86/amd64}.s.
+uint32 runtime_cpuid_ecx;
+uint32 runtime_cpuid_edx;
 
 void
 runtime_goargs(void)
@@ -152,33 +98,6 @@ runtime_goenvs_unix(void)
 	syscall_Envs.__capacity = n;
 }
 
-const byte*
-runtime_getenv(const char *s)
-{
-	int32 i, j, len;
-	const byte *v, *bs;
-	String* envv;
-	int32 envc;
-
-	bs = (const byte*)s;
-	len = runtime_findnull(bs);
-	envv = (String*)syscall_Envs.__values;
-	envc = syscall_Envs.__count;
-	for(i=0; i<envc; i++){
-		if(envv[i].__length <= len)
-			continue;
-		v = (const byte*)envv[i].__data;
-		for(j=0; j<len; j++)
-			if(bs[j] != v[j])
-				goto nomatch;
-		if(v[len] != '=')
-			goto nomatch;
-		return v+len+1;
-	nomatch:;
-	}
-	return nil;
-}
-
 int32
 runtime_atoi(const byte *p)
 {
@@ -188,6 +107,52 @@ runtime_atoi(const byte *p)
 	while('0' <= *p && *p <= '9')
 		n = n*10 + *p++ - '0';
 	return n;
+}
+
+static struct root_list runtime_roots =
+{ nil,
+  { { &syscall_Envs, sizeof syscall_Envs },
+    { &os_Args, sizeof os_Args },
+    { nil, 0 } },
+};
+
+static void
+TestAtomic64(void)
+{
+	uint64 z64, x64;
+
+	z64 = 42;
+	x64 = 0;
+	PREFETCH(&z64);
+	if(runtime_cas64(&z64, &x64, 1))
+		runtime_throw("cas64 failed");
+	if(x64 != 42)
+		runtime_throw("cas64 failed");
+	if(!runtime_cas64(&z64, &x64, 1))
+		runtime_throw("cas64 failed");
+	if(x64 != 42 || z64 != 1)
+		runtime_throw("cas64 failed");
+	if(runtime_atomicload64(&z64) != 1)
+		runtime_throw("load64 failed");
+	runtime_atomicstore64(&z64, (1ull<<40)+1);
+	if(runtime_atomicload64(&z64) != (1ull<<40)+1)
+		runtime_throw("store64 failed");
+	if(runtime_xadd64(&z64, (1ull<<40)+1) != (2ull<<40)+2)
+		runtime_throw("xadd64 failed");
+	if(runtime_atomicload64(&z64) != (2ull<<40)+2)
+		runtime_throw("xadd64 failed");
+	if(runtime_xchg64(&z64, (3ull<<40)+3) != (2ull<<40)+2)
+		runtime_throw("xchg64 failed");
+	if(runtime_atomicload64(&z64) != (3ull<<40)+3)
+		runtime_throw("xchg64 failed");
+}
+
+void
+runtime_check(void)
+{
+	__go_register_gc_roots(&runtime_roots);
+
+	TestAtomic64();
 }
 
 uint32
@@ -205,19 +170,6 @@ runtime_fastrand1(void)
 	return x;
 }
 
-static struct root_list runtime_roots =
-{ nil,
-  { { &syscall_Envs, sizeof syscall_Envs },
-    { &os_Args, sizeof os_Args },
-    { nil, 0 } },
-};
-
-void
-runtime_check(void)
-{
-	__go_register_gc_roots(&runtime_roots);
-}
-
 int64
 runtime_cputicks(void)
 {
@@ -232,23 +184,98 @@ runtime_cputicks(void)
 }
 
 bool
-runtime_showframe(const unsigned char *s)
+runtime_showframe(String s, bool current)
 {
 	static int32 traceback = -1;
-	
+
+	if(current && runtime_m()->throwing > 0)
+		return 1;
 	if(traceback < 0)
-		traceback = runtime_gotraceback();
-	return traceback > 1 || (s != nil && __builtin_strchr((const char*)s, '.') != nil && __builtin_memcmp(s, "runtime.", 7) != 0);
+		traceback = runtime_gotraceback(nil);
+	return traceback > 1 || (__builtin_memchr(s.str, '.', s.len) != nil && __builtin_memcmp(s.str, "runtime.", 7) != 0);
 }
 
-bool
-runtime_isInf(float64 f, int32 sign)
+static Lock ticksLock;
+static int64 ticks;
+
+int64
+runtime_tickspersecond(void)
 {
-	if(!__builtin_isinf(f))
-		return false;
-	if(sign == 0)
-		return true;
-	if(sign > 0)
-		return f > 0;
-	return f < 0;
+	int64 res, t0, t1, c0, c1;
+
+	res = (int64)runtime_atomicload64((uint64*)&ticks);
+	if(res != 0)
+		return ticks;
+	runtime_lock(&ticksLock);
+	res = ticks;
+	if(res == 0) {
+		t0 = runtime_nanotime();
+		c0 = runtime_cputicks();
+		runtime_usleep(100*1000);
+		t1 = runtime_nanotime();
+		c1 = runtime_cputicks();
+		if(t1 == t0)
+			t1++;
+		res = (c1-c0)*1000*1000*1000/(t1-t0);
+		if(res == 0)
+			res++;
+		runtime_atomicstore64((uint64*)&ticks, res);
+	}
+	runtime_unlock(&ticksLock);
+	return res;
+}
+
+int64 runtime_pprof_runtime_cyclesPerSecond(void)
+     __asm__ (GOSYM_PREFIX "runtime_pprof.runtime_cyclesPerSecond");
+
+int64
+runtime_pprof_runtime_cyclesPerSecond(void)
+{
+	return runtime_tickspersecond();
+}
+
+// Called to initialize a new m (including the bootstrap m).
+// Called on the parent thread (main thread in case of bootstrap), can allocate memory.
+void
+runtime_mpreinit(M *mp)
+{
+	mp->gsignal = runtime_malg(32*1024, &mp->gsignalstack, &mp->gsignalstacksize);	// OS X wants >=8K, Linux >=2K
+}
+
+// Called to initialize a new m (including the bootstrap m).
+// Called on the new thread, can not allocate memory.
+void
+runtime_minit(void)
+{
+	M* m;
+	sigset_t sigs;
+
+	// Initialize signal handling.
+	m = runtime_m();
+	runtime_signalstack(m->gsignalstack, m->gsignalstacksize);
+	if (sigemptyset(&sigs) != 0)
+		runtime_throw("sigemptyset");
+	sigprocmask(SIG_SETMASK, &sigs, nil);
+}
+
+// Called from dropm to undo the effect of an minit.
+void
+runtime_unminit(void)
+{
+	runtime_signalstack(nil, 0);
+}
+
+
+void
+runtime_signalstack(byte *p, int32 n)
+{
+	stack_t st;
+
+	st.ss_sp = p;
+	st.ss_size = n;
+	st.ss_flags = 0;
+	if(p == nil)
+		st.ss_flags = SS_DISABLE;
+	if(sigaltstack(&st, nil) < 0)
+		*(int *)0xf1 = 0xf1;
 }

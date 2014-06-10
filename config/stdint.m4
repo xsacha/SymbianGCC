@@ -18,7 +18,7 @@ dnl the "ISO C9X: 7.18 Integer types <stdint.h>" section requires the
 dnl existence of an include file <stdint.h> that defines a set of
 dnl typedefs, especially uint8_t,int32_t,uintptr_t.
 dnl Many older installations will not provide this file, but some will
-dnl have the very same definitions in <inttypes.h>. In other enviroments
+dnl have the very same definitions in <inttypes.h>. In other environments
 dnl we can use the inet-types in <sys/types.h> which would define the
 dnl typedefs int8_t and u_int8_t respectivly.
 dnl
@@ -129,19 +129,19 @@ AC_MSG_RESULT($acx_cv_header_stdint $acx_cv_header_stdint_kind)
 
 # Lacking an uintptr_t?  Test size of void *
 case "$acx_cv_header_stdint:$ac_cv_type_uintptr_t" in
-  stddef.h:* | *:no) AC_CHECK_SIZEOF(void *) ;;
+  stddef.h:* | *:no) AC_CHECK_SIZEOF(void *,,/* no standard headers */) ;;
 esac
 
 # Lacking an uint64_t?  Test size of long
 case "$acx_cv_header_stdint:$ac_cv_type_uint64_t:$ac_cv_type_u_int64_t" in
-  stddef.h:*:* | *:no:no) AC_CHECK_SIZEOF(long) ;;
+  stddef.h:*:* | *:no:no) AC_CHECK_SIZEOF(long,,/* no standard headers */) ;;
 esac
 
 if test $acx_cv_header_stdint = stddef.h; then
   # Lacking a good header?  Test size of everything and deduce all types.
-  AC_CHECK_SIZEOF(int)
-  AC_CHECK_SIZEOF(short)
-  AC_CHECK_SIZEOF(char)
+  AC_CHECK_SIZEOF(int,,/* no standard headers */)
+  AC_CHECK_SIZEOF(short,,/* no standard headers */)
+  AC_CHECK_SIZEOF(char,,/* no standard headers */)
 
   AC_MSG_CHECKING(for type equivalent to int8_t)
   case "$ac_cv_sizeof_char" in
@@ -165,6 +165,7 @@ if test $acx_cv_header_stdint = stddef.h; then
     *) AC_MSG_ERROR([no 32-bit type, please report a bug])
   esac
   AC_MSG_RESULT($acx_cv_type_int32_t)
+
 fi
 
 # These tests are here to make the output prettier

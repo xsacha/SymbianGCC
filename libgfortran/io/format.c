@@ -1,5 +1,4 @@
-/* Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+/* Copyright (C) 2002-2013 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -222,7 +221,7 @@ get_fnode (format_data *fmt, fnode **head, fnode **tail, format_token t)
 
   if (fmt->avail == &fmt->last->array[FARRAY_SIZE])
     {
-      fmt->last->next = get_mem (sizeof (fnode_array));
+      fmt->last->next = xmalloc (sizeof (fnode_array));
       fmt->last = fmt->last->next;
       fmt->last->next = NULL;
       fmt->avail = &fmt->last->array[0];
@@ -1221,12 +1220,12 @@ parse_format (st_parameter_dt *dtp)
 
   if (format_cache_ok)
     {
-      char *fmt_string = get_mem (dtp->format_len);
+      char *fmt_string = xmalloc (dtp->format_len);
       memcpy (fmt_string, dtp->format, dtp->format_len);
       dtp->format = fmt_string;
     }
 
-  dtp->u.p.fmt = fmt = get_mem (sizeof (format_data));
+  dtp->u.p.fmt = fmt = xmalloc (sizeof (format_data));
   fmt->format_string = dtp->format;
   fmt->format_string_len = dtp->format_len;
 

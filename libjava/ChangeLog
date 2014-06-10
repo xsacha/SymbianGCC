@@ -1,70 +1,65 @@
-2013-04-11  Release Manager
+2014-05-22  Release Manager
 
-	* GCC 4.7.3 released.
+	* GCC 4.8.3 released.
 
-2012-12-18  Matthew Gretton-Dann  <matthew.gretton-dann@linaro.org>
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
 
-	Backport from mainline.
-	2012-10-15  Matthias Klose  <doko@ubuntu.com>
+	Backport from mainline
+	2013-11-15  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
 
-	* configure.ac: Match arm*-*-linux-* for ARM Linux/GNU.
 	* configure: Regenerate.
 
-2012-09-20  Release Manager
+2014-04-01  Dominique d'Humieres <dominiq@lps.ens.fr>
 
-	* GCC 4.7.2 released.
+	Backport from mainline
+	2014-02-20  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
-2012-06-14  Release Manager
+	PR libgcj/55637
+	* testsuite/libjava.lang/sourcelocation.xfail: New file.
 
-	* GCC 4.7.1 released.
+2014-03-11  Uros Bizjak  <ubizjak@gmail.com>
 
-2012-05-21  Benjamin Kosnik  <bkoz@redhat.com>
+	* java/lang/natObject.cc (_Jv_MonitorEnter): Add missing parenthesis
+	around comparison with (address | LOCKED) in JvAssert.
 
-	PR libstdc++/52700
-	* configure.ac: Allow gnu, gnu-versioned-namespace for
-	--enable-symvers arguments.
+2013-10-16  Release Manager
+
+	* GCC 4.8.2 released.
+
+2013-06-19  Matthias Klose  <doko@ubuntu.com>
+
+	* pkg.m4 (PKG_CHECK_MODULES): Use AC_PATH_TOOL to check for pkg-config.
+	* classpath/m4/pkg.m4 (PKG_CHECK_MODULES): Likewise.
 	* configure: Regenerate.
+	* classpath/configure: Regenerate.
 
-2012-04-23  Andrew Haley  <aph@redhat.com>
+2013-05-31  Release Manager
 
-	* defineclass.cc (MAJOR_1_7,  MINOR_1_7): New.
-	(parse): Allow MAJOR_1_7 classfile version.
+	* GCC 4.8.1 released.
 
-2012-03-22  Release Manager
+2013-03-22  Release Manager
 
-	* GCC 4.7.0 released.
+	* GCC 4.8.0 released.
 
-2012-02-23  Patrick Marlier  <patrick.marlier@gmail.com>
-	    Jack Howarth  <howarth@bromo.med.uc.edu>
+2013-03-12  Andrew John Hughes  <gnu.andrew@redhat.com>
 
-	PR target/49461
-	* configure.ac (SYSTEMSPEC): No longer pass -no_pie for darwin11.
-	* configure: Regenerate.
+	* include/posix-threads.h:
+	(_Jv_MutexCheckMonitor(_Jv_Mutex_t)): Use
+	pthread_equal rather than !=.
 
-2012-02-02  Kai Tietz  <ktietz@redhat.com>
+2013-01-07  H.J. Lu  <hongjiu.lu@intel.com>
 
-	PR libjava/48512
-	* configure.ac (THREADSTARTFILESPEC): Don't add crtmet.o file for
-	w64 windows targets.
-	* configure: Regenerated.
+	* Makefile.am (lib_gnu_awt_xlib_la_LDFLAGS): Replace
+	LIBSTDCXX_RAW_CXX_LDLAGS with LIBSTDCXX_RAW_CXX_LDFLAGS.
+	* Makefile.in: Regenerated.
 
-2012-02-01  Kai Tietz  <ktietz@redhat.com>
-
-	PR target/51500
-	* interpret.cc (_Jv_init_cif): Handle thiscall
-	convention for 32-bit Windows.
-	* java/lang/reflect/natMethod.cc (_Jv_CallAnyMethodA):
-	Likewise.
-	* java/lang/reflect/natVMProxy.cc (invoke_t): Add
-	thiscall-attribute for 32-bit Windows.
-
-2012-01-01  Jakub Jelinek  <jakub@redhat.com>
+2013-01-03  Jakub Jelinek  <jakub@redhat.com>
 
 	* gnu/gcj/convert/Convert.java (version): Update copyright notice
 	dates.
 	* gnu/gcj/tools/gcj_dbtool/Main.java (main): Likewise.
 
-Copyright (C) 2012 Free Software Foundation, Inc.
+Copyright (C) 2013 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

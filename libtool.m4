@@ -1220,7 +1220,7 @@ ia64-*-hpux*)
   rm -rf conftest*
   ;;
 
-x86_64-*kfreebsd*-gnu|x86_64-*linux*|ppc*-*linux*|powerpc*-*linux*| \
+x86_64-*kfreebsd*-gnu|x86_64-*linux*|powerpc*-*linux*| \
 s390*-*linux*|s390*-*tpf*|sparc*-*linux*)
   # Find out which ABI we are using.
   echo 'int i;' > conftest.$ac_ext
@@ -1232,9 +1232,19 @@ s390*-*linux*|s390*-*tpf*|sparc*-*linux*)
 	    LD="${LD-ld} -m elf_i386_fbsd"
 	    ;;
 	  x86_64-*linux*)
-	    LD="${LD-ld} -m elf_i386"
+	    case `/usr/bin/file conftest.o` in
+	      *x86-64*)
+		LD="${LD-ld} -m elf32_x86_64"
+		;;
+	      *)
+		LD="${LD-ld} -m elf_i386"
+		;;
+	    esac
 	    ;;
-	  ppc64-*linux*|powerpc64-*linux*)
+	  powerpc64le-*linux*)
+	    LD="${LD-ld} -m elf32lppclinux"
+	    ;;
+	  powerpc64-*linux*)
 	    LD="${LD-ld} -m elf32ppclinux"
 	    ;;
 	  s390x-*linux*)
@@ -1253,7 +1263,10 @@ s390*-*linux*|s390*-*tpf*|sparc*-*linux*)
 	  x86_64-*linux*)
 	    LD="${LD-ld} -m elf_x86_64"
 	    ;;
-	  ppc*-*linux*|powerpc*-*linux*)
+	  powerpcle-*linux*)
+	    LD="${LD-ld} -m elf64lppc"
+	    ;;
+	  powerpc-*linux*)
 	    LD="${LD-ld} -m elf64ppc"
 	    ;;
 	  s390*-*linux*|s390*-*tpf*)
@@ -2593,6 +2606,14 @@ sunos4*)
   need_version=yes
   ;;
 
+symbian*)
+  version_type=windows
+  shrext_cmds=".dll"
+  need_version=no
+  need_lib_prefix=no
+  library_names_spec='${libname}.dll'
+  ;;
+
 sysv4 | sysv4.3*)
   version_type=linux
   library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}$major $libname${shared_ext}'
@@ -3118,6 +3139,10 @@ solaris*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
+symbian*)
+  lt_cv_deplibs_check_method=pass_all
+  ;;
+
 sysv5* | sco3.2v5* | sco5v6* | unixware* | OpenUNIX* | sysv4*uw2*)
   lt_cv_deplibs_check_method=pass_all
   ;;
@@ -3573,6 +3598,7 @@ m4_if([$1], [CXX], [
 	# AIX 5 now supports IA64 processor
 	_LT_TAGVAR(lt_prog_compiler_static, $1)='-Bstatic'
       fi
+      _LT_TAGVAR(lt_prog_compiler_pic, $1)='-fPIC'
       ;;
 
     amigaos*)
@@ -3618,6 +3644,10 @@ m4_if([$1], [CXX], [
     interix[[3-9]]*)
       # Interix 3.x gcc -fpic/-fPIC options generate broken code.
       # Instead, we relocate shared libraries at runtime.
+      ;;
+    symbian*)
+      # symbian does not have PIC, the loader relocates non-pic shared objects
+      _LT_TAGVAR(lt_prog_compiler_pic, $1)=
       ;;
     sysv4*MP*)
       if test -d /usr/nec; then
@@ -3884,6 +3914,7 @@ m4_if([$1], [CXX], [
 	# AIX 5 now supports IA64 processor
 	_LT_TAGVAR(lt_prog_compiler_static, $1)='-Bstatic'
       fi
+      _LT_TAGVAR(lt_prog_compiler_pic, $1)='-fPIC'
       ;;
 
     amigaos*)

@@ -40,9 +40,6 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/../../config/depstand.m4 \
 	$(top_srcdir)/../../config/lead-dot.m4 \
-	$(top_srcdir)/../../config/lib-ld.m4 \
-	$(top_srcdir)/../../config/lib-link.m4 \
-	$(top_srcdir)/../../config/lib-prefix.m4 \
 	$(top_srcdir)/../../config/multi.m4 \
 	$(top_srcdir)/../../config/no-executables.m4 \
 	$(top_srcdir)/../../config/override.m4 \
@@ -61,7 +58,9 @@ am__aclocal_m4_deps = $(top_srcdir)/../../config/depstand.m4 \
 	$(top_srcdir)/m4/ax_create_stdint_h.m4 \
 	$(top_srcdir)/m4/ax_func_which_gethostbyname_r.m4 \
 	$(top_srcdir)/m4/gcc_attribute.m4 $(top_srcdir)/m4/iconv.m4 \
-	$(top_srcdir)/m4/pkg.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lib-ld.m4 $(top_srcdir)/m4/lib-link.m4 \
+	$(top_srcdir)/m4/lib-prefix.m4 $(top_srcdir)/m4/pkg.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(SHELL) $(top_srcdir)/../../mkinstalldirs
@@ -167,6 +166,7 @@ MAKEINFO = @MAKEINFO@
 MKDIR = @MKDIR@
 MKDIR_P = @MKDIR_P@
 MOC = @MOC@
+MOC4 = @MOC4@
 MOZILLA_CFLAGS = @MOZILLA_CFLAGS@
 MOZILLA_LIBS = @MOZILLA_LIBS@
 NM = @NM@
@@ -418,6 +418,7 @@ gnu_java_nio_VMSelector.h \
 gnu_java_nio_charset_iconv_IconvEncoder.h \
 gnu_java_nio_charset_iconv_IconvDecoder.h \
 gnu_java_lang_management_VMOperatingSystemMXBeanImpl.h \
+java_io_VMConsole.h \
 java_io_VMFile.h \
 java_io_VMObjectInputStream.h \
 java_io_VMObjectStreamClass.h \
@@ -830,6 +831,8 @@ uninstall-am:
 @CREATE_JNI_HEADERS_TRUE@	$(JAVAH) -o $@ gnu.java.nio.VMSelector
 @CREATE_JNI_HEADERS_TRUE@gnu_java_lang_management_VMOperatingSystemMXBeanImpl.h: $(top_srcdir)/vm/reference/gnu/java/lang/management/VMOperatingSystemMXBeanImpl.java
 @CREATE_JNI_HEADERS_TRUE@	$(JAVAH) -o $@ gnu.java.lang.management.VMOperatingSystemMXBeanImpl
+@CREATE_JNI_HEADERS_TRUE@java_io_VMConsole.h: $(top_srcdir)/vm/reference/java/io/VMConsole.java
+@CREATE_JNI_HEADERS_TRUE@	$(JAVAH) -o $@ java.io.VMConsole
 @CREATE_JNI_HEADERS_TRUE@java_io_VMFile.h: $(top_srcdir)/vm/reference/java/io/VMFile.java
 @CREATE_JNI_HEADERS_TRUE@	$(JAVAH) -o $@ java.io.VMFile
 @CREATE_JNI_HEADERS_TRUE@java_io_VMObjectInputStream.h: $(top_srcdir)/vm/reference/java/io/VMObjectInputStream.java

@@ -1,13 +1,12 @@
-2013-02-21  Jakub Jelinek  <jakub@redhat.com>
+2013-11-29  Matthias Klose  <doko@ubuntu.com>
 
-	PR bootstrap/56258
-	* doc/cp-tools.texinfo (Virtual Machine Options): Use just
-	one @gccoptlist instead of 3 separate ones.
+	* native/jni/gtk-peer/gnu_java_awt_peer_gtk_FreetypeGlyphVector.c,
+	native/jni/gtk-peer/gnu_java_awt_peer_gtk_GdkFontPeer.c:
+	Fix freetype includes.
 
-2012-09-20  Jakub Jelinek  <jakub@redhat.com>
+2013-03-22  Jakub Jelinek  <jakub@redhat.com>
 
 	PR other/43620
-	* configure.ac (AM_INIT_AUTOMAKE): Add no-dist.
 	* Makefile.in: Regenerated.
 	* doc/Makefile.in: Regenerated.
 	* doc/api/Makefile.in: Regenerated.
@@ -42,6 +41,27 @@
 	* resource/Makefile.in: Regenerated.
 	* scripts/Makefile.in: Regenerated.
 	* tools/Makefile.in: Regenerated.
+
+2013-02-21  Jakub Jelinek  <jakub@redhat.com>
+
+	PR bootstrap/56258
+	* doc/cp-tools.texinfo (Virtual Machine Options): Use just
+	one @gccoptlist instead of 3 separate ones.
+
+2013-01-03  Jakub Jelinek  <jakub@redhat.com>
+
+	* gnu/java/rmi/registry/RegistryImpl.java (version): Update
+	copyright notice dates.
+	* tools/gnu/classpath/tools/orbd/Main.java (run): Likewise.
+
+2012-12-03  Matthias Klose  <doko@ubuntu.com>
+
+	* configure.ac (AM_INIT_AUTOMAKE): Call with no-dist.
+	* m4/lib-ld.m4, m4/lib-link.m4,m4/lib-prefix.m4: New.
+
+2012-05-16  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure: Regenerated.
 
 2012-01-01  Jakub Jelinek  <jakub@redhat.com>
 
