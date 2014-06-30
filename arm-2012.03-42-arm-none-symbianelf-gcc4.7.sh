@@ -31,6 +31,16 @@
 # trademarks in the resulting binary; see the "Mentor Graphics
 # Trademarks" section in the Sourcery CodeBench Software
 # License Agreement.
+
+# modified by xsacha to work for 64-bit Linux GCC 4.8.3
+# Configuration:
+# Build Directory
+BUILD="$(pwd)"
+
+# GCC Target Version
+GCC_VER=4.8.3
+
+
 set -e
 inform_fd=2 
 umask 022
@@ -270,338 +280,265 @@ prepend_path() {
 	prependenvvar "$1" "$2"
     fi
 }
-pushenvvar CSL_SCRIPTDIR /scratch/nsidwell/nokia/src/scripts-trunk
-# pushenvvar PATH /usr/local/tools/gcc-4.3.3/bin
-# pushenvvar LD_LIBRARY_PATH /usr/local/tools/gcc-4.3.3/x86_64-pc-linux-gnu/lib:/usr/local/tools/gcc-4.3.3/lib64:/usr/local/tools/gcc-4.3.3/lib
+pushenvvar CSL_SCRIPTDIR ${BUILD}/src/scripts-trunk
 pushenvvar FLEXLM_NO_CKOUT_INSTALL_LIC 1
 pushenvvar LM_APP_DISABLE_CACHE_READ 1
 pushenvvar MAKEINFO 'makeinfo --css-ref=../cs.css'
 clean_environment
 
-echo Task: [01/74] /init/dirs
+echo Task: [01/62] /init/dirs
 pushenv
-# pushenvvar CC_FOR_BUILD gcc-4.7
-mkdir -p /scratch/nsidwell/nokia/obj
-mkdir -p /scratch/nsidwell/nokia/install
-mkdir -p /scratch/nsidwell/nokia/pkg
-mkdir -p /scratch/nsidwell/nokia/logs/data
+mkdir -p ${BUILD}/obj
+mkdir -p ${BUILD}/install
+mkdir -p ${BUILD}/pkg
+mkdir -p ${BUILD}/logs/data
 popenv
 
-echo Task: [02/74] /init/cleanup
+echo Task: [02/62] /init/cleanup
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/pkg/arm-2012.03-42-arm-none-symbianelf.src.tar.bz2 /scratch/nsidwell/nokia/pkg/arm-2012.03-42-arm-none-symbianelf.backup.tar.bz2
+rm -f ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf.src.tar.bz2 ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf.backup.tar.bz2
 # Clean last install
-rm -rf /scratch/nsidwell/nokia/install
-rm -rf /scratch/nsidwell/nokia/logs
-rm -rf /scratch/nsidwell/nokia/obj
+rm -rf ${BUILD}/install
+rm -rf ${BUILD}/logs
+rm -rf ${BUILD}/obj
 popenv
 
-echo Task: [03/74] /init/source_package/binutils
+echo Task: [03/62] /init/source_package/binutils
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/binutils-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/binutils-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' binutils-2012.03
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/binutils-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/binutils-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' binutils-2012.03
 popd
 popenv
 
-echo Task: [04/74] /init/source_package/gcc
+echo Task: [04/62] /init/source_package/gcc
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gcc-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gcc-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' gcc-4.6-2012.03
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gcc-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gcc-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' gcc-4.6-2012.03
 popd
 popenv
 
-echo Task: [05/74] /init/source_package/zlib
+echo Task: [05/62] /init/source_package/zlib
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/zlib-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/zlib-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' zlib-1.2.3
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/zlib-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/zlib-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' zlib-1.2.3
 popd
 popenv
 
-echo Task: [06/74] /init/source_package/gmp
+echo Task: [06/62] /init/source_package/gmp
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gmp-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gmp-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' gmp-2012.03
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gmp-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gmp-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' gmp-2012.03
 popd
 popenv
 
-echo Task: [07/74] /init/source_package/mpfr
+echo Task: [07/62] /init/source_package/mpfr
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpfr-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpfr-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' mpfr-2012.03
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpfr-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpfr-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' mpfr-2012.03
 popd
 popenv
 
-echo Task: [08/74] /init/source_package/mpc
+echo Task: [08/62] /init/source_package/mpc
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpc-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpc-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' mpc-0.9
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpc-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpc-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' mpc-0.9
 popd
 popenv
 
-echo Task: [09/74] /init/source_package/cloog
+echo Task: [09/62] /init/source_package/cloog
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/cloog-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/cloog-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' cloog-0.15
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/cloog-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/cloog-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' cloog-0.15
 popd
 popenv
 
-echo Task: [10/74] /init/source_package/ppl
+echo Task: [10/62] /init/source_package/ppl
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/ppl-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/ppl-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' ppl-0.11
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/ppl-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/ppl-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' ppl-0.11
 popd
 popenv
 
-echo Task: [11/74] /init/source_package/getting_started
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-#symbianelf.backup/getting_started-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/getting_started-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' getting-started-2012.03
-#popd
-#popenv
-
-echo Task: [12/74] /init/source_package/installanywhere
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/installanywhere-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/installanywhere-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' installanywhere-trunk
-#popd
-#popenv
-
-echo Task: [13/74] /init/source_package/csl_tests
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/csl_tests-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/csl_tests-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' csl-tests-trunk
-#popd
-#popenv
-
-echo Task: [14/74] /init/source_package/dejagnu_boards
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-#symbianelf.backup/dejagnu_boards-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-#symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/dejagnu_boards-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' dejagnu-boards-trunk
-#popd
-#popenv
-
-echo Task: [15/74] /init/source_package/scripts
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/scripts-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/scripts-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' scripts-trunk
-#popd
-#popenv
-
-echo Task: [16/74] /init/source_package/xfails
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/xfails-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/xfails-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' xfails-trunk
-#popd
-#popenv
-
-echo Task: [17/74] /init/source_package/portal
-#pushenv
-#pushenvvar CC_FOR_BUILD gcc-4.7
-#rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/portal-2012.03-42.tar.bz2
-#mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-#pushd /scratch/nsidwell/nokia/src
-#tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/portal-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' portal-trunk
-#popd
-#popenv
-
-echo Task: [18/74] /init/source_package/libiconv
+echo Task: [11/62] /init/source_package/libiconv
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libiconv-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libiconv-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' libiconv-1.11
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libiconv-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libiconv-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' libiconv-1.11
 popd
 popenv
 
-echo Task: [19/74] /init/source_package/libelf
+echo Task: [12/62] /init/source_package/libelf
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libelf-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libelf-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' libelf-2012.03
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libelf-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libelf-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' libelf-2012.03
 popd
 popenv
 
-echo Task: [23/74] /init/source_package/coreutils
+echo Task: [13/62] /init/source_package/coreutils
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
-rm -f /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/coreutils-2012.03-42.tar.bz2
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/src
-tar cf /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/coreutils-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' coreutils-5.94
+rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/coreutils-2012.03-42.tar.bz2
+mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
+pushd ${BUILD}/src
+tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/coreutils-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' coreutils-5.94
 popd
 popenv
 
-echo Task: [24/74] /x86_64-pc-linux-gnu/host_cleanup
+echo Task: [14/62] /x86_64-pc-linux-gnu/host_cleanup
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 popenv
 
-echo Task: [25/74] /x86_64-pc-linux-gnu/zlib_first/copy
+echo Task: [15/62] /x86_64-pc-linux-gnu/zlib_first/copy
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-rm -rf /scratch/nsidwell/nokia/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-copy_dir_clean /scratch/nsidwell/nokia/src/zlib-1.2.3 /scratch/nsidwell/nokia/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-chmod -R u+w /scratch/nsidwell/nokia/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+rm -rf ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+copy_dir_clean ${BUILD}/src/zlib-1.2.3 ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+chmod -R u+w ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 popenv
 
-echo Task: [26/74] /x86_64-pc-linux-gnu/zlib_first/configure
+echo Task: [16/62] /x86_64-pc-linux-gnu/zlib_first/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 pushenv
 pushenvvar CFLAGS '-O3 -fPIC'
 pushenvvar CC 'gcc-4.7 '
 pushenvvar AR 'ar rc'
 pushenvvar RANLIB ranlib
-./configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
+./configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
 popenv
 popd
 popenv
 
-echo Task: [27/74] /x86_64-pc-linux-gnu/zlib_first/build
+echo Task: [17/62] /x86_64-pc-linux-gnu/zlib_first/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 
-echo Task: [28/74] /x86_64-pc-linux-gnu/zlib_first/install
+echo Task: [18/62] /x86_64-pc-linux-gnu/zlib_first/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 
-echo Task: [29/74] /x86_64-pc-linux-gnu/gmp/configure
+echo Task: [19/62] /x86_64-pc-linux-gnu/gmp/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
 pushenvvar CFLAGS '-g -O2'
-rm -rf /scratch/nsidwell/nokia/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/gmp-2012.03/configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --enable-cxx --disable-nls
+rm -rf ${BUILD}/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/gmp-2012.03/configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --enable-cxx --disable-nls
 popd
 popenv
 popenv
 popenv
 
-echo Task: [30/74] /x86_64-pc-linux-gnu/gmp/build
+echo Task: [20/62] /x86_64-pc-linux-gnu/gmp/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
 pushenvvar CFLAGS '-g -O2'
-pushd /scratch/nsidwell/nokia/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [31/74] /x86_64-pc-linux-gnu/gmp/install
+echo Task: [21/62] /x86_64-pc-linux-gnu/gmp/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
 pushenvvar CFLAGS '-g -O2'
-pushd /scratch/nsidwell/nokia/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 popenv
 popenv
 
-echo Task: [32/74] /x86_64-pc-linux-gnu/gmp/postinstall
+#echo Task: [22/62] /x86_64-pc-linux-gnu/gmp/postinstall
 # on 64-bit, 1 of 58 tests fails (t-scan)
 #pushenv
 #pushenvvar CC_FOR_BUILD gcc-4.7
@@ -609,671 +546,671 @@ echo Task: [32/74] /x86_64-pc-linux-gnu/gmp/postinstall
 #pushenvvar CXX g++-4.7
 #pushenvvar AR ar
 #pushenvvar RANLIB ranlib
-#prepend_path PATH /scratch/nsidwell/nokia/install/bin
+#prepend_path PATH ${BUILD}/install/bin
 #pushenv
 #pushenv
 #pushenvvar CFLAGS '-g -O2'
-#pushd /scratch/nsidwell/nokia/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+#pushd ${BUILD}/obj/gmp-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 #make check
 #popd
 #popenv
 #popenv
 #popenv
 
-echo Task: [33/74] /x86_64-pc-linux-gnu/mpfr/configure
+echo Task: [22/62] /x86_64-pc-linux-gnu/mpfr/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-rm -rf /scratch/nsidwell/nokia/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/mpfr-2012.03/configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-gmp=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
+rm -rf ${BUILD}/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/mpfr-2012.03/configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-gmp=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
 popd
 popenv
 popenv
 popenv
 
-echo Task: [34/74] /x86_64-pc-linux-gnu/mpfr/build
+echo Task: [23/62] /x86_64-pc-linux-gnu/mpfr/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [35/74] /x86_64-pc-linux-gnu/mpfr/install
+echo Task: [24/62] /x86_64-pc-linux-gnu/mpfr/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 popenv
 popenv
 
-echo Task: [36/74] /x86_64-pc-linux-gnu/mpfr/postinstall
+echo Task: [25/62] /x86_64-pc-linux-gnu/mpfr/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpfr-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make check
 popd
 popenv
 popenv
 popenv
 
-echo Task: [37/74] /x86_64-pc-linux-gnu/mpc/configure
+echo Task: [26/62] /x86_64-pc-linux-gnu/mpc/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-rm -rf /scratch/nsidwell/nokia/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/mpc-0.9/configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-gmp=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpfr=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
+rm -rf ${BUILD}/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/mpc-0.9/configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-gmp=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpfr=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
 popd
 popenv
 popenv
 popenv
 
-echo Task: [38/74] /x86_64-pc-linux-gnu/mpc/build
+echo Task: [27/62] /x86_64-pc-linux-gnu/mpc/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [39/74] /x86_64-pc-linux-gnu/mpc/install
+echo Task: [28/62] /x86_64-pc-linux-gnu/mpc/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 popenv
 popenv
 
-echo Task: [40/74] /x86_64-pc-linux-gnu/mpc/postinstall
+echo Task: [29/62] /x86_64-pc-linux-gnu/mpc/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/mpc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make check
 popd
 popenv
 popenv
 popenv
 
-echo Task: [41/74] /x86_64-pc-linux-gnu/ppl/configure
+echo Task: [30/62] /x86_64-pc-linux-gnu/ppl/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-rm -rf /scratch/nsidwell/nokia/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/ppl-0.11/configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-libgmp-prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-gmp-prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr CPPFLAGS=-I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include LDFLAGS=-L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib --disable-watchdog
+rm -rf ${BUILD}/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/ppl-0.11/configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-libgmp-prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-gmp-prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr CPPFLAGS=-I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include LDFLAGS=-L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib --disable-watchdog
 popd
 popenv
 popenv
 popenv
 
-echo Task: [42/74] /x86_64-pc-linux-gnu/ppl/build
+echo Task: [31/62] /x86_64-pc-linux-gnu/ppl/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [43/74] /x86_64-pc-linux-gnu/ppl/install
+echo Task: [32/62] /x86_64-pc-linux-gnu/ppl/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/ppl-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 popenv
 popenv
 
-echo Task: [44/74] /x86_64-pc-linux-gnu/cloog/configure
+echo Task: [33/62] /x86_64-pc-linux-gnu/cloog/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-rm -rf /scratch/nsidwell/nokia/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/cloog-0.15/configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-ppl=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-gmp=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
+rm -rf ${BUILD}/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/cloog-0.15/configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls --with-ppl=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-gmp=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
 popd
 popenv
 popenv
 popenv
 
-echo Task: [45/74] /x86_64-pc-linux-gnu/cloog/build
+echo Task: [34/62] /x86_64-pc-linux-gnu/cloog/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [46/74] /x86_64-pc-linux-gnu/cloog/install
+echo Task: [35/62] /x86_64-pc-linux-gnu/cloog/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 popenv
 popenv
 
-echo Task: [47/74] /x86_64-pc-linux-gnu/cloog/postinstall
+echo Task: [36/62] /x86_64-pc-linux-gnu/cloog/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/cloog-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make check
 popd
 popenv
 popenv
 popenv
 
-echo Task: [48/74] /x86_64-pc-linux-gnu/libelf/configure
+echo Task: [37/62] /x86_64-pc-linux-gnu/libelf/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-rm -rf /scratch/nsidwell/nokia/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/libelf-2012.03/configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls
+rm -rf ${BUILD}/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/libelf-2012.03/configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-shared --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu --disable-nls
 popd
 popenv
 popenv
 popenv
 
-echo Task: [49/74] /x86_64-pc-linux-gnu/libelf/build
+echo Task: [38/62] /x86_64-pc-linux-gnu/libelf/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [50/74] /x86_64-pc-linux-gnu/libelf/install
+echo Task: [39/62] /x86_64-pc-linux-gnu/libelf/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushd /scratch/nsidwell/nokia/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/libelf-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 popenv
 popenv
 
-echo Task: [51/74] /x86_64-pc-linux-gnu/toolchain/binutils/copy
+echo Task: [40/62] /x86_64-pc-linux-gnu/toolchain/binutils/copy
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushenvvar CPPFLAGS -I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-pushenvvar LDFLAGS -L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-rm -rf /scratch/nsidwell/nokia/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-copy_dir_clean /scratch/nsidwell/nokia/src/binutils-2012.03 /scratch/nsidwell/nokia/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-chmod -R u+w /scratch/nsidwell/nokia/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-touch /scratch/nsidwell/nokia/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/.gnu-stamp
+pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+rm -rf ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+copy_dir_clean ${BUILD}/src/binutils-2012.03 ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+chmod -R u+w ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+touch ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/.gnu-stamp
 popenv
 popenv
 popenv
 
-echo Task: [52/74] /x86_64-pc-linux-gnu/toolchain/binutils/configure
+echo Task: [41/62] /x86_64-pc-linux-gnu/toolchain/binutils/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushenvvar CPPFLAGS -I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-pushenvvar LDFLAGS -L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-rm -rf /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/configure --prefix=/opt/codesourcery --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu '--with-pkgversion=Sourcery CodeBench Lite 2012.03-42' --with-bugurl=https://support.codesourcery.com/GNUToolchain/ --disable-nls --enable-poison-system-directories
+pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+rm -rf ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/configure --prefix=/opt/codesourcery --build=x86_64-pc-linux-gnu --target=arm-none-symbianelf --host=x86_64-pc-linux-gnu '--with-pkgversion=Sourcery CodeBench Lite 2012.03-42' --with-bugurl=https://support.codesourcery.com/GNUToolchain/ --disable-nls --enable-poison-system-directories
 popd
 popenv
 popenv
 popenv
 
-echo Task: [53/74] /x86_64-pc-linux-gnu/toolchain/binutils/libiberty
+echo Task: [42/62] /x86_64-pc-linux-gnu/toolchain/binutils/libiberty
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushenvvar CPPFLAGS -I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-pushenvvar LDFLAGS -L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-pushd /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+pushd ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4 all-libiberty
 popd
-copy_dir_clean /scratch/nsidwell/nokia/src/binutils-2012.03/include /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-chmod -R u+w /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-mkdir -p /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-cp /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/libiberty/libiberty.a /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+copy_dir_clean ${BUILD}/src/binutils-2012.03/include ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+chmod -R u+w ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+mkdir -p ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+cp ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/libiberty/libiberty.a ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
 popenv
 popenv
 popenv
 
-echo Task: [54/74] /x86_64-pc-linux-gnu/toolchain/binutils/build
+echo Task: [43/62] /x86_64-pc-linux-gnu/toolchain/binutils/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushenvvar CPPFLAGS -I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-pushenvvar LDFLAGS -L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-pushd /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+pushd ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 popenv
 
-echo Task: [55/74] /x86_64-pc-linux-gnu/toolchain/binutils/install
+echo Task: [44/62] /x86_64-pc-linux-gnu/toolchain/binutils/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushenvvar CPPFLAGS -I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-pushenvvar LDFLAGS -L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-pushd /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-make install prefix=/scratch/nsidwell/nokia/install exec_prefix=/scratch/nsidwell/nokia/install libdir=/scratch/nsidwell/nokia/install/lib datadir=/scratch/nsidwell/nokia/install/share
+pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+pushd ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+make install prefix=${BUILD}/install exec_prefix=${BUILD}/install libdir=${BUILD}/install/lib datadir=${BUILD}/install/share
 popd
 popenv
 popenv
 popenv
 
-echo Task: [56/74] /x86_64-pc-linux-gnu/toolchain/binutils/postinstall
+echo Task: [45/62] /x86_64-pc-linux-gnu/toolchain/binutils/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenv
-pushenvvar CPPFLAGS -I/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-pushenvvar LDFLAGS -L/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-pushd /scratch/nsidwell/nokia/install
+pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+pushd ${BUILD}/install
 rm ./lib/libiberty.a
 rmdir ./lib
 popd
-pushd /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-make prefix=/scratch/nsidwell/nokia/install exec_prefix=/scratch/nsidwell/nokia/install libdir=/scratch/nsidwell/nokia/install/lib datadir=/scratch/nsidwell/nokia/install/share install-html
+pushd ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+make prefix=${BUILD}/install exec_prefix=${BUILD}/install libdir=${BUILD}/install/lib datadir=${BUILD}/install/share install-html
 popd
-pushd /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-make prefix=/scratch/nsidwell/nokia/install exec_prefix=/scratch/nsidwell/nokia/install libdir=/scratch/nsidwell/nokia/install/lib datadir=/scratch/nsidwell/nokia/install/share install-pdf
+pushd ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+make prefix=${BUILD}/install exec_prefix=${BUILD}/install libdir=${BUILD}/install/lib datadir=${BUILD}/install/share install-pdf
 popd
-cp /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/bfd/.libs/libbfd.a /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-cp /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/bfd/bfd.h /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-cp /scratch/nsidwell/nokia/src/binutils-2012.03/bfd/elf-bfd.h /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
-cp /scratch/nsidwell/nokia/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/opcodes/.libs/libopcodes.a /scratch/nsidwell/nokia/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
-rm -f /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-ld.bfd
-rm -f /scratch/nsidwell/nokia/install/bin/ld.bfd
-rm -f /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/ld.bfd
+cp ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/bfd/.libs/libbfd.a ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+cp ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/bfd/bfd.h ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+cp ${BUILD}/src/binutils-2012.03/bfd/elf-bfd.h ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/include
+cp ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/opcodes/.libs/libopcodes.a ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr/lib
+rm -f ${BUILD}/install/bin/arm-none-symbianelf-ld.bfd
+rm -f ${BUILD}/install/bin/ld.bfd
+rm -f ${BUILD}/install/arm-none-symbianelf/bin/ld.bfd
 popenv
 popenv
 popenv
 
-echo Task: [57/74] /x86_64-pc-linux-gnu/toolchain/gcc_final/configure
+echo Task: [46/62] /x86_64-pc-linux-gnu/toolchain/gcc_final/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenvvar AR_FOR_TARGET arm-none-symbianelf-ar
 pushenvvar NM_FOR_TARGET arm-none-symbianelf-nm
 pushenvvar OBJDUMP_FOR_TARET arm-none-symbianelf-objdump
 pushenvvar STRIP_FOR_TARGET arm-none-symbianelf-strip
-rm -rf /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-mkdir -p /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-pushd /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-/scratch/nsidwell/nokia/src/gcc-4.6-2012.03/configure --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --target=arm-none-symbianelf --enable-threads --disable-libmudflap --disable-libssp --disable-libstdcxx-pch --with-gnu-as --with-gnu-ld '--with-specs=%{save-temps: -fverbose-asm} -D__CS_SOURCERYGXX_MAJ__=2012 -D__CS_SOURCERYGXX_MIN__=3 -D__CS_SOURCERYGXX_REV__=42' --enable-languages=c,c++ --enable-shared --disable-hosted-libstdcxx '--with-pkgversion=Sacha GCC 4.8.3' --with-bugurl=http://github.com/xsacha/SymbianGCC --disable-nls --prefix=/opt/codesourcery --with-gmp=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpfr=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpc=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-ppl=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr '--with-host-libstdcxx=-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-cloog=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-libelf=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-libgomp --with-build-time-tools=/scratch/nsidwell/nokia/install/arm-none-symbianelf/bin --with-build-time-tools=/scratch/nsidwell/nokia/install/arm-none-symbianelf/bin
+rm -rf ${BUILD}/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+mkdir -p ${BUILD}/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+${BUILD}/src/gcc-4.6-2012.03/configure --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --target=arm-none-symbianelf --enable-threads --disable-libmudflap --disable-libssp --disable-libstdcxx-pch --with-gnu-as --with-gnu-ld '--with-specs=%{save-temps: -fverbose-asm} -D__CS_SOURCERYGXX_MAJ__=2012 -D__CS_SOURCERYGXX_MIN__=3 -D__CS_SOURCERYGXX_REV__=42' --enable-languages=c,c++ --enable-shared --disable-hosted-libstdcxx '--with-pkgversion=Sacha GCC ${GCC_VER}' --with-bugurl=http://github.com/xsacha/SymbianGCC --disable-nls --prefix=/opt/codesourcery --with-gmp=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpfr=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-mpc=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-ppl=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr '--with-host-libstdcxx=-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-cloog=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --with-libelf=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr --disable-libgomp --with-build-time-tools=${BUILD}/install/arm-none-symbianelf/bin --with-build-time-tools=${BUILD}/install/arm-none-symbianelf/bin
 popd
 popenv
 popenv
 
-echo Task: [58/74] /x86_64-pc-linux-gnu/toolchain/gcc_final/build
+echo Task: [47/62] /x86_64-pc-linux-gnu/toolchain/gcc_final/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenvvar AR_FOR_TARGET arm-none-symbianelf-ar
 pushenvvar NM_FOR_TARGET arm-none-symbianelf-nm
 pushenvvar OBJDUMP_FOR_TARET arm-none-symbianelf-objdump
 pushenvvar STRIP_FOR_TARGET arm-none-symbianelf-strip
-pushd /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+pushd ${BUILD}/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 popenv
 
-echo Task: [59/74] /x86_64-pc-linux-gnu/toolchain/gcc_final/install
+echo Task: [48/62] /x86_64-pc-linux-gnu/toolchain/gcc_final/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenvvar AR_FOR_TARGET arm-none-symbianelf-ar
 pushenvvar NM_FOR_TARGET arm-none-symbianelf-nm
 pushenvvar OBJDUMP_FOR_TARET arm-none-symbianelf-objdump
 pushenvvar STRIP_FOR_TARGET arm-none-symbianelf-strip
-pushd /scratch/nsidwell/nokia/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-make prefix=/scratch/nsidwell/nokia/install exec_prefix=/scratch/nsidwell/nokia/install libdir=/scratch/nsidwell/nokia/install/lib  install
-make prefix=/scratch/nsidwell/nokia/install exec_prefix=/scratch/nsidwell/nokia/install libdir=/scratch/nsidwell/nokia/install/lib  install-html
-make prefix=/scratch/nsidwell/nokia/install exec_prefix=/scratch/nsidwell/nokia/install libdir=/scratch/nsidwell/nokia/install/lib  install-pdf
+pushd ${BUILD}/obj/gcc-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+make prefix=${BUILD}/install exec_prefix=${BUILD}/install libdir=${BUILD}/install/lib  install
+make prefix=${BUILD}/install exec_prefix=${BUILD}/install libdir=${BUILD}/install/lib  install-html
+make prefix=${BUILD}/install exec_prefix=${BUILD}/install libdir=${BUILD}/install/lib  install-pdf
 popd
 popenv
 popenv
 
-echo Task: [60/74] /x86_64-pc-linux-gnu/toolchain/gcc_final/postinstall
+echo Task: [49/62] /x86_64-pc-linux-gnu/toolchain/gcc_final/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 pushenv
 pushenvvar AR_FOR_TARGET arm-none-symbianelf-ar
 pushenvvar NM_FOR_TARGET arm-none-symbianelf-nm
 pushenvvar OBJDUMP_FOR_TARET arm-none-symbianelf-objdump
 pushenvvar STRIP_FOR_TARGET arm-none-symbianelf-strip
-pushd /scratch/nsidwell/nokia/install
+pushd ${BUILD}/install
 rm ./lib/libiberty.a
 rmdir include
 popd
 popenv
 popenv
 
-echo Task: [61/74] /x86_64-pc-linux-gnu/toolchain/zlib/0/copy
+echo Task: [50/62] /x86_64-pc-linux-gnu/toolchain/zlib/0/copy
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-rm -rf /scratch/nsidwell/nokia/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-copy_dir_clean /scratch/nsidwell/nokia/src/zlib-1.2.3 /scratch/nsidwell/nokia/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
-chmod -R u+w /scratch/nsidwell/nokia/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+rm -rf ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+copy_dir_clean ${BUILD}/src/zlib-1.2.3 ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+chmod -R u+w ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 popenv
 
-echo Task: [62/74] /x86_64-pc-linux-gnu/toolchain/zlib/0/configure
+echo Task: [51/62] /x86_64-pc-linux-gnu/toolchain/zlib/0/configure
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 pushenv
 pushenvvar CFLAGS '-O3 -fPIC'
 pushenvvar CC 'gcc-4.7 '
 pushenvvar AR 'ar rc'
 pushenvvar RANLIB ranlib
-./configure --prefix=/scratch/nsidwell/nokia/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
+./configure --prefix=${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/usr
 popenv
 popd
 popenv
 
-echo Task: [63/74] /x86_64-pc-linux-gnu/toolchain/zlib/0/build
+echo Task: [52/62] /x86_64-pc-linux-gnu/toolchain/zlib/0/build
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make -j4
 popd
 popenv
 
-echo Task: [64/74] /x86_64-pc-linux-gnu/toolchain/zlib/0/install
+echo Task: [53/62] /x86_64-pc-linux-gnu/toolchain/zlib/0/install
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu
 make install
 popd
 popenv
 
-echo Task: [65/74] /x86_64-pc-linux-gnu/finalize_libc_installation
+echo Task: [54/62] /x86_64-pc-linux-gnu/finalize_libc_installation
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 popenv
 
-echo Task: [66/74] /x86_64-pc-linux-gnu/pretidy_installation
+echo Task: [55/62] /x86_64-pc-linux-gnu/pretidy_installation
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/install
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/install
 popd
 popenv
 
-echo Task: [67/74] /x86_64-pc-linux-gnu/remove_libtool_archives
+echo Task: [56/62] /x86_64-pc-linux-gnu/remove_libtool_archives
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-find /scratch/nsidwell/nokia/install -name '*.la' -exec rm '{}' ';'
+prepend_path PATH ${BUILD}/install/bin
+find ${BUILD}/install -name '*.la' -exec rm '{}' ';'
 popenv
 
-echo Task: [68/74] /x86_64-pc-linux-gnu/remove_copied_libs
+echo Task: [57/62] /x86_64-pc-linux-gnu/remove_copied_libs
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
+prepend_path PATH ${BUILD}/install/bin
 popenv
 
-echo Task: [69/74] /x86_64-pc-linux-gnu/remove_fixed_headers
+echo Task: [58/62] /x86_64-pc-linux-gnu/remove_fixed_headers
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-pushd /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/include-fixed
+prepend_path PATH ${BUILD}/install/bin
+pushd ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/include-fixed
 popd
 popenv
 
-echo Task: [70/74] /x86_64-pc-linux-gnu/add_tooldir_readme
+echo Task: [59/62] /x86_64-pc-linux-gnu/add_tooldir_readme
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-cat > /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/README.txt <<'EOF0'
+prepend_path PATH ${BUILD}/install/bin
+cat > ${BUILD}/install/arm-none-symbianelf/bin/README.txt <<'EOF0'
 The executables in this directory are for internal use by the compiler
 and may not operate correctly when used directly.  This directory
 should not be placed on your PATH.  Instead, you should use the
@@ -1281,98 +1218,90 @@ executables in ../../bin/ and place that directory on your PATH.
 EOF0
 popenv
 
-echo Task: [71/74] /x86_64-pc-linux-gnu/strip_host_objects
+echo Task: [60/62] /x86_64-pc-linux-gnu/strip_host_objects
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-addr2line
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-ar
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-as
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-c++
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-c++filt
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-cpp
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-elfedit
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-g++
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcc
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcc-4.8.3
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gcov
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-gprof
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-ld
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-nm
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-objcopy
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-objdump
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-ranlib
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-readelf
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-size
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-strings
-strip /scratch/nsidwell/nokia/install/bin/arm-none-symbianelf-strip
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/ar
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/as
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/c++
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/g++
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/gcc
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/ld
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/nm
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/objcopy
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/objdump
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/ranlib
-strip /scratch/nsidwell/nokia/install/arm-none-symbianelf/bin/strip
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/cc1
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/collect2
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/install-tools/fixincl
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/cc1plus
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/lto-wrapper
-strip /scratch/nsidwell/nokia/install/libexec/gcc/arm-none-symbianelf/4.8.3/lto1
+prepend_path PATH ${BUILD}/install/bin
+strip ${BUILD}/install/bin/arm-none-symbianelf-addr2line
+strip ${BUILD}/install/bin/arm-none-symbianelf-ar
+strip ${BUILD}/install/bin/arm-none-symbianelf-as
+strip ${BUILD}/install/bin/arm-none-symbianelf-c++
+strip ${BUILD}/install/bin/arm-none-symbianelf-c++filt
+strip ${BUILD}/install/bin/arm-none-symbianelf-cpp
+strip ${BUILD}/install/bin/arm-none-symbianelf-elfedit
+strip ${BUILD}/install/bin/arm-none-symbianelf-g++
+strip ${BUILD}/install/bin/arm-none-symbianelf-gcc
+strip ${BUILD}/install/bin/arm-none-symbianelf-gcc-${GCC_VER}
+strip ${BUILD}/install/bin/arm-none-symbianelf-gcov
+strip ${BUILD}/install/bin/arm-none-symbianelf-gprof
+strip ${BUILD}/install/bin/arm-none-symbianelf-ld
+strip ${BUILD}/install/bin/arm-none-symbianelf-nm
+strip ${BUILD}/install/bin/arm-none-symbianelf-objcopy
+strip ${BUILD}/install/bin/arm-none-symbianelf-objdump
+strip ${BUILD}/install/bin/arm-none-symbianelf-ranlib
+strip ${BUILD}/install/bin/arm-none-symbianelf-readelf
+strip ${BUILD}/install/bin/arm-none-symbianelf-size
+strip ${BUILD}/install/bin/arm-none-symbianelf-strings
+strip ${BUILD}/install/bin/arm-none-symbianelf-strip
+strip ${BUILD}/install/arm-none-symbianelf/bin/ar
+strip ${BUILD}/install/arm-none-symbianelf/bin/as
+strip ${BUILD}/install/arm-none-symbianelf/bin/c++
+strip ${BUILD}/install/arm-none-symbianelf/bin/g++
+strip ${BUILD}/install/arm-none-symbianelf/bin/gcc
+strip ${BUILD}/install/arm-none-symbianelf/bin/ld
+strip ${BUILD}/install/arm-none-symbianelf/bin/nm
+strip ${BUILD}/install/arm-none-symbianelf/bin/objcopy
+strip ${BUILD}/install/arm-none-symbianelf/bin/objdump
+strip ${BUILD}/install/arm-none-symbianelf/bin/ranlib
+strip ${BUILD}/install/arm-none-symbianelf/bin/strip
+strip ${BUILD}/install/libexec/gcc/arm-none-symbianelf/${GCC_VER}/cc1
+strip ${BUILD}/install/libexec/gcc/arm-none-symbianelf/${GCC_VER}/collect2
+strip ${BUILD}/install/libexec/gcc/arm-none-symbianelf/${GCC_VER}/install-tools/fixincl
+strip ${BUILD}/install/libexec/gcc/arm-none-symbianelf/${GCC_VER}/cc1plus
+strip ${BUILD}/install/libexec/gcc/arm-none-symbianelf/${GCC_VER}/lto-wrapper
+strip ${BUILD}/install/libexec/gcc/arm-none-symbianelf/${GCC_VER}/lto1
 popenv
 
-echo Task: [72/74] /x86_64-pc-linux-gnu/strip_target_objects
+echo Task: [61/62] /x86_64-pc-linux-gnu/strip_target_objects
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/libsupc++.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/libgcc_s.dll || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/softfp/libsupc++.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/arm-none-symbianelf/lib/softfp/libgcc_s.dll || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/libgcc.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/libgcov.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/softfp/libgcc.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/softfp/libgcov.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/softfp/libgcc_eh.a || true
-arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc /scratch/nsidwell/nokia/install/lib/gcc/arm-none-symbianelf/4.8.3/libgcc_eh.a || true
+prepend_path PATH ${BUILD}/install/bin
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/arm-none-symbianelf/lib/libsupc++.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/arm-none-symbianelf/lib/libgcc_s.dll || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/arm-none-symbianelf/lib/softfp/libsupc++.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/arm-none-symbianelf/lib/softfp/libgcc_s.dll || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/libgcc.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/libgcov.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/softfp/libgcc.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/softfp/libgcov.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/softfp/libgcc_eh.a || true
+arm-none-symbianelf-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc ${BUILD}/install/lib/gcc/arm-none-symbianelf/${GCC_VER}/libgcc_eh.a || true
 popenv
 
-echo Task: [73/74] /x86_64-pc-linux-gnu/package_tbz2
+echo Task: [62/62] /x86_64-pc-linux-gnu/package_tbz2
 pushenv
 pushenvvar CC_FOR_BUILD gcc-4.7
 pushenvvar CC gcc-4.7
 pushenvvar CXX g++-4.7
 pushenvvar AR ar
 pushenvvar RANLIB ranlib
-prepend_path PATH /scratch/nsidwell/nokia/install/bin
-rm -f /scratch/nsidwell/nokia/pkg/arm-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu.tar.bz2
-pushd /scratch/nsidwell/nokia/obj
+prepend_path PATH ${BUILD}/install/bin
+rm -f ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu.tar.bz2
+pushd ${BUILD}/obj
 rm -f arm-2012.03
-ln -s /scratch/nsidwell/nokia/install arm-2012.03
-tar cjf /scratch/nsidwell/nokia/pkg/arm-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu.tar.bz2 --owner=0 --group=0 --exclude=host-x86_64-pc-linux-gnu --exclude=host-x86_64-mingw32 arm-2012.03/arm-none-symbianelf arm-2012.03/bin arm-2012.03/lib arm-2012.03/libexec arm-2012.03/share
+ln -s ${BUILD}/install arm-2012.03
+tar cjf ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu.tar.bz2 --owner=0 --group=0 --exclude=host-x86_64-pc-linux-gnu --exclude=host-x86_64-mingw32 arm-2012.03/arm-none-symbianelf arm-2012.03/bin arm-2012.03/lib arm-2012.03/libexec arm-2012.03/share
 rm -f arm-2012.03
 popd
 popenv
 
-echo Task: [74/74] /fini/sources_package
-pushenv
-pushenvvar CC_FOR_BUILD gcc-4.7
-mkdir -p /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-cp /scratch/nsidwell/nokia/obj/gnu-2012.03-42-arm-none-symbianelf.txt /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-cp /scratch/nsidwell/nokia/logs/arm-2012.03-42-arm-none-symbianelf.sh /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd /scratch/nsidwell/nokia/obj/pkg-2012.03-42-arm-none-symbianelf
-tar cjf /scratch/nsidwell/nokia/pkg/arm-2012.03-42-arm-none-symbianelf.src.tar.bz2 --owner=0 --group=0 arm-2012.03-42-arm-none-symbianelf
-popd
+echo "Complete. Files are in ${BUILD}/install or ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu.tar.bz2"
 
