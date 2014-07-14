@@ -35,7 +35,7 @@
 # modified by xsacha to work for 32-bit MingW GCC 4.8.3
 # Configuration:
 # Build Directory
-BUILD="$(pwd)"
+BUILD="$(pwd)/build"
 
 # GCC Target Version
 GCC_VER=4.8.3
@@ -87,10 +87,9 @@ verbose () {
     fi
 }
 
-copy_dir() {
+extract_tar_move() {
     mkdir -p "$2"
-
-    (cd "$1" && tar cf - .) | (cd "$2" && tar xf -)
+    cd "$2" && tar xf $1
     check_pipe
 }
 
@@ -279,166 +278,110 @@ prepend_path() {
 	prependenvvar "$1" "$2"
     fi
 }
+
+copy_tar_if_not_found() {
+    if [ ! -f ${BUILD}/pkg-2014.07/arm-2014.07-arm-none-symbianelf/$1 ]; then
+        echo "Tar: $1 not found. Copying from checkout dir."
+        cp ${BUILD}/../$1 ${BUILD}/pkg-2014.07/arm-2014.07-arm-none-symbianelf/
+# Also extracts to src
+        pushd ${BUILD}/src/
+        tar xf ${BUILD}/../$1
+        popd
+    fi
+}
+
 pushenvvar CSL_SCRIPTDIR ${BUILD}/src/scripts-trunk
 pushenvvar FLEXLM_NO_CKOUT_INSTALL_LIC 1
 pushenvvar LM_APP_DISABLE_CACHE_READ 1
 pushenvvar MAKEINFO 'makeinfo --css-ref=../cs.css'
 clean_environment
-# task [001/142] /init/dirs
+
+echo Task: [001/142] /init/cleanup
 pushenv
+pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
+# Clean last install
+rm -rf ${BUILD}/install
+rm -rf ${BUILD}/logs
+rm -rf ${BUILD}/obj/!(pkg-2014.07)
+popenv
+
+echo Task: [002/142] /init/dirs
+pushenv
+mkdir -p ${BUILD}/src
 mkdir -p ${BUILD}/obj
 mkdir -p ${BUILD}/install
 mkdir -p ${BUILD}/pkg
 mkdir -p ${BUILD}/logs/data
+mkdir -p ${BUILD}/pkg-2014.07/arm-2014.07-arm-none-symbianelf
 popenv
 
-# task [002/142] /init/cleanup
+echo Task: [003/142] /init/source_package/binutils
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf.src.tar.bz2 ${BUILD}/pkg/arm-2012.03-42-arm-none-symbianelf.backup.tar.bz2
+copy_tar_if_not_found binutils-2012.03-42.tar.bz2
 popenv
 
-# task [003/142] /init/source_package/binutils
+echo Task: [004/142] /init/source_package/gcc
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/binutils-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/binutils-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' binutils-2012.03
-popd
+copy_tar_if_not_found gcc-2012.03-42.tar.bz2
 popenv
 
-# task [004/142] /init/source_package/gcc
+echo Task: [005/142] /init/source_package/zlib
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gcc-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gcc-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' gcc-4.6-2012.03
-popd
+copy_tar_if_not_found zlib-2012.03-42.tar.bz2
 popenv
 
-# task [005/142] /init/source_package/zlib
+echo Task: [006/142] /init/source_package/gmp
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/zlib-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/zlib-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' zlib-1.2.3
-popd
+copy_tar_if_not_found gmp-2012.03-42.tar.bz2
 popenv
 
-# task [006/142] /init/source_package/gmp
+echo Task: [007/142] /init/source_package/mpfr
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gmp-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/gmp-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' gmp-2012.03
-popd
+copy_tar_if_not_found mpfr-2012.03-42.tar.bz2
 popenv
 
-# task [007/142] /init/source_package/mpfr
+echo Task: [008/142] /init/source_package/mpc
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpfr-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpfr-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' mpfr-2012.03
-popd
+copy_tar_if_not_found mpc-2012.03-42.tar.bz2
 popenv
 
-# task [008/142] /init/source_package/mpc
+echo Task: [009/142] /init/source_package/cloog
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpc-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/mpc-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' mpc-0.9
-popd
+copy_tar_if_not_found cloog-2012.03-42.tar.bz2
 popenv
 
-# task [009/142] /init/source_package/cloog
+echo Task: [010/142] /init/source_package/ppl
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/cloog-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/cloog-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' cloog-0.15
-popd
+copy_tar_if_not_found ppl-2012.03-42.tar.bz2
 popenv
 
-# task [010/142] /init/source_package/ppl
+echo Task: [018/142] /init/source_package/libiconv
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/ppl-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/ppl-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' ppl-0.11
-popd
+copy_tar_if_not_found libiconv-2012.03-42.tar.bz2
 popenv
 
-# task [018/142] /init/source_package/libiconv
+echo Task: [019/142] /init/source_package/libelf
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libiconv-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libiconv-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' libiconv-1.11
-popd
+copy_tar_if_not_found libelf-2012.03-42.tar.bz2
 popenv
 
-# task [019/142] /init/source_package/libelf
+echo Task: [023/142] /init/source_package/coreutils
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libelf-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/libelf-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' libelf-2012.03
-popd
+copy_tar_if_not_found coreutils-2012.03-42.tar.bz2
 popenv
 
-# task [020/142] /init/source_package/csl_docbook
-pushenv
-pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/csl_docbook-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/csl_docbook-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' csl-docbook-trunk
-popd
-popenv
-
-# task [021/142] /init/source_package/release_notes
-pushenv
-pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/release_notes-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf.backup/release_notes-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' release-notes-trunk
-popd
-popenv
-
-# task [022/142] /init/source_package/make
-pushenv
-pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/make-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/make-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' make-3.81
-popd
-popenv
-
-# task [023/142] /init/source_package/coreutils
-pushenv
-pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
-rm -f ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/coreutils-2012.03-42.tar.bz2
-mkdir -p ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf
-pushd ${BUILD}/src
-tar cf ${BUILD}/obj/pkg-2012.03-42-arm-none-symbianelf/arm-2012.03-42-arm-none-symbianelf/coreutils-2012.03-42.tar.bz2 --bzip2 --owner=0 --group=0 --exclude=CVS --exclude=.svn --exclude=.git --exclude=.pc '--exclude=*~' '--exclude=.#*' '--exclude=*.orig' '--exclude=*.rej' coreutils-5.94
-popd
-popenv
-
-# task [082/142] /mingw32/host_cleanup
+echo Task: [082/142] /mingw32/host_cleanup
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -448,7 +391,7 @@ pushenvvar RANLIB mingw32-ranlib
 prepend_path PATH ${BUILD}/obj/tools-pc-linux-gnu-2012.03-42-arm-none-symbianelf-mingw32/bin
 popenv
 
-# task [083/142] /mingw32/host_unpack
+echo Task: [083/142] /mingw32/host_unpack
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -465,7 +408,7 @@ rm arm-2012.03
 popd
 popenv
 
-# task [084/142] /mingw32/libiconv/0/configure
+echo Task: [084/142] /mingw32/libiconv/0/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -484,7 +427,7 @@ popenv
 popenv
 popenv
 
-# task [085/142] /mingw32/libiconv/0/build
+echo Task: [085/142] /mingw32/libiconv/0/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -501,7 +444,7 @@ popenv
 popenv
 popenv
 
-# task [086/142] /mingw32/libiconv/0/install
+echo Task: [086/142] /mingw32/libiconv/0/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -518,7 +461,7 @@ popenv
 popenv
 popenv
 
-# task [087/142] /mingw32/make/copy
+echo Task: [087/142] /mingw32/make/copy
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -536,7 +479,7 @@ popenv
 popenv
 popenv
 
-# task [088/142] /mingw32/make/configure
+echo Task: [088/142] /mingw32/make/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -555,7 +498,7 @@ popenv
 popenv
 popenv
 
-# task [089/142] /mingw32/make/build
+echo Task: [089/142] /mingw32/make/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -572,7 +515,7 @@ popenv
 popenv
 popenv
 
-# task [090/142] /mingw32/make/install
+echo Task: [090/142] /mingw32/make/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -589,7 +532,7 @@ popenv
 popenv
 popenv
 
-# task [091/142] /mingw32/coreutils/copy
+echo Task: [091/142] /mingw32/coreutils/copy
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -607,7 +550,7 @@ popenv
 popenv
 popenv
 
-# task [092/142] /mingw32/coreutils/configure
+echo Task: [092/142] /mingw32/coreutils/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -626,7 +569,7 @@ popenv
 popenv
 popenv
 
-# task [093/142] /mingw32/coreutils/build
+echo Task: [093/142] /mingw32/coreutils/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -643,7 +586,7 @@ popenv
 popenv
 popenv
 
-# task [094/142] /mingw32/coreutils/install
+echo Task: [094/142] /mingw32/coreutils/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -660,7 +603,7 @@ popenv
 popenv
 popenv
 
-# task [095/142] /mingw32/zlib_first/copy
+echo Task: [095/142] /mingw32/zlib_first/copy
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -673,7 +616,7 @@ copy_dir_clean ${BUILD}/src/zlib-1.2.3 ${BUILD}/obj/zlib-first-2012.03-42-arm-no
 chmod -R u+w ${BUILD}/obj/zlib-first-2012.03-42-arm-none-symbianelf-mingw32
 popenv
 
-# task [096/142] /mingw32/zlib_first/configure
+echo Task: [096/142] /mingw32/zlib_first/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -692,7 +635,7 @@ popenv
 popd
 popenv
 
-# task [097/142] /mingw32/zlib_first/build
+echo Task: [097/142] /mingw32/zlib_first/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -705,7 +648,7 @@ make -j4
 popd
 popenv
 
-# task [098/142] /mingw32/zlib_first/install
+echo Task: [098/142] /mingw32/zlib_first/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -718,7 +661,7 @@ make install
 popd
 popenv
 
-# task [099/142] /mingw32/gmp/configure
+echo Task: [099/142] /mingw32/gmp/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -738,7 +681,7 @@ popenv
 popenv
 popenv
 
-# task [100/142] /mingw32/gmp/build
+echo Task: [100/142] /mingw32/gmp/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -756,7 +699,7 @@ popenv
 popenv
 popenv
 
-# task [101/142] /mingw32/gmp/install
+echo Task: [101/142] /mingw32/gmp/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -774,7 +717,7 @@ popenv
 popenv
 popenv
 
-# task [102/142] /mingw32/gmp/postinstall
+echo Task: [102/142] /mingw32/gmp/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -789,7 +732,7 @@ popenv
 popenv
 popenv
 
-# task [103/142] /mingw32/mpfr/configure
+echo Task: [103/142] /mingw32/mpfr/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -808,7 +751,7 @@ popenv
 popenv
 popenv
 
-# task [104/142] /mingw32/mpfr/build
+echo Task: [104/142] /mingw32/mpfr/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -825,7 +768,7 @@ popenv
 popenv
 popenv
 
-# task [105/142] /mingw32/mpfr/install
+echo Task: [105/142] /mingw32/mpfr/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -842,7 +785,7 @@ popenv
 popenv
 popenv
 
-# task [106/142] /mingw32/mpfr/postinstall
+echo Task: [106/142] /mingw32/mpfr/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -856,7 +799,7 @@ popenv
 popenv
 popenv
 
-# task [107/142] /mingw32/mpc/configure
+echo Task: [107/142] /mingw32/mpc/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -875,7 +818,7 @@ popenv
 popenv
 popenv
 
-# task [108/142] /mingw32/mpc/build
+echo Task: [108/142] /mingw32/mpc/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -892,7 +835,7 @@ popenv
 popenv
 popenv
 
-# task [109/142] /mingw32/mpc/install
+echo Task: [109/142] /mingw32/mpc/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -909,7 +852,7 @@ popenv
 popenv
 popenv
 
-# task [110/142] /mingw32/mpc/postinstall
+echo Task: [110/142] /mingw32/mpc/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -923,7 +866,7 @@ popenv
 popenv
 popenv
 
-# task [111/142] /mingw32/ppl/configure
+echo Task: [111/142] /mingw32/ppl/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -942,7 +885,7 @@ popenv
 popenv
 popenv
 
-# task [112/142] /mingw32/ppl/build
+echo Task: [112/142] /mingw32/ppl/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -959,7 +902,7 @@ popenv
 popenv
 popenv
 
-# task [113/142] /mingw32/ppl/install
+echo Task: [113/142] /mingw32/ppl/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -976,7 +919,7 @@ popenv
 popenv
 popenv
 
-# task [114/142] /mingw32/cloog/configure
+echo Task: [114/142] /mingw32/cloog/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -995,7 +938,7 @@ popenv
 popenv
 popenv
 
-# task [115/142] /mingw32/cloog/build
+echo Task: [115/142] /mingw32/cloog/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1012,7 +955,7 @@ popenv
 popenv
 popenv
 
-# task [116/142] /mingw32/cloog/install
+echo Task: [116/142] /mingw32/cloog/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1029,7 +972,7 @@ popenv
 popenv
 popenv
 
-# task [117/142] /mingw32/cloog/postinstall
+echo Task: [117/142] /mingw32/cloog/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1043,7 +986,7 @@ popenv
 popenv
 popenv
 
-# task [118/142] /mingw32/libelf/configure
+echo Task: [118/142] /mingw32/libelf/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1062,7 +1005,7 @@ popenv
 popenv
 popenv
 
-# task [119/142] /mingw32/libelf/build
+echo Task: [119/142] /mingw32/libelf/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1079,7 +1022,7 @@ popenv
 popenv
 popenv
 
-# task [120/142] /mingw32/libelf/install
+echo Task: [120/142] /mingw32/libelf/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1096,7 +1039,7 @@ popenv
 popenv
 popenv
 
-# task [121/142] /mingw32/toolchain/binutils/copy
+echo Task: [121/142] /mingw32/toolchain/binutils/copy
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1116,7 +1059,7 @@ popenv
 popenv
 popenv
 
-# task [122/142] /mingw32/toolchain/binutils/configure
+echo Task: [122/142] /mingw32/toolchain/binutils/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1137,7 +1080,7 @@ popenv
 popenv
 popenv
 
-# task [123/142] /mingw32/toolchain/binutils/libiberty
+echo Task: [123/142] /mingw32/toolchain/binutils/libiberty
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1160,7 +1103,7 @@ popenv
 popenv
 popenv
 
-# task [124/142] /mingw32/toolchain/binutils/build
+echo Task: [124/142] /mingw32/toolchain/binutils/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1179,7 +1122,7 @@ popenv
 popenv
 popenv
 
-# task [125/142] /mingw32/toolchain/binutils/install
+echo Task: [125/142] /mingw32/toolchain/binutils/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1198,7 +1141,7 @@ popenv
 popenv
 popenv
 
-# task [126/142] /mingw32/toolchain/binutils/postinstall
+echo Task: [126/142] /mingw32/toolchain/binutils/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1243,7 +1186,7 @@ popenv
 popenv
 popenv
 
-# task [127/142] /mingw32/toolchain/copy_libs
+echo Task: [127/142] /mingw32/toolchain/copy_libs
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1258,7 +1201,7 @@ copy_dir ${BUILD}/obj/tools-pc-linux-gnu-2012.03-42-arm-none-symbianelf-mingw32/
 cp ${BUILD}/obj/tools-pc-linux-gnu-2012.03-42-arm-none-symbianelf-mingw32/share/doc/arm-arm-none-symbianelf/LICENSE.txt ${BUILD}/install/host-mingw32/share/doc/arm-arm-none-symbianelf
 popenv
 
-# task [128/142] /mingw32/toolchain/gcc_final/configure
+echo Task: [128/142] /mingw32/toolchain/gcc_final/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1282,7 +1225,7 @@ popd
 popenv
 popenv
 
-# task [129/142] /mingw32/toolchain/gcc_final/build
+echo Task: [129/142] /mingw32/toolchain/gcc_final/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1304,7 +1247,7 @@ popd
 popenv
 popenv
 
-# task [130/142] /mingw32/toolchain/gcc_final/install
+echo Task: [130/142] /mingw32/toolchain/gcc_final/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1328,7 +1271,7 @@ popd
 popenv
 popenv
 
-# task [131/142] /mingw32/toolchain/gcc_final/postinstall
+echo Task: [131/142] /mingw32/toolchain/gcc_final/postinstall
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1363,7 +1306,7 @@ rm -f ${BUILD}/install/host-mingw32/share/doc/arm-arm-none-symbianelf/html/libib
 popenv
 popenv
 
-# task [132/142] /mingw32/toolchain/zlib/0/copy
+echo Task: [132/142] /mingw32/toolchain/zlib/0/copy
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1376,7 +1319,7 @@ copy_dir_clean ${BUILD}/src/zlib-1.2.3 ${BUILD}/obj/zlib-2012.03-42-arm-none-sym
 chmod -R u+w ${BUILD}/obj/zlib-2012.03-42-arm-none-symbianelf-mingw32
 popenv
 
-# task [133/142] /mingw32/toolchain/zlib/0/configure
+echo Task: [133/142] /mingw32/toolchain/zlib/0/configure
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1395,7 +1338,7 @@ popenv
 popd
 popenv
 
-# task [134/142] /mingw32/toolchain/zlib/0/build
+echo Task: [134/142] /mingw32/toolchain/zlib/0/build
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1408,7 +1351,7 @@ make -j4
 popd
 popenv
 
-# task [135/142] /mingw32/toolchain/zlib/0/install
+echo Task: [135/142] /mingw32/toolchain/zlib/0/install
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1421,7 +1364,7 @@ make install
 popd
 popenv
 
-# task [136/142] /mingw32/pretidy_installation
+echo Task: [136/142] /mingw32/pretidy_installation
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1433,7 +1376,7 @@ pushd ${BUILD}/install/host-mingw32
 popd
 popenv
 
-# task [137/142] /mingw32/remove_libtool_archives
+echo Task: [137/142] /mingw32/remove_libtool_archives
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1444,7 +1387,7 @@ prepend_path PATH ${BUILD}/obj/tools-pc-linux-gnu-2012.03-42-arm-none-symbianelf
 find ${BUILD}/install/host-mingw32 -name '*.la' -exec rm '{}' ';'
 popenv
 
-# task [138/142] /mingw32/remove_copied_libs
+echo Task: [138/142] /mingw32/remove_copied_libs
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1454,7 +1397,7 @@ pushenvvar RANLIB mingw32-ranlib
 prepend_path PATH ${BUILD}/obj/tools-pc-linux-gnu-2012.03-42-arm-none-symbianelf-mingw32/bin
 popenv
 
-# task [139/142] /mingw32/remove_fixed_headers
+echo Task: [139/142] /mingw32/remove_fixed_headers
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1466,7 +1409,7 @@ pushd ${BUILD}/install/host-mingw32/lib/gcc/arm-none-symbianelf/${GCC_VER}/inclu
 popd
 popenv
 
-# task [140/142] /mingw32/add_tooldir_readme
+echo Task: [140/142] /mingw32/add_tooldir_readme
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1482,7 +1425,7 @@ executables in ../../bin/ and place that directory on your PATH.
 EOF0
 popenv
 
-# task [141/142] /mingw32/strip_host_objects
+echo Task: [141/142] /mingw32/strip_host_objects
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
@@ -1532,7 +1475,7 @@ mingw32-strip ${BUILD}/install/host-mingw32/libexec/gcc/arm-none-symbianelf/${GC
 mingw32-strip ${BUILD}/install/host-mingw32/libexec/gcc/arm-none-symbianelf/${GCC_VER}/lto1.exe
 popenv
 
-# task [142/142] /mingw32/package_tbz2
+echo Task: [142/142] /mingw32/package_tbz2
 pushenv
 pushenvvar CC_FOR_BUILD pc-linux-gnu-gcc
 pushenvvar CC mingw32-gcc
