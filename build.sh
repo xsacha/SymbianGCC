@@ -63,10 +63,14 @@ export STRIP=strip
 export CC_FOR_BUILD=${CC}
 
 # Host architecture
-ARCH_HOST=x86_64
-#ARCH_HOST=x86
+#ARCH_HOST=x86_64
+ARCH_HOST=x86
+if [[ "$ARCH_HOST" = "x86" ]]; then
+    export CC="$CC -m32"
+    export CXX="$CXX -m32"
+fi
 
-CLEANUP=false
+CLEANUP=true
 BUILDONLYGCC=false
 
 set -e
@@ -462,7 +466,7 @@ pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-${ARC
 rm -rf ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu
 extract_tar_move ${BUILD}/pkg-2014.07/arm-2014.07-arm-none-symbianelf/binutils-2012.03-42.tar.bz2 ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu
 # Stop makeinfo from terminating when it isn't found
-sed -i 's/ || exit 1//g' ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-x86_64-pc-linux-gnu/binutils-2012.03/missing
+sed -i 's/ || exit 1//g' ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/binutils-2012.03/missing
 chmod -R u+w ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu
 touch ${BUILD}/obj/binutils-src-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/binutils-2012.03/.gnu-stamp
 popenv
@@ -515,8 +519,8 @@ pushenv
 pushenvvar CPPFLAGS -I${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/usr/include
 pushenvvar LDFLAGS -L${BUILD}/obj/host-libs-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/usr/lib
 pushd ${BUILD}/install
-rm ./lib/libiberty.a
-rmdir ./lib
+# Could be either dir for 32-bit. Ignore error
+rm -rf ./lib ./lib32 || true
 popd
 cp ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/bfd/.libs/libbfd.a ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/usr/lib
 cp ${BUILD}/obj/binutils-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/bfd/bfd.h ${BUILD}/obj/host-binutils-2012.03-42-arm-none-symbianelf-${ARCH_HOST}-pc-linux-gnu/usr/include
@@ -574,7 +578,8 @@ pushenvvar NM_FOR_TARGET arm-none-symbianelf-nm
 pushenvvar OBJDUMP_FOR_TARET arm-none-symbianelf-objdump
 pushenvvar STRIP_FOR_TARGET arm-none-symbianelf-strip
 pushd ${BUILD}/install
-rm ./lib/libiberty.a
+rm ./lib/libiberty.a || true
+rm ./lib32/libiberty.a || true
 rmdir include
 popd
 popenv
